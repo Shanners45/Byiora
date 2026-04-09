@@ -115,16 +115,12 @@ export default function CustomisationPage() {
 
   const handleAddBanner = async () => {
     if (!newBanner.image_url) return toast.error("Please provide an image URL")
-    
-    // Import action dynamically for Client Component
-    const { addBannerAction } = await import("@/app/actions/customisation")
     const result = await addBannerAction(
-      newBanner.title, 
-      newBanner.link_url, 
-      newBanner.image_url, 
+      newBanner.title,
+      newBanner.link_url,
+      newBanner.image_url,
       banners.length + 1
     )
-    
     if (result.success && result.data) {
       setBanners(prev => [...prev, result.data as Banner])
       setNewBanner({ title: "", image_url: "", link_url: "" })
@@ -137,7 +133,6 @@ export default function CustomisationPage() {
 
   const handleSaveBannerEdit = async () => {
     if (!editingBannerId) return
-    const { updateBannerAction } = await import("@/app/actions/customisation")
     const result = await updateBannerAction(
       editingBannerId,
       editBannerForm.title || "",
@@ -213,9 +208,7 @@ export default function CustomisationPage() {
 
   const handleAddCategory = async () => {
     if (!newCategoryTitle.trim()) return toast.error("Category title is required")
-    const { addCategoryAction } = await import("@/app/actions/customisation")
     const result = await addCategoryAction(newCategoryTitle, categories.length + 1)
-    
     if (result.success && result.data) {
       setCategories(prev => [...prev, result.data as Category])
       setNewCategoryTitle("")
@@ -235,9 +228,7 @@ export default function CustomisationPage() {
 
   const handleSaveCategoryEdit = async () => {
     if (!editingCategoryId || !editCategoryTitle.trim()) return
-    const { updateCategoryTitleAction } = await import("@/app/actions/customisation")
     const result = await updateCategoryTitleAction(editingCategoryId, editCategoryTitle)
-    
     if (result.success) {
       setCategories(prev => prev.map(c => c.id === editingCategoryId ? { ...c, title: editCategoryTitle } : c))
       setEditingCategoryId(null)
