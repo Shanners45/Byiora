@@ -1,15 +1,32 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
-import { toast } from "sonner"
-import { supabase } from "@/lib/supabase"
-import { Upload, Trash2, ImageIcon, Plus, ChevronUp, ChevronDown, Check, X, Layers, Package } from "lucide-react"
+import type React from "react";
+import { useState, useEffect } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase";
+import {
+  Upload,
+  Trash2,
+  ImageIcon,
+  Plus,
+  ChevronUp,
+  ChevronDown,
+  Check,
+  X,
+  Layers,
+  Package,
+} from "lucide-react";
 import {
   getBannersAction,
   deleteBannerAction,
@@ -23,291 +40,361 @@ import {
   updateCategoryProductsAction,
   reorderCategoriesAction,
   addCategoryAction,
-  updateCategoryTitleAction
-} from "@/app/actions/customisation"
-import Image from "next/image"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+  updateCategoryTitleAction,
+} from "@/app/actions/customisation";
+import Image from "next/image";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Banner {
-  id: string
-  title: string
-  image_url: string
-  link_url: string
-  is_active: boolean
-  sort_order: number
+  id: string;
+  title: string;
+  image_url: string;
+  link_url: string;
+  is_active: boolean;
+  sort_order: number;
 }
 
 interface Category {
-  id: string
-  title: string
-  is_active: boolean
-  sort_order: number
-  product_ids: string[]
+  id: string;
+  title: string;
+  is_active: boolean;
+  sort_order: number;
+  product_ids: string[];
 }
 
 interface ProductInfo {
-  id: string
-  name: string
-  logo: string
+  id: string;
+  name: string;
+  logo: string;
 }
 
 export default function CustomisationPage() {
-  const [activeTab, setActiveTab] = useState("banners")
+  const [activeTab, setActiveTab] = useState("banners");
 
   // ====================== BANNERS STATE ======================
-  const [banners, setBanners] = useState<Banner[]>([])
-  const [isLoadingBanners, setIsLoadingBanners] = useState(true)
-  const [isUploadingBanner, setIsUploadingBanner] = useState<string | null>(null)
-  const [showAddBannerForm, setShowAddBannerForm] = useState(false)
-  const [editingBannerId, setEditingBannerId] = useState<string | null>(null)
-  const [editBannerForm, setEditBannerForm] = useState<Partial<Banner>>({})
-  const [newBanner, setNewBanner] = useState({ title: "", image_url: "", link_url: "" })
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [isLoadingBanners, setIsLoadingBanners] = useState(true);
+  const [isUploadingBanner, setIsUploadingBanner] = useState<string | null>(
+    null,
+  );
+  const [showAddBannerForm, setShowAddBannerForm] = useState(false);
+  const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
+  const [editBannerForm, setEditBannerForm] = useState<Partial<Banner>>({});
+  const [newBanner, setNewBanner] = useState({
+    title: "",
+    image_url: "",
+    link_url: "",
+  });
 
   // ====================== CATEGORIES STATE ======================
-  const [categories, setCategories] = useState<Category[]>([])
-  const [products, setProducts] = useState<ProductInfo[]>([])
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
-  const [showAddCategoryForm, setShowAddCategoryForm] = useState(false)
-  const [newCategoryTitle, setNewCategoryTitle] = useState("")
-  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
-  const [editCategoryTitle, setEditCategoryTitle] = useState("")
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<ProductInfo[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [showAddCategoryForm, setShowAddCategoryForm] = useState(false);
+  const [newCategoryTitle, setNewCategoryTitle] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
+    null,
+  );
+  const [editCategoryTitle, setEditCategoryTitle] = useState("");
 
   useEffect(() => {
-    loadBanners()
-    loadCategoriesAndProducts()
-  }, [])
+    loadBanners();
+    loadCategoriesAndProducts();
+  }, []);
 
   // ====================== BANNERS LOGIC ======================
   const loadBanners = async () => {
-    setIsLoadingBanners(true)
+    setIsLoadingBanners(true);
     try {
-      const result = await getBannersAction()
-      if (result.success && result.data) setBanners(result.data)
-      else if (result.error) toast.error(result.error)
+      const result = await getBannersAction();
+      if (result.success && result.data) setBanners(result.data);
+      else if (result.error) toast.error(result.error);
     } finally {
-      setIsLoadingBanners(false)
+      setIsLoadingBanners(false);
     }
-  }
+  };
 
   const handleBannerImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     bannerId: string | "new",
-    onSuccess: (url: string) => void
+    onSuccess: (url: string) => void,
   ) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setIsUploadingBanner(bannerId)
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingBanner(bannerId);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg"
-      const filePath = `banners/banner-${bannerId}-${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, file, { cacheControl: "3600", upsert: true })
-      if (uploadError) throw new Error()
-      const { data } = supabase.storage.from("product-images").getPublicUrl(filePath)
-      onSuccess(data.publicUrl)
-      toast.success("Image uploaded!")
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const filePath = `banners/banner-${bannerId}-${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("product-images")
+        .upload(filePath, file, { cacheControl: "3600", upsert: true });
+      if (uploadError) throw new Error();
+      const { data } = supabase.storage
+        .from("product-images")
+        .getPublicUrl(filePath);
+      onSuccess(data.publicUrl);
+      toast.success("Image uploaded!");
     } catch {
-      toast.error("Failed to upload image")
+      toast.error("Failed to upload image");
     } finally {
-      setIsUploadingBanner(null)
+      setIsUploadingBanner(null);
     }
-  }
+  };
 
   const handleAddBanner = async () => {
-    if (!newBanner.image_url) return toast.error("Please provide an image URL")
-    
+    if (!newBanner.image_url) return toast.error("Please provide an image URL");
+
     // Import action dynamically for Client Component
-    const { addBannerAction } = await import("@/app/actions/customisation")
+    const { addBannerAction } = await import("@/app/actions/customisation");
     const result = await addBannerAction(
-      newBanner.title, 
-      newBanner.link_url, 
-      newBanner.image_url, 
-      banners.length + 1
-    )
-    
+      newBanner.title,
+      newBanner.link_url,
+      newBanner.image_url,
+      banners.length + 1,
+    );
+
     if (result.success && result.data) {
-      setBanners(prev => [...prev, result.data as Banner])
-      setNewBanner({ title: "", image_url: "", link_url: "" })
-      setShowAddBannerForm(false)
-      toast.success("Banner added")
+      setBanners((prev) => [...prev, result.data as Banner]);
+      setNewBanner({ title: "", image_url: "", link_url: "" });
+      setShowAddBannerForm(false);
+      toast.success("Banner added");
     } else {
-      toast.error(result.error || "Failed to add banner")
+      toast.error(result.error || "Failed to add banner");
     }
-  }
+  };
 
   const handleSaveBannerEdit = async () => {
-    if (!editingBannerId) return
-    const { updateBannerAction } = await import("@/app/actions/customisation")
+    if (!editingBannerId) return;
+    const { updateBannerAction } = await import("@/app/actions/customisation");
     const result = await updateBannerAction(
       editingBannerId,
       editBannerForm.title || "",
       editBannerForm.link_url || "",
-      editBannerForm.image_url || ""
-    )
+      editBannerForm.image_url || "",
+    );
     if (result.success) {
-      setBanners(prev => prev.map(b => b.id === editingBannerId ? { ...b, ...editBannerForm } : b))
-      setEditingBannerId(null)
-      toast.success("Banner updated")
+      setBanners((prev) =>
+        prev.map((b) =>
+          b.id === editingBannerId ? { ...b, ...editBannerForm } : b,
+        ),
+      );
+      setEditingBannerId(null);
+      toast.success("Banner updated");
     } else {
-      toast.error(result.error || "Failed to update banner")
+      toast.error(result.error || "Failed to update banner");
     }
-  }
+  };
 
   const handleDeleteBanner = async (id: string) => {
-    if (!confirm("Delete banner?")) return
-    const result = await deleteBannerAction(id)
-    if (result.success) setBanners(prev => prev.filter(b => b.id !== id))
-    else if (result.error) toast.error(result.error)
-  }
+    if (!confirm("Delete banner?")) return;
+    const result = await deleteBannerAction(id);
+    if (result.success) setBanners((prev) => prev.filter((b) => b.id !== id));
+    else if (result.error) toast.error(result.error);
+  };
 
   const handleToggleBannerActive = async (banner: Banner) => {
-    const result = await toggleBannerStatusAction(banner.id, banner.is_active)
-    if (result.success) setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, is_active: !banner.is_active } : b))
-    else if (result.error) toast.error(result.error)
-  }
+    const result = await toggleBannerStatusAction(banner.id, banner.is_active);
+    if (result.success)
+      setBanners((prev) =>
+        prev.map((b) =>
+          b.id === banner.id ? { ...b, is_active: !banner.is_active } : b,
+        ),
+      );
+    else if (result.error) toast.error(result.error);
+  };
 
-  const handleMoveBanner = async (index: number, direction: 'up' | 'down') => {
-    if ((direction === 'up' && index === 0) || (direction === 'down' && index === banners.length - 1)) return
+  const handleMoveBanner = async (index: number, direction: "up" | "down") => {
+    if (
+      (direction === "up" && index === 0) ||
+      (direction === "down" && index === banners.length - 1)
+    )
+      return;
 
-    const newBanners = [...banners]
-    const swapIndex = direction === 'up' ? index - 1 : index + 1
+    const newBanners = [...banners];
+    const swapIndex = direction === "up" ? index - 1 : index + 1;
 
     // Swap sorting order
-    const currentOrder = newBanners[index].sort_order
-    newBanners[index].sort_order = newBanners[swapIndex].sort_order
-    newBanners[swapIndex].sort_order = currentOrder
+    const currentOrder = newBanners[index].sort_order;
+    newBanners[index].sort_order = newBanners[swapIndex].sort_order;
+    newBanners[swapIndex].sort_order = currentOrder;
 
     // Swap array position
-    const temp = newBanners[index]
-    newBanners[index] = newBanners[swapIndex]
-    newBanners[swapIndex] = temp
+    const temp = newBanners[index];
+    newBanners[index] = newBanners[swapIndex];
+    newBanners[swapIndex] = temp;
 
-    setBanners(newBanners)
+    setBanners(newBanners);
 
     // DB sync using Server Action
     const result = await reorderBannersAction(
       newBanners[index].id,
       newBanners[index].sort_order,
       newBanners[swapIndex].id,
-      newBanners[swapIndex].sort_order
-    )
-    if (result.error) toast.error(result.error)
-  }
+      newBanners[swapIndex].sort_order,
+    );
+    if (result.error) toast.error(result.error);
+  };
 
   // ====================== CATEGORIES LOGIC ======================
   const loadCategoriesAndProducts = async () => {
-    setIsLoadingCategories(true)
+    setIsLoadingCategories(true);
     try {
-      const result = await getCategoriesAction()
+      const result = await getCategoriesAction();
       if (result.success) {
-        if (result.categories) setCategories(result.categories)
-        if (result.products) setProducts(result.products)
+        if (result.categories) setCategories(result.categories);
+        if (result.products) setProducts(result.products);
       } else if (result.error) {
-        toast.error(result.error)
+        toast.error(result.error);
       }
     } finally {
-      setIsLoadingCategories(false)
+      setIsLoadingCategories(false);
     }
-  }
+  };
 
   const handleAddCategory = async () => {
-    if (!newCategoryTitle.trim()) return toast.error("Category title is required")
-    const { addCategoryAction } = await import("@/app/actions/customisation")
-    const result = await addCategoryAction(newCategoryTitle, categories.length + 1)
-    
+    if (!newCategoryTitle.trim())
+      return toast.error("Category title is required");
+    const { addCategoryAction } = await import("@/app/actions/customisation");
+    const result = await addCategoryAction(
+      newCategoryTitle,
+      categories.length + 1,
+    );
+
     if (result.success && result.data) {
-      setCategories(prev => [...prev, result.data as Category])
-      setNewCategoryTitle("")
-      setShowAddCategoryForm(false)
-      toast.success("Category added")
+      setCategories((prev) => [...prev, result.data as Category]);
+      setNewCategoryTitle("");
+      setShowAddCategoryForm(false);
+      toast.success("Category added");
     } else {
-      toast.error(result.error || "Failed to add category")
+      toast.error(result.error || "Failed to add category");
     }
-  }
+  };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm("Delete this homepage category? Products will not be deleted.")) return
-    const result = await deleteCategoryAction(id)
-    if (result.success) setCategories(prev => prev.filter(c => c.id !== id))
-    else if (result.error) toast.error(result.error)
-  }
+    if (
+      !confirm("Delete this homepage category? Products will not be deleted.")
+    )
+      return;
+    const result = await deleteCategoryAction(id);
+    if (result.success)
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+    else if (result.error) toast.error(result.error);
+  };
 
   const handleSaveCategoryEdit = async () => {
-    if (!editingCategoryId || !editCategoryTitle.trim()) return
-    const { updateCategoryTitleAction } = await import("@/app/actions/customisation")
-    const result = await updateCategoryTitleAction(editingCategoryId, editCategoryTitle)
-    
+    if (!editingCategoryId || !editCategoryTitle.trim()) return;
+    const { updateCategoryTitleAction } =
+      await import("@/app/actions/customisation");
+    const result = await updateCategoryTitleAction(
+      editingCategoryId,
+      editCategoryTitle,
+    );
+
     if (result.success) {
-      setCategories(prev => prev.map(c => c.id === editingCategoryId ? { ...c, title: editCategoryTitle } : c))
-      setEditingCategoryId(null)
-      toast.success("Category renamed")
+      setCategories((prev) =>
+        prev.map((c) =>
+          c.id === editingCategoryId ? { ...c, title: editCategoryTitle } : c,
+        ),
+      );
+      setEditingCategoryId(null);
+      toast.success("Category renamed");
     } else {
-      toast.error(result.error || "Failed to rename category")
+      toast.error(result.error || "Failed to rename category");
     }
-  }
+  };
 
   const handleToggleCategoryActive = async (cat: Category) => {
-    const result = await toggleCategoryStatusAction(cat.id, cat.is_active)
-    if (result.success) setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, is_active: !cat.is_active } : c))
-    else if (result.error) toast.error(result.error)
-  }
+    const result = await toggleCategoryStatusAction(cat.id, cat.is_active);
+    if (result.success)
+      setCategories((prev) =>
+        prev.map((c) =>
+          c.id === cat.id ? { ...c, is_active: !cat.is_active } : c,
+        ),
+      );
+    else if (result.error) toast.error(result.error);
+  };
 
-  const handleToggleProductInCategory = async (cat: Category, productId: string) => {
-    let newProductIds = [...(cat.product_ids || [])]
+  const handleToggleProductInCategory = async (
+    cat: Category,
+    productId: string,
+  ) => {
+    let newProductIds = [...(cat.product_ids || [])];
     if (newProductIds.includes(productId)) {
-      newProductIds = newProductIds.filter(id => id !== productId)
+      newProductIds = newProductIds.filter((id) => id !== productId);
     } else {
-      newProductIds.push(productId)
+      newProductIds.push(productId);
     }
 
-    const result = await updateCategoryProductsAction(cat.id, newProductIds)
+    const result = await updateCategoryProductsAction(cat.id, newProductIds);
     if (result.success) {
-      setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, product_ids: newProductIds } : c))
+      setCategories((prev) =>
+        prev.map((c) =>
+          c.id === cat.id ? { ...c, product_ids: newProductIds } : c,
+        ),
+      );
     } else {
-      toast.error(result.error || "Failed to update category")
+      toast.error(result.error || "Failed to update category");
     }
-  }
+  };
 
-  const handleMoveCategory = async (index: number, direction: 'up' | 'down') => {
-    if ((direction === 'up' && index === 0) || (direction === 'down' && index === categories.length - 1)) return
+  const handleMoveCategory = async (
+    index: number,
+    direction: "up" | "down",
+  ) => {
+    if (
+      (direction === "up" && index === 0) ||
+      (direction === "down" && index === categories.length - 1)
+    )
+      return;
 
-    const newCats = [...categories]
-    const swapIndex = direction === 'up' ? index - 1 : index + 1
+    const newCats = [...categories];
+    const swapIndex = direction === "up" ? index - 1 : index + 1;
 
     // Swap sorting order
-    const currentOrder = newCats[index].sort_order
-    newCats[index].sort_order = newCats[swapIndex].sort_order
-    newCats[swapIndex].sort_order = currentOrder
+    const currentOrder = newCats[index].sort_order;
+    newCats[index].sort_order = newCats[swapIndex].sort_order;
+    newCats[swapIndex].sort_order = currentOrder;
 
     // Swap array position
-    const temp = newCats[index]
-    newCats[index] = newCats[swapIndex]
-    newCats[swapIndex] = temp
+    const temp = newCats[index];
+    newCats[index] = newCats[swapIndex];
+    newCats[swapIndex] = temp;
 
-    setCategories(newCats)
+    setCategories(newCats);
 
     // DB sync using Server Action
     const result = await reorderCategoriesAction(
       newCats[index].id,
       newCats[index].sort_order,
       newCats[swapIndex].id,
-      newCats[swapIndex].sort_order
-    )
-    if (result.error) toast.error(result.error)
-  }
+      newCats[swapIndex].sort_order,
+    );
+    if (result.error) toast.error(result.error);
+  };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">Store Customisation</h1>
-        <p className="text-[#4B5563]">Manage homepage banners and product categories display.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">
+          Store Customisation
+        </h1>
+        <p className="text-[#4B5563]">
+          Manage homepage banners and product categories display.
+        </p>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-md h-12 bg-[#FEF7E0] border border-[#F59E0B]/20 p-1">
-          <TabsTrigger value="banners" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full">
+          <TabsTrigger
+            value="banners"
+            className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full"
+          >
             <ImageIcon className="h-4 w-4 mr-2" /> Banners
           </TabsTrigger>
-          <TabsTrigger value="categories" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full">
+          <TabsTrigger
+            value="categories"
+            className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full"
+          >
             <Layers className="h-4 w-4 mr-2" /> Categories
           </TabsTrigger>
         </TabsList>
@@ -316,7 +403,10 @@ export default function CustomisationPage() {
         <TabsContent value="banners" className="space-y-6 mt-6">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold text-gray-900">Banners</h2>
-            <Button onClick={() => setShowAddBannerForm(true)} className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white">
+            <Button
+              onClick={() => setShowAddBannerForm(true)}
+              className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white"
+            >
               <Plus className="h-4 w-4 mr-2" /> Add Banner
             </Button>
           </div>
@@ -332,43 +422,137 @@ export default function CustomisationPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-[#1F2937]">Title</Label>
-                    <Input value={newBanner.title} onChange={e => setNewBanner(n => ({ ...n, title: e.target.value }))} />
+                    <Input
+                      value={newBanner.title}
+                      onChange={(e) =>
+                        setNewBanner((n) => ({ ...n, title: e.target.value }))
+                      }
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[#1F2937]">Link URL</Label>
-                    <Input value={newBanner.link_url} onChange={e => setNewBanner(n => ({ ...n, link_url: e.target.value }))} />
+                    <Input
+                      value={newBanner.link_url}
+                      onChange={(e) =>
+                        setNewBanner((n) => ({
+                          ...n,
+                          link_url: e.target.value,
+                        }))
+                      }
+                    />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-[#1F2937]">Image URL *</Label>
                   <div className="flex gap-3">
-                    <Input value={newBanner.image_url} onChange={e => setNewBanner(n => ({ ...n, image_url: e.target.value }))} />
-                    <input type="file" id="new-banner" className="hidden" onChange={e => handleBannerImageUpload(e, "new", url => setNewBanner(n => ({ ...n, image_url: url })))} />
-                    <Button variant="outline" onClick={() => document.getElementById("new-banner")?.click()}>
+                    <Input
+                      value={newBanner.image_url}
+                      onChange={(e) =>
+                        setNewBanner((n) => ({
+                          ...n,
+                          image_url: e.target.value,
+                        }))
+                      }
+                    />
+                    <input
+                      type="file"
+                      id="new-banner"
+                      className="hidden"
+                      onChange={(e) =>
+                        handleBannerImageUpload(e, "new", (url) =>
+                          setNewBanner((n) => ({ ...n, image_url: url })),
+                        )
+                      }
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        document.getElementById("new-banner")?.click()
+                      }
+                    >
                       {isUploadingBanner === "new" ? "Uploading..." : "Upload"}
                     </Button>
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <Button onClick={handleAddBanner} className="bg-[#7E3AF2]">Save</Button>
-                  <Button variant="outline" onClick={() => setShowAddBannerForm(false)}>Cancel</Button>
+                  <Button onClick={handleAddBanner} className="bg-[#7E3AF2]">
+                    Save
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddBannerForm(false)}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           )}
 
           <div className="grid gap-4">
+            {banners.length === 0 && !isLoadingBanners && (
+              <Card className="bg-gray-50 border-dashed border-2 p-8 text-center">
+                <p className="text-gray-500 font-medium">No banners found.</p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Click "Add Banner" to create your first homepage banner.
+                </p>
+              </Card>
+            )}
+            {isLoadingBanners && (
+              <div className="flex justify-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#7E3AF2]"></div>
+              </div>
+            )}
             {banners.map((banner, index) => (
-              <Card key={banner.id} className="bg-white border-[#F59E0B]/20 p-4">
+              <Card
+                key={banner.id}
+                className="bg-white border-[#F59E0B]/20 p-4"
+              >
                 {editingBannerId === banner.id ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input value={editBannerForm.title || ""} onChange={e => setEditBannerForm(f => ({ ...f, title: e.target.value }))} placeholder="Title" />
-                      <Input value={editBannerForm.link_url || ""} onChange={e => setEditBannerForm(f => ({ ...f, link_url: e.target.value }))} placeholder="URL" />
+                      <Input
+                        value={editBannerForm.title || ""}
+                        onChange={(e) =>
+                          setEditBannerForm((f) => ({
+                            ...f,
+                            title: e.target.value,
+                          }))
+                        }
+                        placeholder="Title"
+                      />
+                      <Input
+                        value={editBannerForm.link_url || ""}
+                        onChange={(e) =>
+                          setEditBannerForm((f) => ({
+                            ...f,
+                            link_url: e.target.value,
+                          }))
+                        }
+                        placeholder="URL"
+                      />
                       <div className="md:col-span-2 flex gap-3">
-                        <Input value={editBannerForm.image_url || ""} onChange={e => setEditBannerForm(f => ({ ...f, image_url: e.target.value }))} />
-                        <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleSaveBannerEdit}>Save</Button>
-                        <Button variant="ghost" onClick={() => setEditingBannerId(null)}>Cancel</Button>
+                        <Input
+                          value={editBannerForm.image_url || ""}
+                          onChange={(e) =>
+                            setEditBannerForm((f) => ({
+                              ...f,
+                              image_url: e.target.value,
+                            }))
+                          }
+                        />
+                        <Button
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          onClick={handleSaveBannerEdit}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={() => setEditingBannerId(null)}
+                        >
+                          Cancel
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -376,14 +560,14 @@ export default function CustomisationPage() {
                   <div className="flex items-center gap-4">
                     <div className="flex flex-col items-center border border-gray-200 rounded overflow-hidden">
                       <button
-                        onClick={() => handleMoveBanner(index, 'up')}
+                        onClick={() => handleMoveBanner(index, "up")}
                         disabled={index === 0}
                         className="p-1 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
                       >
                         <ChevronUp className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleMoveBanner(index, 'down')}
+                        onClick={() => handleMoveBanner(index, "down")}
                         disabled={index === banners.length - 1}
                         className="p-1 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent border-t border-gray-200"
                       >
@@ -391,16 +575,47 @@ export default function CustomisationPage() {
                       </button>
                     </div>
                     <div className="w-24 h-14 bg-gray-100 rounded border flex items-center justify-center overflow-hidden">
-                      {banner.image_url ? <img src={banner.image_url} className="w-full h-full object-cover" alt="" /> : <ImageIcon className="text-gray-300" />}
+                      {banner.image_url ? (
+                        <img
+                          src={banner.image_url}
+                          className="w-full h-full object-cover"
+                          alt=""
+                        />
+                      ) : (
+                        <ImageIcon className="text-gray-300" />
+                      )}
                     </div>
                     <div className="flex-1">
-                      <p className="font-semibold text-gray-800">{banner.title || "Untitled"}</p>
-                      <p className="text-xs text-gray-500">{banner.link_url || "No link"}</p>
+                      <p className="font-semibold text-gray-800">
+                        {banner.title || "Untitled"}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {banner.link_url || "No link"}
+                      </p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Switch checked={banner.is_active} onCheckedChange={() => handleToggleBannerActive(banner)} />
-                      <Button variant="ghost" size="sm" onClick={() => { setEditingBannerId(banner.id); setEditBannerForm({ ...banner }) }}>Edit</Button>
-                      <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteBanner(banner.id)}>Delete</Button>
+                      <Switch
+                        checked={banner.is_active}
+                        onCheckedChange={() => handleToggleBannerActive(banner)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditingBannerId(banner.id);
+                          setEditBannerForm({ ...banner });
+                        }}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500"
+                        onClick={() => handleDeleteBanner(banner.id)}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -412,8 +627,13 @@ export default function CustomisationPage() {
         {/* CATEGORIES TAB */}
         <TabsContent value="categories" className="space-y-6 mt-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-gray-900">Homepage Categories</h2>
-            <Button onClick={() => setShowAddCategoryForm(true)} className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white">
+            <h2 className="text-xl font-semibold text-gray-900">
+              Homepage Categories
+            </h2>
+            <Button
+              onClick={() => setShowAddCategoryForm(true)}
+              className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"
+            >
               <Plus className="h-4 w-4 mr-2" /> Add Category
             </Button>
           </div>
@@ -423,33 +643,61 @@ export default function CustomisationPage() {
               <CardContent className="pt-6 flex gap-4">
                 <div className="flex-1 space-y-2">
                   <Label className="text-gray-700">Category Title</Label>
-                  <Input value={newCategoryTitle} onChange={e => setNewCategoryTitle(e.target.value)} placeholder="e.g. Best Sellers"
+                  <Input
+                    value={newCategoryTitle}
+                    onChange={(e) => setNewCategoryTitle(e.target.value)}
+                    placeholder="e.g. Best Sellers"
                     className="placeholder:text-gray-400 text-gray-900"
                   />
                 </div>
                 <div className="flex items-end gap-2">
-                  <Button onClick={handleAddCategory} className="bg-[#F59E0B]">Save</Button>
-                  <Button variant="outline" onClick={() => setShowAddCategoryForm(false)}>Cancel</Button>
+                  <Button onClick={handleAddCategory} className="bg-[#F59E0B]">
+                    Save
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddCategoryForm(false)}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           )}
 
           <div className="grid gap-6">
+            {categories.length === 0 && !isLoadingCategories && (
+              <Card className="bg-gray-50 border-dashed border-2 p-8 text-center">
+                <p className="text-gray-500 font-medium">
+                  No homepage categories found.
+                </p>
+                <p className="text-sm text-gray-400 mt-1">
+                  Click "Add Category" to create your first display category.
+                </p>
+              </Card>
+            )}
+            {isLoadingCategories && (
+              <div className="flex justify-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#F59E0B]"></div>
+              </div>
+            )}
             {categories.map((cat, index) => (
-              <Card key={cat.id} className="border-[#F59E0B]/20 shadow-sm overflow-hidden bg-white">
+              <Card
+                key={cat.id}
+                className="border-[#F59E0B]/20 shadow-sm overflow-hidden bg-white"
+              >
                 <CardHeader className="bg-[#FEF7E0] py-3 px-4 border-b border-[#F59E0B]/20 flex flex-row items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col items-center bg-white border border-[#F59E0B]/30 rounded overflow-hidden shadow-sm">
                       <button
-                        onClick={() => handleMoveCategory(index, 'up')}
+                        onClick={() => handleMoveCategory(index, "up")}
                         disabled={index === 0}
                         className="p-1 hover:bg-[#F59E0B]/10 disabled:opacity-30 disabled:hover:bg-transparent"
                       >
                         <ChevronUp className="h-4 w-4 text-[#F59E0B]" />
                       </button>
                       <button
-                        onClick={() => handleMoveCategory(index, 'down')}
+                        onClick={() => handleMoveCategory(index, "down")}
                         disabled={index === categories.length - 1}
                         className="p-1 hover:bg-[#F59E0B]/10 disabled:opacity-30 disabled:hover:bg-transparent border-t border-[#F59E0B]/20"
                       >
@@ -458,49 +706,118 @@ export default function CustomisationPage() {
                     </div>
                     {editingCategoryId === cat.id ? (
                       <div className="flex items-center gap-2 ml-2">
-                        <Input value={editCategoryTitle} onChange={e => setEditCategoryTitle(e.target.value)} className="h-8 max-w-[200px]" autoFocus />
-                        <Button size="sm" onClick={handleSaveCategoryEdit} className="h-8 px-2 bg-green-600 text-white">Save</Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingCategoryId(null)} className="h-8 px-2">Cancel</Button>
+                        <Input
+                          value={editCategoryTitle}
+                          onChange={(e) => setEditCategoryTitle(e.target.value)}
+                          className="h-8 max-w-[200px]"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={handleSaveCategoryEdit}
+                          className="h-8 px-2 bg-green-600 text-white"
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingCategoryId(null)}
+                          className="h-8 px-2"
+                        >
+                          Cancel
+                        </Button>
                       </div>
                     ) : (
                       <CardTitle className="text-gray-900 text-lg ml-2 flex items-center gap-2">
                         {cat.title}
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-400 hover:text-gray-700" onClick={() => { setEditingCategoryId(cat.id); setEditCategoryTitle(cat.title); }}>
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-gray-400 hover:text-gray-700"
+                          onClick={() => {
+                            setEditingCategoryId(cat.id);
+                            setEditCategoryTitle(cat.title);
+                          }}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
                         </Button>
                       </CardTitle>
                     )}
                   </div>
                   <div className="flex items-center gap-3">
-                    <Switch checked={cat.is_active} onCheckedChange={() => handleToggleCategoryActive(cat)} />
-                    <Button variant="ghost" size="icon" className="text-red-500 h-8 w-8" onClick={() => handleDeleteCategory(cat.id)}>
+                    <Switch
+                      checked={cat.is_active}
+                      onCheckedChange={() => handleToggleCategoryActive(cat)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-500 h-8 w-8"
+                      onClick={() => handleDeleteCategory(cat.id)}
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-4">
-                  <p className="text-sm text-gray-500 mb-3">Select products to show in this category on the homepage:</p>
+                  <p className="text-sm text-gray-500 mb-3">
+                    Select products to show in this category on the homepage:
+                  </p>
                   <div className="max-h-60 overflow-y-auto border rounded-md p-2 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 bg-gray-50">
-                    {products.map(prod => {
-                      const isSelected = (cat.product_ids || []).includes(prod.id)
+                    {products.map((prod) => {
+                      const isSelected = (cat.product_ids || []).includes(
+                        prod.id,
+                      );
                       return (
                         <div
                           key={prod.id}
                           className={`flex items-center gap-3 p-2 rounded border cursor-pointer transition-colors ${isSelected ? "bg-[#7E3AF2]/10 border-[#7E3AF2]" : "bg-white border-gray-200 hover:bg-gray-100"}`}
-                          onClick={() => handleToggleProductInCategory(cat, prod.id)}
+                          onClick={() =>
+                            handleToggleProductInCategory(cat, prod.id)
+                          }
                         >
-                          <div className={`w-5 h-5 rounded flex items-center justify-center border ${isSelected ? "bg-[#7E3AF2] border-[#7E3AF2] text-white" : "border-gray-300"}`}>
+                          <div
+                            className={`w-5 h-5 rounded flex items-center justify-center border ${isSelected ? "bg-[#7E3AF2] border-[#7E3AF2] text-white" : "border-gray-300"}`}
+                          >
                             {isSelected && <Check className="h-3 w-3" />}
                           </div>
                           <div className="w-8 h-8 rounded border overflow-hidden flex-shrink-0 bg-white">
-                            <img src={prod.logo} alt="" className="w-full h-full object-contain p-1" />
+                            <img
+                              src={prod.logo}
+                              alt=""
+                              className="w-full h-full object-contain p-1"
+                            />
                           </div>
-                          <span className="text-sm font-medium truncate flex-1 text-gray-800">{prod.name}</span>
+                          <span className="text-sm font-medium truncate flex-1 text-gray-800">
+                            {prod.name}
+                          </span>
                         </div>
-                      )
+                      );
                     })}
                   </div>
-                  <p className="text-xs text-[#F59E0B] mt-2 italic font-medium">Selected: {(cat.product_ids || []).filter(id => products.some(p => p.id === id)).length} products</p>
+                  <p className="text-xs text-[#F59E0B] mt-2 italic font-medium">
+                    Selected:{" "}
+                    {
+                      (cat.product_ids || []).filter((id) =>
+                        products.some((p) => p.id === id),
+                      ).length
+                    }{" "}
+                    products
+                  </p>
                 </CardContent>
               </Card>
             ))}
@@ -508,5 +825,5 @@ export default function CustomisationPage() {
         </TabsContent>
       </Tabs>
     </div>
-  )
+  );
 }

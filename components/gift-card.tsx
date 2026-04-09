@@ -19,18 +19,13 @@ export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, o
 
   return (
     <div
-      className="relative aspect-[4/5] bg-gray-900 rounded-3xl cursor-pointer transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl group overflow-hidden border border-white/5"
+      className="relative aspect-[4/5] bg-[#2D1B36] rounded-3xl cursor-pointer transition-all duration-300 hover:scale-[1.03] hover:shadow-2xl group overflow-hidden border border-white/5 flex flex-col"
       onClick={() => {
         onClick?.()
       }}
     >
-      {/* Product Image Section */}
-      <div 
-        className="absolute top-0 left-0 w-full h-[78%] group-hover:scale-105 transition-transform duration-700 ease-out overflow-hidden"
-        style={{ 
-          clipPath: "polygon(0 0, 100% 0, 100% 96%, 95% 100%, 90% 96%, 85% 100%, 80% 96%, 75% 100%, 70% 96%, 65% 100%, 60% 96%, 55% 100%, 50% 96%, 45% 100%, 40% 96%, 35% 100%, 30% 96%, 25% 100%, 20% 96%, 15% 100%, 10% 96%, 5% 100%, 0 96%)" 
-        }}
-      >
+      {/* Product Image Section (Edge-to-Edge) */}
+      <div className="relative w-full flex-1 overflow-hidden group-hover:scale-105 transition-transform duration-700 ease-out bg-gray-800">
         {isImageLogo ? (
           <Image
             src={logo || "/placeholder.svg"}
@@ -41,13 +36,10 @@ export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, o
             priority
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gray-800 text-6xl">
+          <div className="w-full h-full flex items-center justify-center text-6xl">
             {logo}
           </div>
         )}
-        
-        {/* Subtle overlay to help text legibility if needed, though most text is below now */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-40"></div>
       </div>
 
       {ribbon_text ? (
@@ -60,9 +52,23 @@ export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, o
         </div>
       ) : null}
 
-      {/* Info Section - Now meeting the clipped image */}
-      <div className="absolute bottom-0 left-0 right-0 z-10 bg-[#2D1B36] flex flex-col justify-center items-center py-5 min-h-[30%] px-4 text-center">
-        <h3 className="font-bold text-white text-sm md:text-base leading-tight line-clamp-2 max-w-[95%] group-hover:text-purple-300 transition-colors">
+      {/* Info Section with Jagged SVG exactly on top */}
+      <div className="relative bg-[#2D1B36] w-full z-10 pt-4 pb-5 px-3 min-h-[90px] flex flex-col justify-center">
+        {/* Jagged Edge SVG placed strictly above the info section to cut into the image */}
+        <div className="absolute left-0 right-0 w-full pointer-events-none" style={{ top: '-10px' }}>
+          <svg 
+            viewBox="0 0 100 10" 
+            preserveAspectRatio="none" 
+            className="w-full h-[10px] block"
+          >
+            <path 
+              d="M0,10 L5,0 L10,10 L15,0 L20,10 L25,0 L30,10 L35,0 L40,10 L45,0 L50,10 L55,0 L60,10 L65,0 L70,10 L75,0 L80,10 L85,0 L90,10 L95,0 L100,10 V10 H0 Z" 
+              fill="#2D1B36"
+            />
+          </svg>
+        </div>
+
+        <h3 className="font-bold text-white text-center text-sm md:text-base leading-tight line-clamp-2 w-full mx-auto relative z-10 group-hover:text-purple-300 transition-colors">
           {name}
         </h3>
         
