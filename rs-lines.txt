@@ -1,0 +1,32 @@
+app/admin/dashboard/products/[id]/page.tsx:383: <TableCell className="text-[#4B5563]">Rs. {denom.price}</TableCell>
+app/admin/dashboard/products/[id]/page.tsx:426: Price (Rs.)
+app/admin/dashboard/products/add/page.tsx:336: <TableCell className="text-[#4B5563]">Rs. {denom.price}</TableCell>
+app/admin/dashboard/products/add/page.tsx:379: Price (Rs.)
+app/admin/dashboard/page.tsx:169: <p className="text-2xl font-bold text-[#1F2937]">Rs. {stats.totalRevenue.toFixed(2)}</p>
+app/admin/dashboard/page.tsx:225: <p className="font-medium text-[#1F2937]">Rs. {order.price}</p>
+app/admin/dashboard/orders/page.tsx:195: `Rs. {t.price}`,
+app/admin/dashboard/orders/page.tsx:362: <TableCell className="text-[#4B5563]">Rs. {transaction.price}</TableCell>
+app/gift-card/[id]/page.tsx:26: { value: "5", price: "5", label: "Rs. 5 Gift Card" },
+app/gift-card/[id]/page.tsx:27: { value: "10", price: "10", label: "Rs. 10 Gift Card" },
+app/gift-card/[id]/page.tsx:28: { value: "25", price: "25", label: "Rs. 25 Gift Card" },
+app/gift-card/[id]/page.tsx:29: { value: "50", price: "50", label: "Rs. 50 Gift Card" },
+app/gift-card/[id]/page.tsx:30: { value: "100", price: "100", label: "Rs. 100 Gift Card" },
+app/gift-card/[id]/page.tsx:53: { value: "15", price: "15", label: "Rs. 15 Gift Card" },
+app/gift-card/[id]/page.tsx:54: { value: "25", price: "25", label: "Rs. 25 Gift Card" },
+app/gift-card/[id]/page.tsx:55: { value: "50", price: "50", label: "Rs. 50 Gift Card" },
+app/gift-card/[id]/page.tsx:56: { value: "100", price: "100", label: "Rs. 100 Gift Card" },
+app/gift-card/[id]/page.tsx:99: { value: "10", price: "10", label: "Rs. 10 Gift Card" },
+app/gift-card/[id]/page.tsx:100: { value: "25", price: "25", label: "Rs. 25 Gift Card" },
+app/gift-card/[id]/page.tsx:101: { value: "50", price: "50", label: "Rs. 50 Gift Card" },
+app/gift-card/[id]/page.tsx:102: { value: "100", price: "100", label: "Rs. 100 Gift Card" },
+app/gift-card/[id]/page.tsx:111: { value: "10", price: "10", label: "Rs. 10 Gift Card" },
+app/gift-card/[id]/page.tsx:112: { value: "25", price: "25", label: "Rs. 25 Gift Card" },
+app/gift-card/[id]/page.tsx:113: { value: "50", price: "50", label: "Rs. 50 Gift Card" },
+app/gift-card/[id]/page.tsx:114: { value: "100", price: "100", label: "Rs. 100 Gift Card" },
+app/gift-card/[id]/page.tsx:123: { value: "10", price: "10", label: "Rs. 10 Gift Card" },
+app/gift-card/[id]/page.tsx:124: { value: "25", price: "25", label: "Rs. 25 Gift Card" },
+app/gift-card/[id]/page.tsx:125: { value: "50", price: "50", label: "Rs. 50 Gift Card" },
+app/gift-card/[id]/page.tsx:126: { value: "100", price: "100", label: "Rs. 100 Gift Card" },
+app/gift-card/[id]/page.tsx:276: order_price: `Rs. {selectedDenom?.price}`,
+app/gift-card/[id]/page.tsx:468: <div className="text-brand-sky-blue text-sm">Rs. {denom.price}</div>
+app/gift-card/[id]/page.tsx:648: `Rs. {giftCard.denominations.find((d) => d.value === selectedDenomination)?.price}`}

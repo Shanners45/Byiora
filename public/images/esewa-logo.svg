@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 80" width="200" height="80">
+  <!-- Green circle with 'e' logo -->
+  <circle cx="36" cy="40" r="34" fill="#60BB46"/>
+  <text x="36" y="53" font-family="Arial, sans-serif" font-size="42" font-weight="bold" fill="white" text-anchor="middle">e</text>
+  <!-- eSewa text -->
+  <text x="80" y="36" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#60BB46" text-anchor="start">e</text>
+  <text x="96" y="36" font-family="Arial, sans-serif" font-size="22" font-weight="bold" fill="#333333" text-anchor="start">Sewa</text>
+  <text x="80" y="58" font-family="Arial, sans-serif" font-size="11" fill="#666666" text-anchor="start">Digital Wallet</text>
+</svg>
