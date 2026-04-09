@@ -14,8 +14,6 @@ import {
   deleteBannerAction,
   toggleBannerStatusAction,
   reorderBannersAction,
-  addBannerAction,
-  updateBannerAction,
   deleteCategoryAction,
   toggleCategoryStatusAction,
   updateCategoryProductsAction,
@@ -115,36 +113,45 @@ export default function CustomisationPage() {
 
   const handleAddBanner = async () => {
     if (!newBanner.image_url) return toast.error("Please provide an image URL")
-    const result = await addBannerAction(
-      newBanner.title,
-      newBanner.link_url,
-      newBanner.image_url,
-      banners.length + 1
-    )
-    if (result.success && result.data) {
-      setBanners(prev => [...prev, result.data as Banner])
+    try {
+      const { data, error } = await supabase
+        .from("banners")
+        .insert([{
+          title: newBanner.title,
+          image_url: newBanner.image_url,
+          link_url: newBanner.link_url,
+          is_active: true,
+          sort_order: banners.length + 1
+        }])
+        .select()
+        .single()
+      if (error) throw error
+      setBanners(prev => [...prev, data as Banner])
       setNewBanner({ title: "", image_url: "", link_url: "" })
       setShowAddBannerForm(false)
       toast.success("Banner added")
-    } else {
-      toast.error(result.error || "Failed to add banner")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add banner")
     }
   }
 
   const handleSaveBannerEdit = async () => {
     if (!editingBannerId) return
-    const result = await updateBannerAction(
-      editingBannerId,
-      editBannerForm.title || "",
-      editBannerForm.link_url || "",
-      editBannerForm.image_url || ""
-    )
-    if (result.success) {
+    try {
+      const { error } = await supabase
+        .from("banners")
+        .update({
+          title: editBannerForm.title || "",
+          link_url: editBannerForm.link_url || "",
+          image_url: editBannerForm.image_url || ""
+        })
+        .eq("id", editingBannerId)
+      if (error) throw error
       setBanners(prev => prev.map(b => b.id === editingBannerId ? { ...b, ...editBannerForm } : b))
       setEditingBannerId(null)
       toast.success("Banner updated")
-    } else {
-      toast.error(result.error || "Failed to update banner")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update banner")
     }
   }
 

@@ -198,7 +198,7 @@ export default function ProductDetailPage() {
         const { data, error } = await supabase
           .from("payment_methods")
           .select("*")
-          .eq("is_active", true)
+          .eq("is_enabled", true)
           .order("sort_order", { ascending: true })
 
         if (!error && data) {
