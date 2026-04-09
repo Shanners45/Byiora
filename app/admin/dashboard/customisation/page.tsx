@@ -10,17 +10,6 @@ import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { Upload, Trash2, ImageIcon, Plus, ChevronUp, ChevronDown, Check, X, Layers, Package } from "lucide-react"
-import {
-  deleteBannerAction,
-  toggleBannerStatusAction,
-  reorderBannersAction,
-  deleteCategoryAction,
-  toggleCategoryStatusAction,
-  updateCategoryProductsAction,
-  reorderCategoriesAction,
-  addCategoryAction,
-  updateCategoryTitleAction
-} from "@/app/actions/customisation"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
@@ -58,6 +47,7 @@ export default function CustomisationPage() {
   const [editingBannerId, setEditingBannerId] = useState<string | null>(null)
   const [editBannerForm, setEditBannerForm] = useState<Partial<Banner>>({})
   const [newBanner, setNewBanner] = useState({ title: "", image_url: "", link_url: "" })
+  const [isReordering, setIsReordering] = useState(false)
 
   // ====================== CATEGORIES STATE ======================
   const [categories, setCategories] = useState<Category[]>([])
@@ -157,43 +147,57 @@ export default function CustomisationPage() {
 
   const handleDeleteBanner = async (id: string) => {
     if (!confirm("Delete banner?")) return
-    const result = await deleteBannerAction(id)
-    if (result.success) setBanners(prev => prev.filter(b => b.id !== id))
-    else if (result.error) toast.error(result.error)
+    try {
+      const { error } = await supabase.from("banners").delete().eq("id", id)
+      if (error) throw error
+      setBanners(prev => prev.filter(b => b.id !== id))
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete banner")
+    }
   }
 
   const handleToggleBannerActive = async (banner: Banner) => {
-    const result = await toggleBannerStatusAction(banner.id, banner.is_active)
-    if (result.success) setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, is_active: !banner.is_active } : b))
-    else if (result.error) toast.error(result.error)
+    try {
+      const { error } = await supabase
+        .from("banners")
+        .update({ is_active: !banner.is_active })
+        .eq("id", banner.id)
+      if (error) throw error
+      setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, is_active: !banner.is_active } : b))
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update banner")
+    }
   }
 
   const handleMoveBanner = async (index: number, direction: 'up' | 'down') => {
-    if ((direction === 'up' && index === 0) || (direction === 'down' && index === banners.length - 1)) return
+    if (isReordering || (direction === 'up' && index === 0) || (direction === 'down' && index === banners.length - 1)) return
 
+    setIsReordering(true)
     const newBanners = [...banners]
     const swapIndex = direction === 'up' ? index - 1 : index + 1
 
-    // Swap sorting order
     const currentOrder = newBanners[index].sort_order
     newBanners[index].sort_order = newBanners[swapIndex].sort_order
     newBanners[swapIndex].sort_order = currentOrder
 
-    // Swap array position
     const temp = newBanners[index]
     newBanners[index] = newBanners[swapIndex]
     newBanners[swapIndex] = temp
 
     setBanners(newBanners)
 
-    // DB sync using Server Action
-    const result = await reorderBannersAction(
-      newBanners[index].id,
-      newBanners[index].sort_order,
-      newBanners[swapIndex].id,
-      newBanners[swapIndex].sort_order
-    )
-    if (result.error) toast.error(result.error)
+    try {
+      await Promise.all([
+        supabase.from("banners").update({ sort_order: newBanners[index].sort_order }).eq("id", newBanners[index].id),
+        supabase.from("banners").update({ sort_order: newBanners[swapIndex].sort_order }).eq("id", newBanners[swapIndex].id)
+      ])
+      toast.success("Order updated")
+    } catch (err: any) {
+      toast.error("Failed to reorder banners")
+      loadBanners() // revert on error
+    } finally {
+      setIsReordering(false)
+    }
   }
 
   // ====================== CATEGORIES LOGIC ======================
@@ -215,40 +219,60 @@ export default function CustomisationPage() {
 
   const handleAddCategory = async () => {
     if (!newCategoryTitle.trim()) return toast.error("Category title is required")
-    const result = await addCategoryAction(newCategoryTitle, categories.length + 1)
-    if (result.success && result.data) {
-      setCategories(prev => [...prev, result.data as Category])
+    try {
+      const { data, error } = await supabase
+        .from("homepage_categories")
+        .insert([{ title: newCategoryTitle.trim(), sort_order: categories.length + 1, product_ids: [], is_active: true }])
+        .select()
+        .single()
+      if (error) throw error
+      setCategories(prev => [...prev, data as Category])
       setNewCategoryTitle("")
       setShowAddCategoryForm(false)
       toast.success("Category added")
-    } else {
-      toast.error(result.error || "Failed to add category")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add category")
     }
   }
 
   const handleDeleteCategory = async (id: string) => {
     if (!confirm("Delete this homepage category? Products will not be deleted.")) return
-    const result = await deleteCategoryAction(id)
-    if (result.success) setCategories(prev => prev.filter(c => c.id !== id))
-    else if (result.error) toast.error(result.error)
+    try {
+      const { error } = await supabase.from("homepage_categories").delete().eq("id", id)
+      if (error) throw error
+      setCategories(prev => prev.filter(c => c.id !== id))
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete category")
+    }
   }
 
   const handleSaveCategoryEdit = async () => {
     if (!editingCategoryId || !editCategoryTitle.trim()) return
-    const result = await updateCategoryTitleAction(editingCategoryId, editCategoryTitle)
-    if (result.success) {
+    try {
+      const { error } = await supabase
+        .from("homepage_categories")
+        .update({ title: editCategoryTitle.trim() })
+        .eq("id", editingCategoryId)
+      if (error) throw error
       setCategories(prev => prev.map(c => c.id === editingCategoryId ? { ...c, title: editCategoryTitle } : c))
       setEditingCategoryId(null)
       toast.success("Category renamed")
-    } else {
-      toast.error(result.error || "Failed to rename category")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to rename category")
     }
   }
 
   const handleToggleCategoryActive = async (cat: Category) => {
-    const result = await toggleCategoryStatusAction(cat.id, cat.is_active)
-    if (result.success) setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, is_active: !cat.is_active } : c))
-    else if (result.error) toast.error(result.error)
+    try {
+      const { error } = await supabase
+        .from("homepage_categories")
+        .update({ is_active: !cat.is_active })
+        .eq("id", cat.id)
+      if (error) throw error
+      setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, is_active: !cat.is_active } : c))
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update category")
+    }
   }
 
   const handleToggleProductInCategory = async (cat: Category, productId: string) => {
@@ -258,41 +282,47 @@ export default function CustomisationPage() {
     } else {
       newProductIds.push(productId)
     }
-
-    const result = await updateCategoryProductsAction(cat.id, newProductIds)
-    if (result.success) {
+    try {
+      const { error } = await supabase
+        .from("homepage_categories")
+        .update({ product_ids: newProductIds })
+        .eq("id", cat.id)
+      if (error) throw error
       setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, product_ids: newProductIds } : c))
-    } else {
-      toast.error(result.error || "Failed to update category")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update category")
     }
   }
 
   const handleMoveCategory = async (index: number, direction: 'up' | 'down') => {
-    if ((direction === 'up' && index === 0) || (direction === 'down' && index === categories.length - 1)) return
+    if (isReordering || (direction === 'up' && index === 0) || (direction === 'down' && index === categories.length - 1)) return
 
+    setIsReordering(true)
     const newCats = [...categories]
     const swapIndex = direction === 'up' ? index - 1 : index + 1
 
-    // Swap sorting order
     const currentOrder = newCats[index].sort_order
     newCats[index].sort_order = newCats[swapIndex].sort_order
     newCats[swapIndex].sort_order = currentOrder
 
-    // Swap array position
     const temp = newCats[index]
     newCats[index] = newCats[swapIndex]
     newCats[swapIndex] = temp
 
     setCategories(newCats)
 
-    // DB sync using Server Action
-    const result = await reorderCategoriesAction(
-      newCats[index].id,
-      newCats[index].sort_order,
-      newCats[swapIndex].id,
-      newCats[swapIndex].sort_order
-    )
-    if (result.error) toast.error(result.error)
+    try {
+      await Promise.all([
+        supabase.from("homepage_categories").update({ sort_order: newCats[index].sort_order }).eq("id", newCats[index].id),
+        supabase.from("homepage_categories").update({ sort_order: newCats[swapIndex].sort_order }).eq("id", newCats[swapIndex].id)
+      ])
+      toast.success("Category order updated")
+    } catch (err: any) {
+      toast.error("Failed to reorder categories")
+      loadCategoriesAndProducts() // revert on error
+    } finally {
+      setIsReordering(false)
+    }
   }
 
   return (
@@ -314,8 +344,11 @@ export default function CustomisationPage() {
 
         {/* BANNERS TAB */}
         <TabsContent value="banners" className="space-y-6 mt-6">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-[#1F2937]">Banners</h2>
+          <div className="flex justify-between items-end">
+            <div>
+              <h2 className="text-xl font-semibold text-[#1F2937]">Banners</h2>
+              <p className="text-xs text-[#F59E0B] mt-1 italic font-medium">Recommended size: 1280 × 420 px (or any 3:1 aspect ratio)</p>
+            </div>
             <Button onClick={() => setShowAddBannerForm(true)} className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white">
               <Plus className="h-4 w-4 mr-2" /> Add Banner
             </Button>
@@ -377,14 +410,14 @@ export default function CustomisationPage() {
                     <div className="flex flex-col items-center border border-gray-200 rounded overflow-hidden">
                       <button
                         onClick={() => handleMoveBanner(index, 'up')}
-                        disabled={index === 0}
+                        disabled={isReordering || index === 0}
                         className="p-1 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent"
                       >
                         <ChevronUp className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => handleMoveBanner(index, 'down')}
-                        disabled={index === banners.length - 1}
+                        disabled={isReordering || index === banners.length - 1}
                         className="p-1 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent border-t border-gray-200"
                       >
                         <ChevronDown className="h-4 w-4" />
@@ -411,7 +444,7 @@ export default function CustomisationPage() {
 
         {/* CATEGORIES TAB */}
         <TabsContent value="categories" className="space-y-6 mt-6">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-end">
             <h2 className="text-xl font-semibold text-[#1F2937]">Homepage Categories</h2>
             <Button onClick={() => setShowAddCategoryForm(true)} className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white">
               <Plus className="h-4 w-4 mr-2" /> Add Category
@@ -443,14 +476,14 @@ export default function CustomisationPage() {
                     <div className="flex flex-col items-center bg-white border border-[#F59E0B]/30 rounded overflow-hidden shadow-sm">
                       <button
                         onClick={() => handleMoveCategory(index, 'up')}
-                        disabled={index === 0}
+                        disabled={isReordering || index === 0}
                         className="p-1 hover:bg-[#F59E0B]/10 disabled:opacity-30 disabled:hover:bg-transparent"
                       >
                         <ChevronUp className="h-4 w-4 text-[#F59E0B]" />
                       </button>
                       <button
                         onClick={() => handleMoveCategory(index, 'down')}
-                        disabled={index === categories.length - 1}
+                        disabled={isReordering || index === categories.length - 1}
                         className="p-1 hover:bg-[#F59E0B]/10 disabled:opacity-30 disabled:hover:bg-transparent border-t border-[#F59E0B]/20"
                       >
                         <ChevronDown className="h-4 w-4 text-[#F59E0B]" />

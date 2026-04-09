@@ -51,28 +51,48 @@ export default function AdminSettingsPage() {
   })
 
   useEffect(() => {
-    const adminUserJson = localStorage.getItem("admin_user")
-    const sessionJson = localStorage.getItem("byiora_admin_session")
+    const fetchAdminUser = async () => {
+      const adminUserJson = localStorage.getItem("admin_user")
+      const sessionJson = localStorage.getItem("byiora_admin_session")
 
-    if (adminUserJson) {
-      try {
-        const parsedUser = JSON.parse(adminUserJson)
-        setAdminUser(parsedUser)
-        setName(parsedUser.name)
-      } catch (e) {
-        console.error("Failed to parse admin_user", e)
+      if (adminUserJson) {
+        try {
+          const parsedUser = JSON.parse(adminUserJson)
+          setAdminUser(parsedUser)
+          setName(parsedUser.name)
+        } catch (e) {
+          console.error("Failed to parse admin_user", e)
+        }
+      } else if (sessionJson) {
+        try {
+          const parsedUser = JSON.parse(sessionJson)
+          setAdminUser(parsedUser)
+          setName(parsedUser.name)
+        } catch (e) {
+          console.error("Failed to parse admin session", e)
+        }
+      } else {
+        // Fallback: Fetch directly from Supabase if localStorage is empty
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: adminData } = await supabase
+            .from("admin_users")
+            .select("id, name, email, role")
+            .eq("id", user.id)
+            .single()
+
+          if (adminData) {
+            setAdminUser(adminData)
+            setName(adminData.name)
+            // Sync to localStorage for other components
+            localStorage.setItem("admin_user", JSON.stringify(adminData))
+          }
+        }
       }
-    } else if (sessionJson) {
-      try {
-        const parsedUser = JSON.parse(sessionJson)
-        setAdminUser(parsedUser)
-        setName(parsedUser.name)
-      } catch (e) {
-        console.error("Failed to parse admin session", e)
-      }
+      loadPaymentMethods()
     }
 
-    loadPaymentMethods()
+    fetchAdminUser()
   }, [])
 
   const loadPaymentMethods = async () => {
