@@ -31,7 +31,7 @@ import {
 import { Trash2, UserPlus, UserX, UserCheck, KeyRound } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { deleteAdminUserAction } from "@/app/actions/admin"
-import { promoteUserAction, addAdminUserAction, toggleAdminStatusAction, getAdminUsersAction } from "@/app/actions/admin-users"
+import { promoteUserAction, addAdminUserAction, toggleAdminStatusAction, getAdminUsersAction, resetAdminPasswordAction } from "@/app/actions/admin-users"
 
 interface AdminUser {
   id: string
@@ -251,13 +251,11 @@ export default function AdminUsersPage() {
   const handleResetPassword = async (userId: string, userEmail: string) => {
     try {
       const newPassword = "newpass123"
-      const passwordHash = `$2b$10$${btoa(newPassword).slice(0, 53)}`
+      
+      const result = await resetAdminPasswordAction(userId, newPassword)
 
-      const { error } = await supabase.from("admin_users").update({ password_hash: passwordHash }).eq("id", userId)
-
-      if (error) {
-        console.error("Error resetting password:", error)
-        toast.error("Failed to reset password")
+      if (result.error) {
+        toast.error(result.error)
         return
       }
 

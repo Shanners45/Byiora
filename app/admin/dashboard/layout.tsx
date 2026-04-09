@@ -37,19 +37,24 @@ export default function AdminDashboardLayout({
 
         const { data: adminData } = await supabase
           .from("admin_users")
-          .select("id, name, email, role")
+          .select("id, name, email, role, status")
           .eq("id", user.id)
           .single()
 
-        if (!adminData) {
-          console.log("Invalid session data, clearing and redirecting")
+        if (!adminData || adminData.status === "blocked") {
+          console.log(adminData ? "Account is blocked" : "Invalid session data", ", clearing and redirecting")
           await supabase.auth.signOut()
+          localStorage.clear()
           router.replace("/admin/login")
+          toast.error(adminData?.status === "blocked" ? "Your account has been blocked" : "Session expired")
           return
         }
 
         console.log("Valid session found for:", adminData.email)
         setAdminUser(adminData)
+        // Sync to localStorage for usage in child pages
+        localStorage.setItem("admin_user", JSON.stringify(adminData))
+        localStorage.setItem("byiora_admin_session", JSON.stringify(adminData))
       } catch (error) {
         console.error("Session validation error:", error)
         router.replace("/admin/login")

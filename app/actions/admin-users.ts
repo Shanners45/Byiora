@@ -44,6 +44,17 @@ export async function promoteUserAction(userId: string, newRole: "sub_admin" | "
       return { error: `Failed to promote user: ${error.message}` }
     }
 
+    // 2. Reset their password to the default mentioned in the UI (temppass123)
+    const { error: authError } = await serviceSupabase.auth.admin.updateUserById(userId, {
+      password: "temppass123",
+    })
+
+    if (authError) {
+      console.error("Error resetting password during promotion:", authError)
+      // We don't necessarily fail the whole promotion if auth reset fails, 
+      // but it's better to log it.
+    }
+
     revalidatePath("/admin/dashboard/admin-users")
     return { success: true }
   } catch (error: any) {
@@ -149,6 +160,40 @@ export async function getAdminUsersAction() {
     return { success: true, data }
   } catch (error: any) {
     console.error("Error in getAdminUsersAction:", error)
+    return { error: error.message || "An unexpected error occurred" }
+  }
+}
+/**
+ * Resets an admin user's password (admin only)
+ * Uses Service Role to update the actual Auth system
+ */
+export async function resetAdminPasswordAction(userId: string, newPassword: string) {
+  if (!(await verifyAdmin())) {
+    return { error: "Unauthorized: Admin access required" }
+  }
+
+  try {
+    const serviceSupabase = createServiceRoleClient()
+
+    // 1. Update the password in Supabase Auth
+    const { error: authError } = await serviceSupabase.auth.admin.updateUserById(userId, {
+      password: newPassword,
+    })
+
+    if (authError) {
+      console.error("Error updating auth password:", authError)
+      return { error: `Failed to update auth password: ${authError.message}` }
+    }
+
+    // 2. Optional: Keep the password_hash column in sync if it exists/is used
+    // (Note: This is mostly for visibility in the database if the user has a separate check)
+    // We'll just update it to a generic string or the provided one if needed.
+    // However, the Auth update is the one that allows/denies login.
+
+    revalidatePath("/admin/dashboard/admin-users")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error in resetAdminPasswordAction:", error)
     return { error: error.message || "An unexpected error occurred" }
   }
 }

@@ -53,6 +53,7 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     const fetchAdminUser = async () => {
+      // 1. Initial load from localStorage for immediate UI display
       const adminUserJson = localStorage.getItem("admin_user")
       const sessionJson = localStorage.getItem("byiora_admin_session")
 
@@ -72,24 +73,26 @@ export default function AdminSettingsPage() {
         } catch (e) {
           console.error("Failed to parse admin session", e)
         }
-      } else {
-        // Fallback: Fetch directly from Supabase if localStorage is empty
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          const { data: adminData } = await supabase
-            .from("admin_users")
-            .select("id, name, email, role")
-            .eq("id", user.id)
-            .single()
+      }
 
-          if (adminData) {
-            setAdminUser(adminData)
-            setName(adminData.name)
-            // Sync to localStorage for other components
-            localStorage.setItem("admin_user", JSON.stringify(adminData))
-          }
+      // 2. Always fetch fresh data from Supabase to ensure roles/names are up-to-date
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: adminData, error } = await supabase
+          .from("admin_users")
+          .select("id, name, email, role")
+          .eq("id", user.id)
+          .single()
+
+        if (adminData && !error) {
+          setAdminUser(adminData)
+          setName(adminData.name)
+          // Sync to localStorage so other components stay updated
+          localStorage.setItem("admin_user", JSON.stringify(adminData))
+          localStorage.setItem("byiora_admin_session", JSON.stringify(adminData))
         }
       }
+      
       loadPaymentMethods()
     }
 

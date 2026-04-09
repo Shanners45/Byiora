@@ -397,8 +397,8 @@ export default function CustomisationPage() {
                 {editingBannerId === banner.id ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input value={editBannerForm.title || ""} onChange={e => setEditBannerForm(f => ({ ...f, title: e.target.value }))} placeholder="Title" className="placeholder:text-gray-500" />
-                      <Input value={editBannerForm.link_url || ""} onChange={e => setEditBannerForm(f => ({ ...f, link_url: e.target.value }))} placeholder="URL" className="placeholder:text-gray-500" />
+                      <Input value={editBannerForm.title || ""} onChange={e => setEditBannerForm(f => ({ ...f, title: e.target.value }))} placeholder="Title" className="placeholder:text-gray-400" />
+                      <Input value={editBannerForm.link_url || ""} onChange={e => setEditBannerForm(f => ({ ...f, link_url: e.target.value }))} placeholder="URL" className="placeholder:text-gray-400" />
                       <div className="md:col-span-2 flex gap-3">
                         <Input value={editBannerForm.image_url || ""} onChange={e => setEditBannerForm(f => ({ ...f, image_url: e.target.value }))} />
                         <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleSaveBannerEdit}>Save</Button>
