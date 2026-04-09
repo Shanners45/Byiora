@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { ArrowLeft, Save, Upload, Trash2, Pencil } from "lucide-react"
 import { type Product } from "@/lib/product-categories"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/client"
 import { getProductByIdAction, updateProductAction } from "@/app/actions/products"
 import { toast } from "sonner"
 import Image from "next/image"
@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 export default function ProductEditPage() {
+  const supabase = createClient()
   const router = useRouter()
   const params = useParams()
   const productId = params.id as string

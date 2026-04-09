@@ -13,13 +13,14 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { ArrowLeft, Save, Upload, Trash2, Pencil } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import Image from "next/image"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { createProductAction } from "@/app/actions/products"
 
 export default function AddProductPage() {
+  const supabase = createClient()
   const router = useRouter()
 
   const [isSaving, setIsSaving] = useState(false)

@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/client"
 import { Save, User, Lock, QrCode, CreditCard, Upload, Plus, Pencil, Trash2, X, Check } from "lucide-react"
 import Image from "next/image"
 
@@ -26,6 +26,7 @@ interface PaymentMethod {
 }
 
 export default function AdminSettingsPage() {
+  const supabase = createClient()
   const [adminUser, setAdminUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null)
   const [name, setName] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")

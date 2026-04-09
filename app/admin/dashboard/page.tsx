@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/client"
 import { Users, ShoppingBag, DollarSign, Package, UserCheck, Bell } from "lucide-react"
 import Link from "next/link"
 import { getDashboardStatsAction } from "@/app/actions/dashboard"
@@ -19,6 +19,7 @@ interface DashboardStats {
 }
 
 export default function AdminDashboardPage() {
+  const supabase = createClient()
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
     totalProducts: 0,

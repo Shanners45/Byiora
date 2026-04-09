@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/client"
 import { Upload, Trash2, ImageIcon, Plus, ChevronUp, ChevronDown, Check, X, Layers, Package } from "lucide-react"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -37,6 +37,7 @@ interface ProductInfo {
 }
 
 export default function CustomisationPage() {
+  const supabase = createClient()
   const [activeTab, setActiveTab] = useState("banners")
 
   // ====================== BANNERS STATE ======================
@@ -396,8 +397,8 @@ export default function CustomisationPage() {
                 {editingBannerId === banner.id ? (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <Input value={editBannerForm.title || ""} onChange={e => setEditBannerForm(f => ({ ...f, title: e.target.value }))} placeholder="Title" />
-                      <Input value={editBannerForm.link_url || ""} onChange={e => setEditBannerForm(f => ({ ...f, link_url: e.target.value }))} placeholder="URL" />
+                      <Input value={editBannerForm.title || ""} onChange={e => setEditBannerForm(f => ({ ...f, title: e.target.value }))} placeholder="Title" className="placeholder:text-gray-500" />
+                      <Input value={editBannerForm.link_url || ""} onChange={e => setEditBannerForm(f => ({ ...f, link_url: e.target.value }))} placeholder="URL" className="placeholder:text-gray-500" />
                       <div className="md:col-span-2 flex gap-3">
                         <Input value={editBannerForm.image_url || ""} onChange={e => setEditBannerForm(f => ({ ...f, image_url: e.target.value }))} />
                         <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleSaveBannerEdit}>Save</Button>
