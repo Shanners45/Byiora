@@ -133,10 +133,8 @@ export async function POST(request: Request) {
 
       ${remarks ? `
       <div style="background-color: #fef2f2; border: 2px solid #fca5a5; border-radius: 12px; padding: 20px; margin: 25px 0;">
-        <h3 style="color: #991b1b; font-size: 16px; margin: 0 0 12px 0;">📋 Reason: </h3>
-        <p style="color: #7f1d1d; font-size: 15px; line-height: 1.5; margin: 0; font-weight: 500;">
-          ${remarks}
-        </p>
+        <h3 style="color: #991b1b; font-size: 16px; margin: 0 0 12px 0;">📋 Reason for Failure</h3>
+        <p style="color: #7f1d1d; font-size: 15px; line-height: 1.5; margin: 0; font-weight: 500;">${remarks}</p>
       </div>` : ''}
 
       <div style="margin: 30px 0; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 16px; padding: 3px; box-shadow: 0 10px 15px -3px rgba(239, 68, 68, 0.25);">
