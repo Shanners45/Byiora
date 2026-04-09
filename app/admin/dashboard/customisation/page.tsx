@@ -315,7 +315,7 @@ export default function CustomisationPage() {
         {/* BANNERS TAB */}
         <TabsContent value="banners" className="space-y-6 mt-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-[#1F2937]">Banners</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Banners</h2>
             <Button onClick={() => setShowAddBannerForm(true)} className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white">
               <Plus className="h-4 w-4 mr-2" /> Add Banner
             </Button>
@@ -324,7 +324,7 @@ export default function CustomisationPage() {
           {showAddBannerForm && (
             <Card className="border-2 border-[#7E3AF2]/30 bg-white shadow-md">
               <CardHeader className="pb-3">
-                <CardTitle className="text-[#1F2937] flex items-center gap-2">
+                <CardTitle className="text-gray-900 flex items-center gap-2">
                   <ImageIcon className="h-5 w-5" /> New Banner
                 </CardTitle>
               </CardHeader>
@@ -412,7 +412,7 @@ export default function CustomisationPage() {
         {/* CATEGORIES TAB */}
         <TabsContent value="categories" className="space-y-6 mt-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold text-[#1F2937]">Homepage Categories</h2>
+            <h2 className="text-xl font-semibold text-gray-900">Homepage Categories</h2>
             <Button onClick={() => setShowAddCategoryForm(true)} className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white">
               <Plus className="h-4 w-4 mr-2" /> Add Category
             </Button>
@@ -422,9 +422,9 @@ export default function CustomisationPage() {
             <Card className="border-2 border-[#F59E0B]/30 bg-white shadow-md">
               <CardContent className="pt-6 flex gap-4">
                 <div className="flex-1 space-y-2">
-                  <Label>Category Title</Label>
+                  <Label className="text-gray-700">Category Title</Label>
                   <Input value={newCategoryTitle} onChange={e => setNewCategoryTitle(e.target.value)} placeholder="e.g. Best Sellers"
-                    className="placeholder:text-gray-500"
+                    className="placeholder:text-gray-400 text-gray-900"
                   />
                 </div>
                 <div className="flex items-end gap-2">
@@ -463,7 +463,7 @@ export default function CustomisationPage() {
                         <Button size="sm" variant="ghost" onClick={() => setEditingCategoryId(null)} className="h-8 px-2">Cancel</Button>
                       </div>
                     ) : (
-                      <CardTitle className="text-[#1F2937] text-lg ml-2 flex items-center gap-2">
+                      <CardTitle className="text-gray-900 text-lg ml-2 flex items-center gap-2">
                         {cat.title}
                         <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-400 hover:text-gray-700" onClick={() => { setEditingCategoryId(cat.id); setEditCategoryTitle(cat.title); }}>
                           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
@@ -495,7 +495,7 @@ export default function CustomisationPage() {
                           <div className="w-8 h-8 rounded border overflow-hidden flex-shrink-0 bg-white">
                             <img src={prod.logo} alt="" className="w-full h-full object-contain p-1" />
                           </div>
-                          <span className="text-sm font-medium truncate flex-1">{prod.name}</span>
+                          <span className="text-sm font-medium truncate flex-1 text-gray-800">{prod.name}</span>
                         </div>
                       )
                     })}

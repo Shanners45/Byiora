@@ -25,7 +25,12 @@ export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, o
       }}
     >
       {/* Product Image Section */}
-      <div className="absolute inset-0 w-full h-[110%] group-hover:scale-110 transition-transform duration-700 ease-out">
+      <div 
+        className="absolute top-0 left-0 w-full h-[78%] group-hover:scale-105 transition-transform duration-700 ease-out overflow-hidden"
+        style={{ 
+          clipPath: "polygon(0 0, 100% 0, 100% 96%, 95% 100%, 90% 96%, 85% 100%, 80% 96%, 75% 100%, 70% 96%, 65% 100%, 60% 96%, 55% 100%, 50% 96%, 45% 100%, 40% 96%, 35% 100%, 30% 96%, 25% 100%, 20% 96%, 15% 100%, 10% 96%, 5% 100%, 0 96%)" 
+        }}
+      >
         {isImageLogo ? (
           <Image
             src={logo || "/placeholder.svg"}
@@ -41,8 +46,8 @@ export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, o
           </div>
         )}
         
-        {/* Subtle overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60"></div>
+        {/* Subtle overlay to help text legibility if needed, though most text is below now */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-40"></div>
       </div>
 
       {ribbon_text ? (
@@ -55,32 +60,14 @@ export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, o
         </div>
       ) : null}
 
-      {/* Info Section with Jagged Edge */}
-      <div className="absolute bottom-0 left-0 right-0 z-10">
-        {/* Jagged Edge SVG - Positioned to overlap the image */}
-        <div className="absolute top-0 left-0 w-full transform -translate-y-[98%] pointer-events-none">
-          <svg 
-            viewBox="0 0 100 20" 
-            preserveAspectRatio="none" 
-            className="w-full h-8 block"
-            style={{ filter: "drop-shadow(0 -5px 10px rgba(0,0,0,0.3))" }}
-          >
-            <path 
-              d="M0,20 L5,12 L10,18 L15,8 L22,16 L30,4 L38,15 L45,6 L52,18 L60,8 L68,16 L75,4 L82,15 L90,8 L95,16 L100,8 V20 H0 Z" 
-              fill="#2D1B36"
-            />
-          </svg>
-        </div>
-
-        {/* Content Box */}
-        <div className="bg-[#2D1B36] px-4 pb-6 pt-1 text-center min-h-[85px] flex flex-col justify-center items-center">
-          <h3 className="font-bold text-white text-sm md:text-base leading-tight line-clamp-2 max-w-[90%] group-hover:text-purple-300 transition-colors drop-shadow-sm">
-            {name}
-          </h3>
-          
-          {/* Subtle glow on hover */}
-          <div className="absolute inset-0 bg-purple-500/0 group-hover:bg-purple-500/5 transition-colors duration-300 pointer-events-none"></div>
-        </div>
+      {/* Info Section - Now meeting the clipped image */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 bg-[#2D1B36] flex flex-col justify-center items-center py-5 min-h-[30%] px-4 text-center">
+        <h3 className="font-bold text-white text-sm md:text-base leading-tight line-clamp-2 max-w-[95%] group-hover:text-purple-300 transition-colors">
+          {name}
+        </h3>
+        
+        {/* Subtle glow on hover */}
+        <div className="absolute inset-0 bg-purple-500/0 group-hover:bg-purple-500/5 transition-colors duration-300 pointer-events-none"></div>
       </div>
     </div>
   )
