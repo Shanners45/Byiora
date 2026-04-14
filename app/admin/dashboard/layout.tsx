@@ -159,6 +159,7 @@ export default function AdminDashboardLayout({
                 height={36}
                 style={{ objectFit: 'contain', width: 'auto' }}
                 priority
+                unoptimized={true}
               />
             </div>
             <span className="text-lg font-semibold text-white ml-2">Admin</span>

@@ -77,6 +77,7 @@ export default function AdminLogin() {
               height={56}
               style={{ objectFit: 'contain' }}
               priority
+              unoptimized={true}
             />
           </div>
           <h1 className="text-2xl font-bold text-white">Admin Portal</h1>
