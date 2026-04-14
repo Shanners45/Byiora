@@ -1,5 +1,4 @@
 import { supabase } from "./supabase"
-import { createServiceRoleClient } from "./supabase/service-role"
 
 export interface Product {
   id: string
@@ -38,27 +37,22 @@ function isSupabaseConfigured(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
 }
 
-// Get all products from Supabase with fallback
-export async function getAllProducts(useServiceRole = false): Promise<Product[]> {
+export async function getAllProducts(): Promise<Product[]> {
   const now = Date.now()
 
-  // Return cached data if it's still fresh (only for non-service role calls)
-  if (!useServiceRole && productsCache.length > 0 && now - lastFetch < CACHE_DURATION) {
+  // Return cached data if it's still fresh
+  if (productsCache.length > 0 && now - lastFetch < CACHE_DURATION) {
     return productsCache
   }
 
   // If Supabase is not configured, return fallback data
   if (!isSupabaseConfigured()) {
-    console.warn("Supabase not configured, using fallback data")
-    const fallbackProducts = [...fallbackFeaturedGiftCards, ...fallbackWebStoreGames]
-    productsCache = fallbackProducts
-    lastFetch = now
-    return fallbackProducts
+    console.warn("Supabase not configured, using empty array")
+    return []
   }
 
   try {
-    // Use Service Role for admin operations to bypass RLS
-    const client = useServiceRole ? createServiceRoleClient() : supabase
+    const client = supabase
     const { data, error } = await client.from("products").select("*").order("created_at", { ascending: true })
 
     if (error) {
@@ -100,9 +94,8 @@ export async function getAllProducts(useServiceRole = false): Promise<Product[]>
     if (productsCache.length > 0) {
       return productsCache
     }
-    console.warn("Using fallback data due to network error")
-    const fallbackProducts = [...fallbackFeaturedGiftCards, ...fallbackWebStoreGames]
-    return fallbackProducts
+    console.warn("Using empty array due to network error")
+    return []
   }
 }
 
@@ -205,112 +198,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   }
 }
 
-// Delete product
-export async function deleteProduct(id: string): Promise<void> {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Supabase not configured")
-  }
-
-  try {
-    // Use Service Role to bypass RLS for admin operations
-    const serviceSupabase = createServiceRoleClient()
-    const { error } = await serviceSupabase.from("products").delete().eq("id", id)
-
-    if (error) {
-      console.error("Error deleting product:", error)
-      throw new Error(error.message || "Failed to delete product")
-    }
-
-    // Clear cache to force refresh
-    productsCache = []
-    lastFetch = 0
-
-    console.log(`Product ${id} deleted`)
-  } catch (error) {
-    console.error("Error deleting product:", error)
-    throw error
-  }
-}
-
-// Update product status
-export async function updateProductStatus(id: string, isActive: boolean): Promise<void> {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Supabase not configured")
-  }
-
-  try {
-    // Use Service Role to bypass RLS for admin operations
-    const serviceSupabase = createServiceRoleClient()
-    const { error } = await serviceSupabase
-      .from("products")
-      .update({
-        is_active: isActive,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-
-    if (error) {
-      console.error("Error updating product status:", error)
-      throw new Error(error.message || "Failed to update product status")
-    }
-
-    // Clear cache to force refresh
-    productsCache = []
-    lastFetch = 0
-
-    console.log(`Product ${id} status updated to ${isActive ? "active" : "inactive"}`)
-  } catch (error) {
-    console.error("Error updating product status:", error)
-    throw error
-  }
-}
-
-// Update product
-export async function updateProduct(id: string, updatedProduct: Partial<Product>): Promise<void> {
-  if (!isSupabaseConfigured()) {
-    throw new Error("Supabase not configured")
-  }
-
-  try {
-    const updateData: any = {
-      updated_at: new Date().toISOString(),
-    }
-
-    // Map our Product interface to Supabase columns
-    if (updatedProduct.name !== undefined) updateData.name = updatedProduct.name
-    if (updatedProduct.logo !== undefined) updateData.logo = updatedProduct.logo
-    if (updatedProduct.category !== undefined) updateData.category = updatedProduct.category
-    if (updatedProduct.description !== undefined) updateData.description = updatedProduct.description
-    if (updatedProduct.isActive !== undefined) updateData.is_active = updatedProduct.isActive
-    if (updatedProduct.isNew !== undefined) updateData.is_new = updatedProduct.isNew
-    if (updatedProduct.hasUpdate !== undefined) updateData.has_update = updatedProduct.hasUpdate
-    if (updatedProduct.denominations !== undefined) updateData.denominations = updatedProduct.denominations
-    if (updatedProduct.faqs !== undefined) updateData.faqs = updatedProduct.faqs
-    // Extra fields not in the typed interface but valid Supabase columns
-    const extra = updatedProduct as any
-    if ('slug' in extra) updateData.slug = extra.slug
-    if ('denom_icon_url' in extra) updateData.denom_icon_url = extra.denom_icon_url
-    if ('ribbon_text' in extra) updateData.ribbon_text = extra.ribbon_text
-
-    // Use Service Role to bypass RLS for admin operations
-    const serviceSupabase = createServiceRoleClient()
-    const { error } = await serviceSupabase.from("products").update(updateData).eq("id", id)
-
-    if (error) {
-      console.error("Error updating product:", error)
-      throw new Error("Failed to update product")
-    }
-
-    // Clear cache to force refresh
-    productsCache = []
-    lastFetch = 0
-
-    console.log(`Product ${id} updated`)
-  } catch (error) {
-    console.error("Error updating product:", error)
-    throw error
-  }
-}
+// Legacy exports and unused code removed
 
 // Legacy exports for backward compatibility
 export const featuredGiftCards: Product[] = []

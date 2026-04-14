@@ -401,7 +401,7 @@ function HeaderContent() {
                     <User className="h-5 w-5" />
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-md bg-brand-white border-gray-200">
+                <DialogContent className="sm:max-w-md bg-brand-white border-gray-200" aria-describedby={undefined}>
                   <SignInForm onSuccess={() => setIsSignInOpen(false)} />
                 </DialogContent>
               </Dialog>

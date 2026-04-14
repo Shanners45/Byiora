@@ -605,7 +605,7 @@ export default function OrdersPage() {
       {/* Remarks Dialog for Failed orders */}
       {remarksDialog && (
         <Dialog open={remarksDialog.open} onOpenChange={(open) => { if (!open) setRemarksDialog(null) }}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle className="text-red-600">Mark Order as Failed</DialogTitle>
             </DialogHeader>

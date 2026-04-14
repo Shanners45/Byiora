@@ -333,7 +333,7 @@ export default function AdminUsersPage() {
                 Add User as Sub-Admin
               </Button>
             </DialogTrigger>
-            <DialogContent className="border-none shadow-lg">
+            <DialogContent className="border-none shadow-lg" aria-describedby={undefined}>
               <DialogHeader>
                 <DialogTitle className="text-[#1F2937]">Promote User to Admin</DialogTitle>
                 <DialogDescription className="text-[#4B5563]">
@@ -409,7 +409,7 @@ export default function AdminUsersPage() {
                 Add Admin User
               </Button>
             </DialogTrigger>
-            <DialogContent className="border-none shadow-lg">
+            <DialogContent className="border-none shadow-lg" aria-describedby={undefined}>
               <DialogHeader>
                 <DialogTitle className="text-[#1F2937]">Add New Admin User</DialogTitle>
                 <DialogDescription className="text-[#4B5563]">
