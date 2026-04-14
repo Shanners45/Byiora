@@ -13,12 +13,77 @@ const nunito = Nunito({
   display: "swap",
 })
 
+const BASE_URL = "https://www.byiora.store"
+
 export const metadata: Metadata = {
-  title: "Byiora",
-  description: "The fastest & easiest way to buy premium gift cards. Instant delivery, secure payments.",
-  keywords: "gift cards, digital vouchers, instant delivery, secure payment",
+  metadataBase: new URL(BASE_URL),
+  title: {
+    default: "Byiora | Premium Digital Game Top-Up Nepal",
+    template: "%s | Byiora",
+  },
+  description:
+    "Nepal's fastest & most trusted platform to buy premium gift cards and game top-ups. Steam, PUBG, Free Fire, Netflix & more — instant delivery, secure payments.",
+  keywords: [
+    "gift cards Nepal",
+    "game top-up Nepal",
+    "Steam gift card Nepal",
+    "PUBG UC Nepal",
+    "Free Fire diamonds Nepal",
+    "Netflix gift card",
+    "digital vouchers",
+    "instant delivery",
+    "Byiora",
+  ],
+  authors: [{ name: "Byiora" }],
+  creator: "Byiora",
+  publisher: "Byiora",
+  formatDetection: {
+    email: false,
+    telephone: false,
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    url: BASE_URL,
+    siteName: "Byiora",
+    title: "Byiora | Premium Digital Game Top-Up Nepal",
+    description:
+      "Nepal's fastest & most trusted platform to buy premium gift cards and game top-ups. Instant delivery, secure payments.",
+    images: [
+      {
+        url: `https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png`,
+        width: 1200,
+        height: 630,
+        alt: "Byiora – Premium Digital Gift Cards & Game Top-Up",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Byiora | Premium Digital Game Top-Up Nepal",
+    description:
+      "Nepal's fastest & most trusted platform to buy premium gift cards and game top-ups.",
+    images: [
+      `https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png`,
+    ],
+    creator: "@byiora",
+  },
+  alternates: {
+    canonical: BASE_URL,
+  },
   icons: {
     icon: "/favicon.ico",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
   },
 }
 

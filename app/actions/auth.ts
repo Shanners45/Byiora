@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
-import { sendWelcomeEmail } from "@/lib/email-service"
+import { headers } from "next/headers"
 
 export async function loginWithPassword(email: string, password: string, redirectPath: string = "/") {
   const supabase = await createClient()
@@ -44,13 +44,23 @@ export async function signupWithPassword(email: string, password: string, name: 
       return { error: "Failed to create user profile" }
     }
 
-    // Send welcome email from server-side
-    // Use try-catch so email failure doesn't break signup
+    // Trigger welcome email in background via API route
     try {
-      await sendWelcomeEmail(email.toLowerCase().trim(), name.trim())
+      const headerList = await headers()
+      const host = headerList.get('host')
+      const protocol = host?.includes('localhost') ? 'http' : 'https'
+      const appUrl = `${protocol}://${host}`
+      
+      fetch(`${appUrl}/api/send-welcome`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.toLowerCase().trim(),
+          userName: name.trim(),
+        }),
+      }).catch(e => console.error("Welcome email background error:", e))
     } catch (e) {
-      console.error("Welcome email failed:", e)
-      // Don't throw - signup should succeed even if email fails
+      console.error("Welcome email trigger failed:", e)
     }
   }
 

@@ -257,7 +257,7 @@ export default function ContactPage() {
                   className="w-full bg-brand-purple hover:bg-brand-purple/90 text-white font-semibold h-11 gap-2"
                 >
                   <Send className="h-4 w-4" />
-                  {sending ? "Opening email…" : "Send Message"}
+                  {sending ? "Sending email…" : "Send Message"}
                 </Button>
 
                 <p className="text-xs text-gray-400 text-center">
