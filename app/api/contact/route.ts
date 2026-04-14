@@ -1,7 +1,17 @@
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
-import DOMPurify from 'isomorphic-dompurify'
 
+// Simple HTML sanitization function
+function sanitizeHtml(input: string): string {
+  if (!input) return ""
+  return input
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+    .replace(/\//g, '&#x2F;')
+}
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: Request) {
@@ -13,10 +23,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const sanitizedName = DOMPurify.sanitize(name)
-    const sanitizedEmail = DOMPurify.sanitize(email)
-    const sanitizedSubject = DOMPurify.sanitize(subject || "New Support Request")
-    const sanitizedMessage = DOMPurify.sanitize(message)
+    const sanitizedName = sanitizeHtml(name)
+    const sanitizedEmail = sanitizeHtml(email)
+    const sanitizedSubject = sanitizeHtml(subject || "New Support Request")
+    const sanitizedMessage = sanitizeHtml(message)
 
     const htmlContent = `
 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
