@@ -17,11 +17,8 @@ export default function TransactionsPage() {
   const router = useRouter();
   const { isLoggedIn, transactions, user, isLoading } = useAuth();
 
-  console.log("Transactions page rendered, isLoggedIn:", isLoggedIn);
-
   useEffect(() => {
     if (!isLoggedIn && !isLoading) {
-      console.log("User not logged in, redirecting to home");
       router.push("/");
     }
   }, [isLoggedIn, isLoading, router]);

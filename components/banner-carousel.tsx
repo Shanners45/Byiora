@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { supabase } from "@/lib/supabase"
+import Image from "next/image"
 
 interface Banner {
   id: string
@@ -12,22 +12,38 @@ interface Banner {
   title: string
 }
 
-export function BannerCarousel() {
+interface BannerCarouselProps {
+  /** Pre-fetched banners from the server. If provided, skips client-side fetch. */
+  initialBanners?: Banner[]
+}
+
+export function BannerCarousel({ initialBanners }: BannerCarouselProps) {
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [banners, setBanners] = useState<Banner[]>([])
+  const [banners, setBanners] = useState<Banner[]>(initialBanners || [])
 
+  // Only self-fetch if no initialBanners were provided (backward compatibility)
   useEffect(() => {
-    const fetchBanners = async () => {
-      const { data, error } = await supabase
-        .from("banners")
-        .select("id, image_url, link_url, title")
-        .eq("is_active", true)
-        .order("sort_order", { ascending: true })
+    if (initialBanners && initialBanners.length > 0) return
 
-      if (!error && data && data.length > 0) {
-        setBanners(data)
-      } else {
-        // Fallback to static banners if table doesn't exist yet
+    const fetchBanners = async () => {
+      try {
+        const { supabase } = await import("@/lib/supabase")
+        const { data, error } = await supabase
+          .from("banners")
+          .select("id, image_url, link_url, title")
+          .eq("is_active", true)
+          .order("sort_order", { ascending: true })
+
+        if (!error && data && data.length > 0) {
+          setBanners(data)
+        } else {
+          setBanners([
+            { id: "1", image_url: "/images/banner-1.jpeg", link_url: "", title: "Banner 1" },
+            { id: "2", image_url: "/images/banner-2.png", link_url: "", title: "Banner 2" },
+            { id: "3", image_url: "/images/banner-3.png", link_url: "", title: "Banner 3" },
+          ])
+        }
+      } catch {
         setBanners([
           { id: "1", image_url: "/images/banner-1.jpeg", link_url: "", title: "Banner 1" },
           { id: "2", image_url: "/images/banner-2.png", link_url: "", title: "Banner 2" },
@@ -37,8 +53,9 @@ export function BannerCarousel() {
     }
 
     fetchBanners()
-  }, [])
+  }, [initialBanners])
 
+  // Auto-rotate slides
   useEffect(() => {
     if (banners.length <= 1) return
     const timer = setInterval(() => {
@@ -66,20 +83,24 @@ export function BannerCarousel() {
           >
             {banner.link_url ? (
               <a href={banner.link_url} className="block relative h-full w-full">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={banner.image_url}
                   alt={banner.title || `Banner ${index + 1}`}
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 1200px"
+                  priority={index === 0}
                 />
               </a>
             ) : (
               <div className="relative h-full w-full">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={banner.image_url}
                   alt={banner.title || `Banner ${index + 1}`}
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, 1200px"
+                  priority={index === 0}
                 />
               </div>
             )}

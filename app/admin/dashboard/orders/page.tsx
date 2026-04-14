@@ -287,11 +287,7 @@ export default function OrdersPage() {
         )
         if (notifResult.error) {
           console.error("Error inserting notification:", notifResult.error)
-        } else {
-          console.log("Notification sent successfully to user:", transaction.user_id)
         }
-      } else {
-        console.log("No user_id for transaction, skipping notification:", transaction.transaction_id)
       }
 
       toast.success("Order marked as completed and email sent with giftcode!")

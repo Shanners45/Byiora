@@ -362,9 +362,8 @@ export default function AddProductPage() {
               </Label>
               <div className="flex items-center gap-3">
                 {denomIconUrl && (
-                  <div className="w-14 h-14 rounded-lg overflow-hidden border border-[#F59E0B]/40 flex-shrink-0 bg-white flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={denomIconUrl} alt="Denom icon" className="w-full h-full object-contain" />
+                  <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#F59E0B]/40 flex-shrink-0 bg-white flex items-center justify-center">
+                    <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
                   </div>
                 )}
                 <div className="flex-1 space-y-1.5">

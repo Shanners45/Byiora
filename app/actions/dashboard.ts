@@ -34,31 +34,23 @@ export async function getDashboardStatsAction() {
   try {
     const serviceSupabase = createServiceRoleClient()
 
-    // Load users count
-    const { count: usersCount } = await serviceSupabase
-      .from("users")
-      .select("*", { count: "exact", head: true })
-
-    // Load products count
-    const { count: productsCount } = await serviceSupabase
-      .from("products")
-      .select("*", { count: "exact", head: true })
-
-    // Load transactions for recent orders display
-    const { data: transactions, error: transactionsError } = await serviceSupabase
-      .from("transactions")
-      .select("*")
-      .order("created_at", { ascending: false })
+    const [
+      { count: usersCount },
+      { count: productsCount },
+      { data: transactions, error: transactionsError },
+      { data: completedTransactions, error: completedError },
+      { data: products }
+    ] = await Promise.all([
+      serviceSupabase.from("users").select("*", { count: "exact", head: true }),
+      serviceSupabase.from("products").select("*", { count: "exact", head: true }),
+      serviceSupabase.from("transactions").select("*").order("created_at", { ascending: false }),
+      serviceSupabase.from("transactions").select("price,product_name").eq("status", "Completed"),
+      serviceSupabase.from("products").select("*").eq("is_active", true).limit(5)
+    ])
 
     if (transactionsError) {
       console.error("Error loading transactions:", transactionsError)
     }
-
-    // Separately load ONLY completed transactions for revenue accuracy
-    const { data: completedTransactions, error: completedError } = await serviceSupabase
-      .from("transactions")
-      .select("price,product_name")
-      .eq("status", "Completed")
 
     if (completedError) {
       console.error("Error loading completed transactions:", completedError)
@@ -66,7 +58,6 @@ export async function getDashboardStatsAction() {
 
     // Calculate stats
     const totalOrders = transactions?.length || 0
-    // Sum price from ALL completed transactions (includes guest orders where user_id is null)
     const totalRevenue = completedTransactions
       ?.reduce((sum, t) => {
         const cleanPrice = String(t.price).replace(/,/g, '')
@@ -74,13 +65,6 @@ export async function getDashboardStatsAction() {
         return sum + (isNaN(parsed) ? 0 : parsed)
       }, 0) || 0
     const recentOrders = transactions?.slice(0, 5) || []
-
-    // Load top products
-    const { data: products } = await serviceSupabase
-      .from("products")
-      .select("*")
-      .eq("is_active", true)
-      .limit(5)
 
     return {
       success: true,

@@ -30,7 +30,6 @@ export default function AdminDashboardLayout({
         const { data: { user } } = await supabase.auth.getUser()
 
         if (!user) {
-          console.log("No session found, redirecting to login")
           router.replace("/admin/login")
           return
         }
@@ -42,7 +41,6 @@ export default function AdminDashboardLayout({
           .single()
 
         if (!adminData || adminData.status === "blocked") {
-          console.log(adminData ? "Account is blocked" : "Invalid session data", ", clearing and redirecting")
           await supabase.auth.signOut()
           localStorage.clear()
           router.replace("/admin/login")
@@ -50,7 +48,6 @@ export default function AdminDashboardLayout({
           return
         }
 
-        console.log("Valid session found for:", adminData.email)
         setAdminUser(adminData)
         // Sync to localStorage for usage in child pages
         localStorage.setItem("admin_user", JSON.stringify(adminData))
@@ -155,11 +152,13 @@ export default function AdminDashboardLayout({
         <div className="flex items-center justify-between px-4">
           <div className="flex items-center">
             <div className="h-8 relative mr-2 flex items-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <Image
                 src="/logo-final.png"
                 alt="Byiora Logo"
-                style={{ objectFit: 'contain', height: '36px', width: 'auto', maxWidth: '120px' }}
+                width={120}
+                height={36}
+                style={{ objectFit: 'contain', width: 'auto' }}
+                priority
               />
             </div>
             <span className="text-lg font-semibold text-white ml-2">Admin</span>

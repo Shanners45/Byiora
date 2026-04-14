@@ -424,8 +424,8 @@ export default function CustomisationPage() {
                         <ChevronDown className="h-4 w-4" />
                       </button>
                     </div>
-                    <div className="w-24 h-14 bg-gray-100 rounded border flex items-center justify-center overflow-hidden">
-                      {banner.image_url ? <img src={banner.image_url} className="w-full h-full object-cover" alt="" /> : <ImageIcon className="text-gray-300" />}
+                    <div className="relative w-24 h-14 bg-gray-100 rounded border flex items-center justify-center overflow-hidden">
+                      {banner.image_url ? <Image src={banner.image_url} alt="" fill sizes="96px" style={{ objectFit: 'cover' }} /> : <ImageIcon className="text-gray-300" />}
                     </div>
                     <div className="flex-1">
                       <p className="font-semibold text-gray-800">{banner.title || "Untitled"}</p>
@@ -526,8 +526,8 @@ export default function CustomisationPage() {
                           <div className={`w-5 h-5 rounded flex items-center justify-center border ${isSelected ? "bg-[#7E3AF2] border-[#7E3AF2] text-white" : "border-gray-300"}`}>
                             {isSelected && <Check className="h-3 w-3" />}
                           </div>
-                          <div className="w-8 h-8 rounded border overflow-hidden flex-shrink-0 bg-white">
-                            <img src={prod.logo} alt="" className="w-full h-full object-contain p-1" />
+                          <div className="relative w-8 h-8 rounded border overflow-hidden flex-shrink-0 bg-white">
+                            <Image src={prod.logo} alt="" fill sizes="32px" style={{ objectFit: 'contain' }} className="p-1" />
                           </div>
                           <span className="text-sm font-medium truncate flex-1">{prod.name}</span>
                         </div>

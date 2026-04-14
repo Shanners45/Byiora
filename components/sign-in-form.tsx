@@ -19,6 +19,7 @@ export function SignInForm({ onSuccess }: SignInFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [signInEmail, setSignInEmail] = useState("")
   const [signInPassword, setSignInPassword] = useState("")
+  const [signUpName, setSignUpName] = useState("")
   const [signUpEmail, setSignUpEmail] = useState("")
   const [signUpPassword, setSignUpPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -46,7 +47,11 @@ export function SignInForm({ onSuccess }: SignInFormProps) {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
-    console.log("Sign up form submitted")
+
+    if (!signUpName.trim()) {
+      toast.error("Please enter your full name!")
+      return
+    }
 
     if (signUpPassword !== confirmPassword) {
       toast.error("Passwords do not match!")
@@ -61,9 +66,10 @@ export function SignInForm({ onSuccess }: SignInFormProps) {
     setIsLoading(true)
 
     try {
-      const success = await signup(signUpEmail, signUpPassword, signUpEmail.split("@")[0])
+      const success = await signup(signUpEmail, signUpPassword, signUpName.trim())
       if (success) {
         // Reset form
+        setSignUpName("")
         setSignUpEmail("")
         setSignUpPassword("")
         setConfirmPassword("")
@@ -148,6 +154,20 @@ export function SignInForm({ onSuccess }: SignInFormProps) {
 
         <TabsContent value="signup" className="space-y-4">
           <form onSubmit={handleSignUp} className="space-y-4">
+            <div>
+              <Label htmlFor="signup-name" className="text-brand-charcoal font-semibold text-base">
+                Full Name
+              </Label>
+              <Input
+                id="signup-name"
+                type="text"
+                value={signUpName}
+                onChange={(e) => setSignUpName(e.target.value)}
+                placeholder="Enter your full name"
+                required
+                className="bg-brand-white border-gray-200 text-brand-charcoal placeholder:text-gray-500 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
+              />
+            </div>
             <div>
               <Label htmlFor="signup-email" className="text-brand-charcoal font-semibold text-base">
                 Email

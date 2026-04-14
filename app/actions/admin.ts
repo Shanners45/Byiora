@@ -1,7 +1,26 @@
 "use server"
 
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
+import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+
+/**
+ * Verifies the current user is an admin
+ */
+async function verifyAdmin() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return false
+
+  const { data: adminUser } = await supabase
+    .from('admin_users')
+    .select('id, role')
+    .eq('id', user.id)
+    .single()
+
+  if (!adminUser) return false
+  return true
+}
 
 /**
  * Deletes an admin user from both admin_users and users tables.
@@ -9,12 +28,13 @@ import { revalidatePath } from "next/cache"
  * Uses Service Role to bypass RLS for admin operations.
  */
 export async function deleteAdminUserAction(userId: string) {
+  if (!(await verifyAdmin())) {
+    return { error: "Unauthorized: Admin access required" }
+  }
+  
   const supabase = createServiceRoleClient()
 
   try {
-    // Check if the current user is an admin (optional security check)
-    // For now we assume the caller has valid admin session
-    
     // 1. Delete from admin_users table
     const { error: adminError } = await supabase
       .from("admin_users")

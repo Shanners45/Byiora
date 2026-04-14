@@ -1,17 +1,7 @@
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
+import { sanitizeHtml } from '@/lib/sanitize'
 
-// Simple HTML sanitization function
-function sanitizeHtml(input: string): string {
-  if (!input) return ""
-  return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;')
-}
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: Request) {

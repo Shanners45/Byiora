@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
+import { revalidatePath } from "next/cache"
 import DOMPurify from "isomorphic-dompurify"
 
 async function verifyAdmin() {
@@ -30,6 +31,7 @@ export async function addBannerAction(title: string, linkUrl: string, imageUrl: 
   }]).select().single()
 
   if (error) return { error: error.message }
+  revalidatePath("/")
   return { success: true, data }
 }
 
@@ -47,6 +49,7 @@ export async function updateBannerAction(id: string, title: string, linkUrl: str
   }).eq("id", id)
 
   if (error) return { error: error.message }
+  revalidatePath("/")
   return { success: true }
 }
 
@@ -63,6 +66,7 @@ export async function addCategoryAction(title: string, sortOrder: number) {
   }]).select().single()
 
   if (error) return { error: error.message }
+  revalidatePath("/")
   return { success: true, data }
 }
 
@@ -77,6 +81,7 @@ export async function updateCategoryTitleAction(id: string, title: string) {
   }).eq("id", id)
 
   if (error) return { error: error.message }
+  revalidatePath("/")
   return { success: true }
 }
 
@@ -97,6 +102,7 @@ export async function deleteBannerAction(id: string) {
   const { error } = await supabase.from("banners").delete().eq("id", id)
 
   if (error) return { error: error.message }
+  revalidatePath("/")
   return { success: true }
 }
 
@@ -107,6 +113,7 @@ export async function toggleBannerStatusAction(id: string, currentStatus: boolea
   const { error } = await supabase.from("banners").update({ is_active: !currentStatus }).eq("id", id)
 
   if (error) return { error: error.message }
+  revalidatePath("/")
   return { success: true }
 }
 
@@ -120,6 +127,7 @@ export async function reorderBannersAction(banner1Id: string, banner1Order: numb
   ])
 
   if (error1 || error2) return { error: (error1 || error2)?.message || "Failed to reorder" }
+  revalidatePath("/")
   return { success: true }
 }
 
@@ -143,6 +151,7 @@ export async function deleteCategoryAction(id: string) {
   const { error } = await supabase.from("homepage_categories").delete().eq("id", id)
 
   if (error) return { error: error.message }
+  revalidatePath("/")
   return { success: true }
 }
 
@@ -153,6 +162,7 @@ export async function toggleCategoryStatusAction(id: string, currentStatus: bool
   const { error } = await supabase.from("homepage_categories").update({ is_active: !currentStatus }).eq("id", id)
 
   if (error) return { error: error.message }
+  revalidatePath("/")
   return { success: true }
 }
 
@@ -163,6 +173,7 @@ export async function updateCategoryProductsAction(id: string, productIds: strin
   const { error } = await supabase.from("homepage_categories").update({ product_ids: productIds }).eq("id", id)
 
   if (error) return { error: error.message }
+  revalidatePath("/")
   return { success: true }
 }
 
@@ -176,5 +187,6 @@ export async function reorderCategoriesAction(cat1Id: string, cat1Order: number,
   ])
 
   if (error1 || error2) return { error: (error1 || error2)?.message || "Failed to reorder" }
+  revalidatePath("/")
   return { success: true }
 }

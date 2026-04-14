@@ -1,19 +1,8 @@
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
+import { sanitizeHtml } from '@/lib/sanitize'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
-
-// Simple HTML sanitization function to replace DOMPurify
-function sanitizeHtml(input: string): string {
-  if (!input) return ""
-  return input
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/\//g, '&#x2F;')
-}
 
 export async function POST(request: Request) {
   try {

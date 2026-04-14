@@ -70,11 +70,13 @@ export default function AdminLogin() {
       <div className="w-full max-w-md px-4">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="https://www.byiora.store/images/byiora-logo-full.png"
+            <Image
+              src="/logo-final.png"
               alt="Byiora"
-              style={{ height: '56px', width: 'auto', objectFit: 'contain' }}
+              width={160}
+              height={56}
+              style={{ objectFit: 'contain' }}
+              priority
             />
           </div>
           <h1 className="text-2xl font-bold text-white">Admin Portal</h1>

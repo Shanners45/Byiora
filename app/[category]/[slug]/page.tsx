@@ -28,118 +28,6 @@ interface PaymentMethod {
   is_enabled: boolean
 }
 
-const giftCardData = {
-  steam: {
-    name: "Steam Gift Card",
-    description: "Steam Gift Cards are the perfect way to give the gift of games to your friends and family.",
-    denominations: [
-      { value: "5", price: "5", label: "Rs. 5 Gift Card" },
-      { value: "10", price: "10", label: "Rs. 10 Gift Card" },
-      { value: "25", price: "25", label: "Rs. 25 Gift Card" },
-      { value: "50", price: "50", label: "Rs. 50 Gift Card" },
-      { value: "100", price: "100", label: "Rs. 100 Gift Card" },
-    ],
-    instructions:
-      "Simply select your preferred amount, choose your payment method, complete the payment, and you will receive your voucher code via email.",
-  },
-  pubg: {
-    name: "PUBG Mobile UC",
-    description:
-      "Buy PUBG Mobile UC voucher in seconds! Simply select your preferred UC amount, choose your preferred payment method, complete the payment, and you will receive your voucher code via email.",
-    denominations: [
-      { value: "60", price: "0.99", label: "60 UC" },
-      { value: "325", price: "4.99", label: "325 UC" },
-      { value: "660", price: "9.99", label: "660 UC" },
-      { value: "1800", price: "24.99", label: "1800 UC" },
-      { value: "3850", price: "49.99", label: "3850 UC" },
-      { value: "8100", price: "99.99", label: "8100 UC" },
-    ],
-    instructions: "PUBG Mobile UC voucher codes sold have at least 7 days validity from the date of purchase.",
-  },
-  netflix: {
-    name: "Netflix Gift Card",
-    description: "Give the gift of entertainment with Netflix Gift Cards. Perfect for movie and TV show lovers.",
-    denominations: [
-      { value: "15", price: "15", label: "Rs. 15 Gift Card" },
-      { value: "25", price: "25", label: "Rs. 25 Gift Card" },
-      { value: "50", price: "50", label: "Rs. 50 Gift Card" },
-      { value: "100", price: "100", label: "Rs. 100 Gift Card" },
-    ],
-    instructions:
-      "Netflix Gift Cards can be redeemed on any Netflix account in the same country where it was purchased.",
-  },
-  "cod-mobile": {
-    name: "COD Mobile CP",
-    description: "Get COD Mobile CP instantly! Top up your account and enjoy premium features.",
-    denominations: [
-      { value: "80", price: "0.99", label: "80 CP" },
-      { value: "400", price: "4.99", label: "400 CP" },
-      { value: "800", price: "9.99", label: "800 CP" },
-      { value: "2000", price: "24.99", label: "2000 CP" },
-    ],
-    instructions: "COD Mobile CP will be added directly to your account after payment confirmation.",
-  },
-  "free-fire": {
-    name: "Free Fire Diamonds",
-    description: "Purchase Free Fire Diamonds instantly! Get the best deals on diamonds for your Free Fire account.",
-    denominations: [
-      { value: "100", price: "0.99", label: "100 Diamonds" },
-      { value: "520", price: "4.99", label: "520 Diamonds" },
-      { value: "1080", price: "9.99", label: "1080 Diamonds" },
-      { value: "2200", price: "19.99", label: "2200 Diamonds" },
-    ],
-    instructions: "Free Fire Diamonds will be credited to your account within minutes of payment.",
-  },
-  "mobile-legends": {
-    name: "Mobile Legends Diamonds",
-    description: "Buy Mobile Legends Diamonds at the best prices! Power up your gameplay with instant delivery.",
-    denominations: [
-      { value: "86", price: "1.99", label: "86 Diamonds" },
-      { value: "172", price: "3.99", label: "172 Diamonds" },
-      { value: "257", price: "5.99", label: "257 Diamonds" },
-      { value: "514", price: "11.99", label: "514 Diamonds" },
-      { value: "1028", price: "23.99", label: "1028 Diamonds" },
-    ],
-    instructions: "Mobile Legends Diamonds will be added to your account immediately after successful payment.",
-  },
-  amazon: {
-    name: "Amazon Gift Card",
-    description: "Amazon Gift Cards - the perfect gift for any occasion. Shop millions of items on Amazon.",
-    denominations: [
-      { value: "10", price: "10", label: "Rs. 10 Gift Card" },
-      { value: "25", price: "25", label: "Rs. 25 Gift Card" },
-      { value: "50", price: "50", label: "Rs. 50 Gift Card" },
-      { value: "100", price: "100", label: "Rs. 100 Gift Card" },
-    ],
-    instructions: "Amazon Gift Cards can be used to purchase millions of items on Amazon.com.",
-  },
-  apple: {
-    name: "Apple Gift Card",
-    description:
-      "Apple Gift Cards can be used for purchases at any Apple Store, on the Apple Store app, apple.com, the App Store, iTunes, Apple Music, Apple TV+, Apple News+, Apple Books, Apple Arcade, iCloud+, Apple Fitness+, Apple One and other Apple properties.",
-    denominations: [
-      { value: "10", price: "10", label: "Rs. 10 Gift Card" },
-      { value: "25", price: "25", label: "Rs. 25 Gift Card" },
-      { value: "50", price: "50", label: "Rs. 50 Gift Card" },
-      { value: "100", price: "100", label: "Rs. 100 Gift Card" },
-    ],
-    instructions: "Apple Gift Cards can be used for all Apple services and products.",
-  },
-  "google-play": {
-    name: "Google Play Gift Card",
-    description:
-      "Google Play Gift Cards can be used to purchase apps, games, music, movies, TV shows, and books on Google Play.",
-    denominations: [
-      { value: "10", price: "10", label: "Rs. 10 Gift Card" },
-      { value: "25", price: "25", label: "Rs. 25 Gift Card" },
-      { value: "50", price: "50", label: "Rs. 50 Gift Card" },
-      { value: "100", price: "100", label: "Rs. 100 Gift Card" },
-    ],
-    instructions: "Google Play Gift Cards can be used for all Google Play purchases.",
-  },
-}
-
-
 
 export default function ProductDetailPage() {
   const params = useParams()
@@ -163,12 +51,11 @@ export default function ProductDetailPage() {
   const categorySlug = params.category as string
   const productSlug = params.slug as string
 
-  const giftCardOrig = giftCardData[productSlug as keyof typeof giftCardData] || ({} as any)
   const giftCard = {
-    name: product?.name || giftCardOrig.name || "Gift Card",
-    description: product?.description || giftCardOrig.description || "Digital Gift Card",
-    denominations: product?.denominations?.length > 0 ? product.denominations : (giftCardOrig.denominations || []),
-    instructions: giftCardOrig.instructions || "Purchased codes will be sent to your email.",
+    name: product?.name || "Gift Card",
+    description: product?.description || "Digital Gift Card",
+    denominations: product?.denominations || [],
+    instructions: "Purchased codes will be sent to your email.",
   }
 
   useEffect(() => {
@@ -208,13 +95,12 @@ export default function ProductDetailPage() {
       }
     }
 
-    loadProduct()
-    loadPaymentMethods()
+    Promise.all([loadProduct(), loadPaymentMethods()])
   }, [productSlug, categorySlug])
 
   const isTopupProduct = product?.category === "topup"
 
-  console.log("Product detail page rendered for:", productSlug, "in category:", categorySlug)
+
 
   if (isLoading) {
     return <LoadingScreen />
@@ -243,15 +129,6 @@ export default function ProductDetailPage() {
   }
 
   const handlePurchase = async () => {
-    console.log("Purchase initiated:", {
-      productSlug,
-      giftCard: productSlug,
-      denomination: selectedDenomination,
-      payment: selectedPayment,
-      email,
-      userId: isTopupProduct ? userId : undefined,
-    })
-
     if (!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !userId)) {
       toast.error("Please complete all required fields")
       return

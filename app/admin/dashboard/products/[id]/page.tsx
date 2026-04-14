@@ -123,8 +123,6 @@ export default function ProductEditPage() {
       const fileName = `${productId}-${Date.now()}.${fileExt}`
       const filePath = `${fileName}`
 
-      console.log("Uploading file:", fileName)
-
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("product-images")
@@ -139,12 +137,8 @@ export default function ProductEditPage() {
         return
       }
 
-      console.log("Upload successful:", uploadData)
-
       // Get public URL
       const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(filePath)
-
-      console.log("Public URL:", urlData)
 
       if (urlData?.publicUrl) {
         setLogo(urlData.publicUrl)
@@ -456,9 +450,8 @@ export default function ProductEditPage() {
                 </Label>
                 <div className="flex items-center gap-3">
                   {denomIconUrl && (
-                    <div className="w-14 h-14 rounded-lg overflow-hidden border border-[#E5E7EB] flex-shrink-0 bg-white flex items-center justify-center">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={denomIconUrl} alt="Denom icon" className="w-full h-full object-contain" />
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#E5E7EB] flex-shrink-0 bg-white flex items-center justify-center">
+                      <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
                     </div>
                   )}
                   <div className="flex-1 space-y-1.5">
