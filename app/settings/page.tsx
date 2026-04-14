@@ -13,29 +13,19 @@ import { toast } from "sonner"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { useAuth } from "@/lib/auth-context"
-import { ArrowLeft, User, Lock, Trash2 } from "lucide-react"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
+import { ArrowLeft, User, Lock } from "lucide-react"
+
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { user, logout, updateProfile, deleteAccount, isLoggedIn } = useAuth()
+  const { user, logout, updateProfile, isLoggedIn } = useAuth()
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [name, setName] = useState(user?.name || "")
   const [email, setEmail] = useState(user?.email || "")
   const [isUpdating, setIsUpdating] = useState(false)
-  const [isDeleting, setIsDeleting] = useState(false)
+
   const [transactions, setTransactions] = useState([]) // Mock transaction state
 
   // Redirect if not logged in
@@ -83,23 +73,6 @@ export default function SettingsPage() {
     }, 1000)
   }
 
-  const handleDeleteAccount = async () => {
-    setIsDeleting(true)
-    try {
-      const success = await deleteAccount()
-      if (success) {
-        toast.success("Account deleted successfully")
-        router.push("/")
-      } else {
-        toast.error("Failed to delete account")
-      }
-    } catch (error) {
-      console.error("Delete account error:", error)
-      toast.error("Failed to delete account")
-    } finally {
-      setIsDeleting(false)
-    }
-  }
 
   return (
     <div className="min-h-screen bg-brand-purple">
@@ -247,56 +220,7 @@ export default function SettingsPage() {
                 </form>
               </Card>
 
-              {/* Danger Zone - Account Deletion */}
-              <Card className="bg-white border-none shadow-lg">
-                <CardHeader>
-                  <CardTitle className="text-[#EF4444]">Danger Zone</CardTitle>
-                  <CardDescription className="text-[#4B5563]">Irreversible account actions</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border border-[#EF4444]/20 rounded-lg bg-[#EF4444]/5">
-                    <div>
-                      <h4 className="font-medium text-[#1F2937]">Delete Account</h4>
-                      <p className="text-sm text-[#4B5563]">
-                        Permanently delete your account. Your order history will be preserved.
-                      </p>
-                    </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className="text-[#EF4444] border-[#EF4444]/20 hover:bg-[#EF4444]/10"
-                          disabled={isDeleting}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Account
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent className="border-none shadow-lg">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle className="text-[#1F2937]">Delete Account</AlertDialogTitle>
-                          <AlertDialogDescription className="text-[#4B5563]">
-                            Are you sure you want to delete your account? This action cannot be undone.
-                            Your order history will remain in our system for record-keeping purposes.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel className="text-[#4B5563] border-[#E5E7EB]">
-                            Cancel
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={handleDeleteAccount}
-                            className="bg-[#EF4444] hover:bg-[#EF4444]/90 text-white"
-                            disabled={isDeleting}
-                          >
-                            {isDeleting ? "Deleting..." : "Delete Account"}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </CardContent>
-              </Card>
+
             </TabsContent>
           </Tabs>
         </div>

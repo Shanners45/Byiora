@@ -36,7 +36,6 @@ interface AuthContextType {
   signup: (email: string, password: string, name: string) => Promise<boolean>
   logout: () => void
   updateProfile: (name: string) => Promise<boolean>
-  deleteAccount: () => Promise<boolean>
   addTransaction: (
     transaction: Omit<Transaction, "id" | "date" | "transactionId"> & {
       productId?: string
@@ -208,35 +207,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await logoutUser("/")
   }
 
-  const deleteAccount = async (): Promise<boolean> => {
-    if (!user) return false
-
-    try {
-      const supabase = createClient()
-      
-      // Anonymize user data instead of deleting to preserve foreign key references
-      const { error } = await supabase
-        .from("users")
-        .update({
-          email: `deleted_user_${user.id}@anonymized.local`,
-          name: "Deleted User",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id)
-
-      if (error) {
-        console.error("Error deleting account:", error)
-        return false
-      }
-
-      // Sign out after anonymization
-      await logout()
-      return true
-    } catch (error) {
-      console.error("Delete account error:", error)
-      return false
-    }
-  }
 
   const addTransaction = async (
     transactionData: Omit<Transaction, "id" | "date" | "transactionId"> & {
@@ -315,7 +285,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signup,
         logout,
         updateProfile,
-        deleteAccount,
         addTransaction,
         updateTransactionStatus,
         isLoading,

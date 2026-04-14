@@ -37,13 +37,23 @@ export default function ContactPage() {
     }
     setSending(true)
     try {
-      // Build a mailto link as a lightweight fallback (no backend needed)
-      const subject = encodeURIComponent(form.subject || "Byiora Support Request")
-      const body = encodeURIComponent(
-        `Name: ${form.name}\nEmail: ${form.email}\n\n${form.message}`
-      )
-      window.location.href = `mailto:${CONTACT_DETAILS.email}?subject=${subject}&body=${body}`
-      toast.success("Opening your email client…")
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to send message")
+      }
+
+      toast.success("Message sent! We'll get back to you shortly.")
+      setForm({ name: "", email: "", subject: "", message: "" })
+    } catch (error: any) {
+      console.error("Error sending message:", error)
+      toast.error(error.message || "Something went wrong. Please try again.")
     } finally {
       setSending(false)
     }

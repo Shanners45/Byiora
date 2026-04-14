@@ -258,6 +258,12 @@ export default function ProductDetailPage() {
       return
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(email)) {
+      toast.error("Please enter a valid email address")
+      return
+    }
+
     setIsProcessing(true)
 
     const selectedDenom = giftCard.denominations.find((d: any) => d.label === selectedDenomination)

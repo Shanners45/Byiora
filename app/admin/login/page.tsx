@@ -27,7 +27,7 @@ export default function AdminLogin() {
       // 1. Use Server Action for login to enforce HTTP-only secure cookies
       const { loginWithPassword } = await import("@/app/actions/auth")
       const result = await loginWithPassword(email, password, "/admin/dashboard")
-      
+
       if (result.error || !result.data?.user) {
         toast.error(result.error || "Invalid credentials")
         setIsLoading(false)
@@ -50,7 +50,7 @@ export default function AdminLogin() {
         setIsLoading(false)
         return
       }
-      
+
       toast.success("Login successful!")
       router.replace("/admin/dashboard")
     } catch (error) {
@@ -72,7 +72,7 @@ export default function AdminLogin() {
           <div className="flex justify-center mb-4">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/images/byiora-logo-full.png"
+              src="https://www.byiora.store/images/byiora-logo-full.png"
               alt="Byiora"
               style={{ height: '56px', width: 'auto', objectFit: 'contain' }}
             />
