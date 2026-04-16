@@ -32,10 +32,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 
     const categoryLabel = product.category === "topup" ? "Top-Up" : "Gift Card"
-    const title = `Buy ${product.name} ${categoryLabel} in Nepal`
+    const title = `Buy ${product.name} in Nepal`
     const description =
       product.description ||
-      `Buy ${product.name} ${categoryLabel} instantly on Byiora. Secure payments, instant delivery in Nepal.`
+      `Buy ${product.name} instantly on Byiora. Secure payments, instant delivery in Nepal.`
 
     const productUrl = `${BASE_URL}/${category}/${slug}`
 
@@ -52,13 +52,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         siteName: "Byiora",
         images: product.logo
           ? [
-              {
-                url: product.logo,
-                width: 600,
-                height: 600,
-                alt: `${product.name} – Byiora`,
-              },
-            ]
+            {
+              url: product.logo,
+              width: 600,
+              height: 600,
+              alt: `${product.name} – Byiora`,
+            },
+          ]
           : [],
         type: "website",
       },
