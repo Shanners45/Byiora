@@ -69,7 +69,7 @@ export const metadata: Metadata = {
     creator: "@byiora",
   },
   alternates: {
-    canonical: BASE_URL,
+    canonical: '/',
   },
   icons: {
     icon: "/favicon.ico",
