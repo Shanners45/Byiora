@@ -8,15 +8,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import { Mail, MessageCircle, Facebook, Instagram, Twitter, Clock, Send, ChevronRight, ArrowLeft } from "lucide-react"
+import { Mail, MessageCircle, Facebook, Instagram, MapPin, Clock, Send, ChevronRight, ArrowLeft } from "lucide-react"
 
 const CONTACT_DETAILS = {
   email: "support@byiora.store",
-  whatsapp: "+977-9800000000", // Replace with real number
-  whatsappLink: "https://wa.me/9779800000000",
+  whatsapp: "+977-9842864103", // Replace with real number
+  whatsappLink: "https://wa.me/9779842864103",
   facebook: "https://www.facebook.com/byiora",
   instagram: "https://www.instagram.com/byiora",
-  twitter: "https://twitter.com/byiora",
+  location: "Kathmandu, Nepal",
+  locationLink: "https://maps.google.com/?q=Kathmandu,+Nepal",
   supportHours: "Sun – Fri, 9 AM – 6 PM NPT",
 }
 
@@ -153,19 +154,19 @@ export default function ContactPage() {
               <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-purple-600 ml-auto transition-colors" />
             </a>
 
-            {/* Twitter / X */}
+            {/* Location */}
             <a
-              href={CONTACT_DETAILS.twitter}
+              href={CONTACT_DETAILS.locationLink}
               target="_blank"
               rel="noopener noreferrer"
               className="group flex items-center gap-4 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm rounded-2xl px-5 py-4 transition-all"
             >
               <div className="w-11 h-11 rounded-full bg-purple-50 flex items-center justify-center flex-shrink-0">
-                <Twitter className="h-5 w-5 text-purple-600" />
+                <MapPin className="h-5 w-5 text-purple-600" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Twitter / X</p>
-                <p className="text-slate-800 font-semibold text-sm">@byiora</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Location</p>
+                <p className="text-slate-800 font-semibold text-sm">{CONTACT_DETAILS.location}</p>
               </div>
               <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-purple-600 ml-auto transition-colors" />
             </a>
