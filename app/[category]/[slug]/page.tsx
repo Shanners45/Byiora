@@ -185,13 +185,9 @@ export default function ProductDetailPage() {
         setIsProcessing(false)
         setShowQRDialog(false)
 
-        // Show success toast — visible now that dialog is closed
-        toast.success(
-          "🎉 Order placed successfully! Your order is being processed and you will receive your voucher code via email soon.",
-        )
-
-        // Send DB notification AFTER dialog closes so the toast popup is visible
         if (user) {
+          // Send DB notification AFTER dialog closes so the toast popup is visible
+          // The notification context automatically fires a toast for us
           try {
             await sendNotification({
               title: "Order Placed Successfully! 🎉",
@@ -202,6 +198,11 @@ export default function ProductDetailPage() {
           } catch (notifError) {
             console.error("Failed to send notification:", notifError)
           }
+        } else {
+          // Fallback toast for guest users who do not rely on the notification context
+          toast.success("Order Placed Successfully! 🎉", {
+            description: `Your order for ${giftCard.name} (${selectedDenom?.label}) has been placed and is being processed.`,
+          })
         }
 
         // Reset form after successful order

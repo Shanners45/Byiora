@@ -32,7 +32,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }
 
-    const emailSubject = `Order Placed: ${productName} ${denomination}`
+    const emailSubject = `Order Placed: ${productName}`
 
     const row = (label: string, value: string) => `
       <tr>
@@ -64,7 +64,6 @@ export async function POST(request: Request) {
           ${row("Payment Method", paymentMethod || "—")}
           ${row("Transaction ID", transactionId || "—")}
           ${row("Order Date", orderDate)}
-          ${row("Email", email)}
         </table>
       </div>
 
