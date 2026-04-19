@@ -156,7 +156,7 @@ export async function getAllProductsAdminAction() {
     const { data, error } = await serviceSupabase
       .from("products")
       .select("*")
-      .order("created_at", { ascending: true })
+      .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error loading products:", error)

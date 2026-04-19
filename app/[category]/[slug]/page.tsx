@@ -170,6 +170,9 @@ export default function ProductDetailPage() {
             productName: giftCard.name,
             denomination: selectedDenom?.label || selectedDenomination,
             transactionId: transactionId,
+            price: selectedDenom?.price || "",
+            paymentMethod: paymentMethodName,
+            orderDate: new Date().toISOString(),
           })
         })
       } catch (emailError) {

@@ -12,7 +12,7 @@ import { Mail, MessageCircle, Facebook, Instagram, MapPin, Clock, Send, ChevronR
 
 const CONTACT_DETAILS = {
   email: "support@byiora.store",
-  whatsapp: "+977-9842864103", // Replace with real number
+  whatsapp: "+977-9842864103",
   whatsappLink: "https://wa.me/9779842864103",
   facebook: "https://www.facebook.com/byiora",
   instagram: "https://www.instagram.com/byiora",

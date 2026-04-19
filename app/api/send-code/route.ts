@@ -30,10 +30,10 @@ export async function POST(request: Request) {
     }
 
     if (user.email !== email) {
-       const { data: adminUser } = await supabase.from('admin_users').select('id').eq('id', user.id).single()
-       if (!adminUser) {
-          return NextResponse.json({ error: "Forbidden: You cannot send emails to other users." }, { status: 403 })
-       }
+      const { data: adminUser } = await supabase.from('admin_users').select('id').eq('id', user.id).single()
+      if (!adminUser) {
+        return NextResponse.json({ error: "Forbidden: You cannot send emails to other users." }, { status: 403 })
+      }
     }
 
     const emailSubject = subject || `Your ${productName} Giftcard Code from Byiora`
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
     `
 
     const data = await resend.emails.send({
-      from: 'Byiora <order@byiora.store>',
+      from: 'Byiora <no_reply@byiora.store>',
       replyTo: 'support@byiora.store',
       to: [email],
       subject: emailSubject,

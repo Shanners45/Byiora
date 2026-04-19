@@ -14,36 +14,50 @@ export async function POST(request: Request) {
     const userName = sanitizeHtml(body.userName || "")
     const productName = sanitizeHtml(body.productName || "")
     const denomination = sanitizeHtml(body.denomination || "")
+    const price = sanitizeHtml(body.price || "")
+    const paymentMethod = sanitizeHtml(body.paymentMethod || "")
+    const orderDate = body.orderDate
+      ? new Date(body.orderDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
+      : new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }
 
-
-
     const emailSubject = `Order Placed: ${productName} ${denomination}`
+
+    const row = (label: string, value: string) => `
+      <tr>
+        <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; white-space: nowrap; width: 40%;">${label}</td>
+        <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb;">${value}</td>
+      </tr>`
 
     const htmlContent = `
 <div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
 
     <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
-      <img src="https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
-      <p style="color: #9ca3af; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Order Placed Successfully</p>
+      <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
+      <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Order Placed Successfully</p>
     </div>
 
     <div style="padding: 40px;">
       <h2 style="color: #1E1E1E; font-size: 20px; margin-top: 0;">Hi ${userName ? userName : 'Valued Customer'},</h2>
       <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Thank you for your order! We've successfully received your request for <strong>${productName} ${denomination}</strong>. Your order is currently being verified and processed.</p>
 
-      <div style="margin: 40px 0; background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); border-radius: 16px; padding: 3px; box-shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.25);">
-        <div style="background-color: #ffffff; border-radius: 14px; padding: 30px; text-align: center;">
-          <p style="margin: 0; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Order Status</p>
-          <div style="margin-top: 15px; font-family: 'Arial', sans-serif; font-size: 24px; font-weight: bold; color: #F59E0B; letter-spacing: 2px; padding: 15px; background-color: #FFFBEB; border-radius: 8px; border: 1px solid #FEF3C7; text-transform: uppercase;">
-            PENDING
-          </div>
-          <p style="margin: 15px 0 0 0; color: #6b7280; font-size: 12px;">Transaction ID: ${transactionId || 'N/A'}</p>
+      <div style="margin: 32px 0; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
+        <div style="background-color: #6B3FA0; padding: 12px 16px;">
+          <p style="margin: 0; color: #ffffff; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Order Summary</p>
         </div>
+        <table style="width: 100%; border-collapse: collapse;">
+          ${row("Product", `${productName} ${denomination}`)}
+          ${row("Amount", denomination || "—")}
+          ${row("Price", price ? `NPR ${price}` : "—")}
+          ${row("Payment Method", paymentMethod || "—")}
+          ${row("Transaction ID", transactionId || "—")}
+          ${row("Order Date", orderDate)}
+          ${row("Email", email)}
+        </table>
       </div>
 
       <p style="color: #4b5563; font-size: 15px; line-height: 1.6; text-align: center;">
@@ -65,7 +79,7 @@ export async function POST(request: Request) {
     `
 
     const data = await resend.emails.send({
-      from: 'Byiora <order@byiora.store>',
+      from: 'Byiora <no_reply@byiora.store>',
       replyTo: 'support@byiora.store',
       to: [email],
       subject: emailSubject,
@@ -78,3 +92,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to send placed email' }, { status: 500 })
   }
 }
+

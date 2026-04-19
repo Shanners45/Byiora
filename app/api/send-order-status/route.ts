@@ -156,7 +156,7 @@ export async function POST(request: Request) {
     const htmlContent = isCompleted ? completedTemplate : failedTemplate
 
     const data = await resend.emails.send({
-      from: 'Byiora <order@byiora.store>',
+      from: 'Byiora <no_reply@byiora.store>',
       replyTo: 'support@byiora.store',
       to: [email],
       subject: emailSubject,

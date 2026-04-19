@@ -134,7 +134,8 @@ export default function CustomisationPage() {
         .update({
           title: editBannerForm.title || "",
           link_url: editBannerForm.link_url || "",
-          image_url: editBannerForm.image_url || ""
+          image_url: editBannerForm.image_url || "",
+          sort_order: editBannerForm.sort_order  // preserve sort order on edit
         })
         .eq("id", editingBannerId)
       if (error) throw error

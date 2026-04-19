@@ -54,7 +54,7 @@ export async function POST(request: Request) {
     `
 
     const data = await resend.emails.send({
-      from: 'Byiora <welcome@byiora.store>',
+      from: 'Byiora <no_reply@byiora.store>',
       to: [email],
       subject: 'Welcome to Byiora! 🎮',
       html: htmlContent,

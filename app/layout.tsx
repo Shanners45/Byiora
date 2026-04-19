@@ -18,7 +18,7 @@ const BASE_URL = "https://www.byiora.store"
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
-    default: "Byiora | Premium Digital Game Top-Up Nepal",
+    default: "Byiora | Premium Game Top-Up Nepal",
     template: "%s | Byiora",
   },
   description:

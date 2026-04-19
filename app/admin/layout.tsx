@@ -3,7 +3,7 @@ import { Toaster } from "sonner"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Byiora Admin",
+  title: "Admin Dashboard",
   robots: {
     index: false,
     follow: false,
