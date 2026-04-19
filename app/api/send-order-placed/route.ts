@@ -17,8 +17,16 @@ export async function POST(request: Request) {
     const price = sanitizeHtml(body.price || "")
     const paymentMethod = sanitizeHtml(body.paymentMethod || "")
     const orderDate = body.orderDate
-      ? new Date(body.orderDate).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
-      : new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
+      ? new Date(body.orderDate).toLocaleString("en-US", {
+        timeZone: "Asia/Kathmandu",
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+      : new Date().toLocaleString("en-US", {
+        timeZone: "Asia/Kathmandu",
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
 
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
@@ -43,14 +51,14 @@ export async function POST(request: Request) {
 
     <div style="padding: 40px;">
       <h2 style="color: #1E1E1E; font-size: 20px; margin-top: 0;">Hi ${userName ? userName : 'Valued Customer'},</h2>
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Thank you for your order! We've successfully received your request for <strong>${productName} ${denomination}</strong>. Your order is currently being verified and processed.</p>
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Thank you for your order! We've successfully received your request for <strong>${productName}</strong>. Your order is currently being verified and processed.</p>
 
       <div style="margin: 32px 0; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
         <div style="background-color: #6B3FA0; padding: 12px 16px;">
           <p style="margin: 0; color: #ffffff; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Order Summary</p>
         </div>
         <table style="width: 100%; border-collapse: collapse;">
-          ${row("Product", `${productName} ${denomination}`)}
+          ${row("Product", `${productName}`)}
           ${row("Amount", denomination || "—")}
           ${row("Price", price ? `NPR ${price}` : "—")}
           ${row("Payment Method", paymentMethod || "—")}

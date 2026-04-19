@@ -151,6 +151,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             userId: data.user_id,
           }
           setNotifications((prev) => [newNotification, ...prev])
+
+          // Fire toast immediately — don't rely solely on the realtime listener
+          const toastFn = (toast as any)[notification.type] || toast.info
+          toastFn(notification.title, { description: notification.message })
         }
       } catch (error) {
         console.error("Error sending notification:", error)

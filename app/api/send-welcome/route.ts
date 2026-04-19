@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     
     <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
       <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
-      <p style="color: #9ca3af; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Welcome to the Family</p>
+      <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Welcome to the Family</p>
     </div>
 
     <div style="padding: 40px;">
