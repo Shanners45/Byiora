@@ -1,6 +1,6 @@
 "use client"
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
-import { supabase } from "./supabase"
+import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "./auth-context"
 import { toast } from "sonner"
 
@@ -30,6 +30,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const { user } = useAuth()
   const currentUserId = user?.id || null
+  const supabase = createClient()
 
   const unreadCount = notifications.filter((n) => !n.isRead).length
 

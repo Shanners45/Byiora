@@ -180,29 +180,29 @@ export default function ProductDetailPage() {
         // Don't fail the order if email fails
       }
 
-      // Send notification to user if logged in
-      if (user) {
-        try {
-          await sendNotification({
-            title: "Order Placed Successfully! 🎉",
-            message: `Your order for ${giftCard.name} (${selectedDenom?.label}) has been placed and is being processed.`,
-            type: "success",
-            userId: user.id,
-          })
-        } catch (notifError) {
-          console.error("Failed to send notification:", notifError)
-        }
-      }
-
-      // Simulate payment processing time
-      setTimeout(() => {
+      // Simulate payment processing time, then close dialog and show notifications
+      setTimeout(async () => {
         setIsProcessing(false)
         setShowQRDialog(false)
 
-        // Always show success message - order stays as "Processing" for admin to manage
+        // Show success toast — visible now that dialog is closed
         toast.success(
           "🎉 Order placed successfully! Your order is being processed and you will receive your voucher code via email soon.",
         )
+
+        // Send DB notification AFTER dialog closes so the toast popup is visible
+        if (user) {
+          try {
+            await sendNotification({
+              title: "Order Placed Successfully! 🎉",
+              message: `Your order for ${giftCard.name} (${selectedDenom?.label}) has been placed and is being processed.`,
+              type: "success",
+              userId: user.id,
+            })
+          } catch (notifError) {
+            console.error("Failed to send notification:", notifError)
+          }
+        }
 
         // Reset form after successful order
         setSelectedDenomination("")
