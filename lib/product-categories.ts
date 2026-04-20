@@ -1,4 +1,4 @@
-import { supabase } from "./supabase"
+import { createClient } from "@/lib/supabase/client"
 
 export interface Product {
   id: string
@@ -52,7 +52,7 @@ export async function getAllProducts(): Promise<Product[]> {
   }
 
   try {
-    const client = supabase
+    const client = createClient()
     const { data, error } = await client.from("products").select("*").order("created_at", { ascending: true })
 
     if (error) {
@@ -61,9 +61,8 @@ export async function getAllProducts(): Promise<Product[]> {
       if (productsCache.length > 0) {
         return productsCache
       }
-      console.warn("Using fallback data due to Supabase error")
-      const fallbackProducts = [...fallbackFeaturedGiftCards, ...fallbackWebStoreGames]
-      return fallbackProducts
+      console.warn("Using empty array due to Supabase error")
+      return []
     }
 
     // Transform Supabase data to our Product interface
@@ -121,18 +120,16 @@ export async function getWebStoreGames(): Promise<Product[]> {
 // Get product by ID
 export async function getProductById(id: string): Promise<Product | null> {
   if (!isSupabaseConfigured()) {
-    const fallbackProducts = [...fallbackFeaturedGiftCards, ...fallbackWebStoreGames]
-    return fallbackProducts.find((product) => product.id === id) || null
+    return null
   }
 
   try {
+    const supabase = createClient()
     const { data, error } = await supabase.from("products").select("*").eq("id", id).single()
 
     if (error) {
       console.error("Error fetching product:", error)
-      // Try fallback data
-      const fallbackProducts = [...fallbackFeaturedGiftCards, ...fallbackWebStoreGames]
-      return fallbackProducts.find((product) => product.id === id) || null
+      return null
     }
 
     return {
@@ -152,27 +149,23 @@ export async function getProductById(id: string): Promise<Product | null> {
     }
   } catch (error) {
     console.error("Error fetching product:", error)
-    // Try fallback data
-    const fallbackProducts = [...fallbackFeaturedGiftCards, ...fallbackWebStoreGames]
-    return fallbackProducts.find((product) => product.id === id) || null
+    return null
   }
 }
 
 // Get product by slug
 export async function getProductBySlug(slug: string): Promise<Product | null> {
   if (!isSupabaseConfigured()) {
-    const fallbackProducts = [...fallbackFeaturedGiftCards, ...fallbackWebStoreGames]
-    return fallbackProducts.find((product) => product.slug === slug) || null
+    return null
   }
 
   try {
+    const supabase = createClient()
     const { data, error } = await supabase.from("products").select("*").eq("slug", slug).single()
 
     if (error) {
       console.error("Error fetching product by slug:", error)
-      // Try fallback data
-      const fallbackProducts = [...fallbackFeaturedGiftCards, ...fallbackWebStoreGames]
-      return fallbackProducts.find((product) => product.slug === slug) || null
+      return null
     }
 
     return {
@@ -192,30 +185,8 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
     }
   } catch (error) {
     console.error("Error fetching product by slug:", error)
-    // Try fallback data
-    const fallbackProducts = [...fallbackFeaturedGiftCards, ...fallbackWebStoreGames]
-    return fallbackProducts.find((product) => product.slug === slug) || null
+    return null
   }
 }
 
 // Legacy exports and unused code removed
-
-// Legacy exports for backward compatibility
-export const featuredGiftCards: Product[] = []
-export const webStoreGames: Product[] = []
-export const allProducts: Product[] = []
-
-// Initialize legacy arrays (for components that still use them)
-export async function initializeLegacyArrays() {
-  const featured = await getFeaturedGiftCards()
-  const webStore = await getWebStoreGames()
-
-  featuredGiftCards.length = 0
-  featuredGiftCards.push(...featured)
-
-  webStoreGames.length = 0
-  webStoreGames.push(...webStore)
-
-  allProducts.length = 0
-  allProducts.push(...featured, ...webStore)
-}

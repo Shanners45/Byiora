@@ -1,12 +1,7 @@
 import type { Metadata } from "next"
-import { createClient } from "@supabase/supabase-js"
+import { createClient } from "@/lib/supabase/server"
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
 const BASE_URL = "https://www.byiora.store"
-
-// Create a lightweight client for metadata generation (server-side only)
-const supabase = createClient(supabaseUrl, supabaseKey)
 
 interface Props {
   params: Promise<{ category: string; slug: string }>
@@ -15,6 +10,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { category, slug } = await params
+  const supabase = await createClient()
 
   try {
     const { data: product, error } = await supabase

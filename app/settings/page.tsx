@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,7 +18,7 @@ import { ArrowLeft, User, Lock } from "lucide-react"
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { user, logout, updateProfile, isLoggedIn } = useAuth()
+  const { user, logout, updateProfile, isLoggedIn, isLoading } = useAuth()
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -29,8 +29,13 @@ export default function SettingsPage() {
   const [transactions, setTransactions] = useState([]) // Mock transaction state
 
   // Redirect if not logged in
-  if (!isLoggedIn) {
-    router.push("/")
+  useEffect(() => {
+    if (!isLoading && !isLoggedIn) {
+      router.push("/")
+    }
+  }, [isLoggedIn, isLoading, router])
+
+  if (isLoading || !isLoggedIn) {
     return null
   }
 
