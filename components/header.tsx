@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { Menu, Search, User, Bell, LogOut, Settings, History } from "lucide-react"
+import { Menu, Search, User, Bell, LogOut, Settings, History, Home, Headset } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { NotificationPanel } from "./notification-panel"
 import { SearchResults } from "./search-results"
@@ -17,59 +17,6 @@ import { useEffect, useState } from "react"
 import Image from "next/image"
 
 export function Header() {
-  const router = useRouter()
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  if (!mounted) {
-    return (
-      <header className="sticky top-0 z-50 w-full border-b border-gray-200 bg-brand-white/95 backdrop-blur-lg shadow-sm">
-        <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center cursor-pointer" onClick={() => router.push("/")}>
-              <div className="h-10 relative">
-                <Image
-                  src="/logo-final.png"
-                  alt="Byiora Logo"
-                  width={120}
-                  height={40}
-                  className="object-contain"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="hidden md:flex items-center flex-1 max-w-md mx-8">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-brand-light-gray h-4 w-4" />
-              <input
-                type="text"
-                placeholder="Search gift cards..."
-                className="w-full pl-10 pr-4 py-2 bg-brand-white border border-gray-200 rounded-lg text-brand-charcoal placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="text-brand-charcoal hover:bg-brand-sky-blue/10">
-              <Bell className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="text-brand-charcoal hover:bg-brand-sky-blue/10">
-              <User className="h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      </header>
-    )
-  }
-
-  return <HeaderContent />
-}
-
-function HeaderContent() {
   const { user, isLoggedIn, logout, isLoading } = useAuth()
   const { unreadCount } = useNotifications()
   const router = useRouter()
@@ -207,6 +154,7 @@ function HeaderContent() {
                             setIsMobileSidebarOpen(false)
                           }}
                         >
+                          <Home className="h-4 w-4 mr-2" />
                           Home
                         </Button>
                         <Button
@@ -233,6 +181,7 @@ function HeaderContent() {
                             setIsMobileSidebarOpen(false)
                           }}
                         >
+                          <Headset className="h-4 w-4 mr-2" />
                           Contact Us
                         </Button>
                         <Button
@@ -259,6 +208,7 @@ function HeaderContent() {
                             setIsMobileSidebarOpen(false)
                           }}
                         >
+                          <Home className="h-4 w-4 mr-2" />
                           Home
                         </Button>
                         <Button
@@ -269,6 +219,7 @@ function HeaderContent() {
                             setIsMobileSidebarOpen(false)
                           }}
                         >
+                          <Headset className="h-4 w-4 mr-2" />
                           Contact Us
                         </Button>
                       </nav>
@@ -402,6 +353,7 @@ function HeaderContent() {
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md bg-brand-white border-gray-200" aria-describedby={undefined}>
+                  <DialogTitle className="sr-only">Sign In</DialogTitle>
                   <SignInForm onSuccess={() => setIsSignInOpen(false)} />
                 </DialogContent>
               </Dialog>

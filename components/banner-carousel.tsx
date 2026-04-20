@@ -13,47 +13,11 @@ interface Banner {
 }
 
 interface BannerCarouselProps {
-  /** Pre-fetched banners from the server. If provided, skips client-side fetch. */
-  initialBanners?: Banner[]
+  banners: Banner[]
 }
 
-export function BannerCarousel({ initialBanners }: BannerCarouselProps) {
+export function BannerCarousel({ banners }: BannerCarouselProps) {
   const [currentSlide, setCurrentSlide] = useState(0)
-  const [banners, setBanners] = useState<Banner[]>(initialBanners || [])
-
-  // Only self-fetch if no initialBanners were provided (backward compatibility)
-  useEffect(() => {
-    if (initialBanners && initialBanners.length > 0) return
-
-    const fetchBanners = async () => {
-      try {
-        const { supabase } = await import("@/lib/supabase")
-        const { data, error } = await supabase
-          .from("banners")
-          .select("id, image_url, link_url, title")
-          .eq("is_active", true)
-          .order("sort_order", { ascending: true })
-
-        if (!error && data && data.length > 0) {
-          setBanners(data)
-        } else {
-          setBanners([
-            { id: "1", image_url: "/images/banner-1.jpeg", link_url: "", title: "Banner 1" },
-            { id: "2", image_url: "/images/banner-2.png", link_url: "", title: "Banner 2" },
-            { id: "3", image_url: "/images/banner-3.png", link_url: "", title: "Banner 3" },
-          ])
-        }
-      } catch {
-        setBanners([
-          { id: "1", image_url: "/images/banner-1.jpeg", link_url: "", title: "Banner 1" },
-          { id: "2", image_url: "/images/banner-2.png", link_url: "", title: "Banner 2" },
-          { id: "3", image_url: "/images/banner-3.png", link_url: "", title: "Banner 3" },
-        ])
-      }
-    }
-
-    fetchBanners()
-  }, [initialBanners])
 
   // Auto-rotate slides
   useEffect(() => {

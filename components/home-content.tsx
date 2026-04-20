@@ -50,7 +50,7 @@ export function HomeContent({ categories, banners }: HomeContentProps) {
     <>
       {/* Hero Banner */}
       <section className="mb-12">
-        <BannerCarousel initialBanners={banners} />
+        <BannerCarousel banners={banners} />
       </section>
 
       {/* Category Sections */}

@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
 import Image from "next/image"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/client"
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("")
@@ -35,7 +35,6 @@ export default function AdminLogin() {
       }
 
       // 2. Check admin_users table for UID and role using SSR browser client
-      const { createClient } = await import("@/lib/supabase/client")
       const supabase = createClient()
       const { data: adminUser, error: adminError } = await supabase
         .from("admin_users")
@@ -71,7 +70,7 @@ export default function AdminLogin() {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <Image
-              src="/logo-final.png"
+              src="https://www.byiora.store/logo-final.png"
               alt="Byiora"
               width={160}
               height={56}

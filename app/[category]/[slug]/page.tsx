@@ -15,7 +15,7 @@ import { Footer } from "@/components/footer"
 import { useAuth } from "@/lib/auth-context"
 import { useNotifications } from "@/lib/notification-context"
 import { getProductBySlug } from "@/lib/product-categories"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
 import { LoadingScreen } from "@/components/loading-screen"
 
@@ -41,6 +41,7 @@ export default function ProductDetailPage() {
   const [marketingConsent, setMarketingConsent] = useState(false)
   const [smsConsent, setSmsConsent] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const supabase = createClient()
   const [product, setProduct] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showQRDialog, setShowQRDialog] = useState(false)

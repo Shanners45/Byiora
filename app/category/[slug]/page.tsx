@@ -6,7 +6,7 @@ import { ArrowLeft, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { supabase } from "@/lib/supabase"
+import { createClient } from "@/lib/supabase/client"
 import { LoadingScreen } from "@/components/loading-screen"
 import Image from "next/image"
 import Link from "next/link"
@@ -35,6 +35,7 @@ export default function CategoryPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [categoryName, setCategoryName] = useState("")
+  const supabase = createClient()
 
   // Map category slugs to display names
   const categoryDisplayNames: Record<string, string> = {
