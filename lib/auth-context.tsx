@@ -181,7 +181,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateProfile = async (name: string): Promise<boolean> => {
-    if (!user) return false
+    if (!user || !name || name.trim().length === 0) return false
 
     try {
       const supabase = createClient()

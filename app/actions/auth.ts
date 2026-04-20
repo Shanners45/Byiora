@@ -23,6 +23,10 @@ export async function loginWithPassword(email: string, password: string, redirec
 }
 
 export async function signupWithPassword(email: string, password: string, name: string) {
+  if (!name || name.trim().length === 0) {
+    return { error: "Full name is required" }
+  }
+
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.signUp({

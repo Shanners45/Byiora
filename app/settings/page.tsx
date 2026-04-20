@@ -43,6 +43,11 @@ export default function SettingsPage() {
     e.preventDefault()
     setIsUpdating(true)
 
+    if (!name || name.trim().length === 0) {
+      toast.error("Full name is required")
+      return
+    }
+
     try {
       const success = await updateProfile(name)
       if (success) {
@@ -130,6 +135,7 @@ export default function SettingsPage() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="Your name"
+                        required
                         className="bg-[#F9FAFB] border-[#E5E7EB] placeholder:text-gray-400"
                       />
                     </div>
