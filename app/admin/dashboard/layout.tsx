@@ -150,8 +150,8 @@ export default function AdminDashboardLayout({
           } fixed inset-y-0 z-50 flex w-64 flex-col bg-[#7E3AF2] text-white border-r border-[#E5E7EB] pt-5 pb-4 transition-transform duration-300 lg:translate-x-0 lg:static lg:w-64`}
       >
         <div className="flex items-center justify-between px-4">
-          <div className="flex items-center">
-            <div className="h-8 relative mr-2 flex items-center">
+          <div className="flex items-center gap-4">
+            <div className="h-8 relative flex items-center">
               <Image
                 src="https://www.byiora.store/logo-final.png"
                 alt="Byiora Logo"
@@ -162,7 +162,7 @@ export default function AdminDashboardLayout({
                 unoptimized={true}
               />
             </div>
-            <span className="text-lg font-semibold text-white ml-2">Admin</span>
+            <span className="text-lg font-semibold text-white/90 tracking-wide">Admin</span>
           </div>
           <Button
             variant="ghost"
