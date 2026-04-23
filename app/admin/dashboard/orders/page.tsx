@@ -300,18 +300,23 @@ export default function OrdersPage() {
   }
 
   const getUIDForDisplay = (transaction: Transaction) => {
-    // Check if it's a topup product
+    // For topup products, UID comes from guest_user_data
     if (transaction.product_name.toLowerCase().includes("topup") || transaction.product_category === "topup") {
-      // guest_user_data contains { userId: "..." } for topup orders
       if (transaction.guest_user_data?.userId) {
         return transaction.guest_user_data.userId
       } else if (transaction.guest_user_data?.uid) {
         return transaction.guest_user_data.uid
-      } else if (transaction.users?.id) {
-        return transaction.users.id
-      } else if (transaction.user_id) {
-        return transaction.user_id
       }
+    }
+    // For digital-goods, show giftcard code if available
+    if (transaction.product_category === "digital-goods" || (!transaction.product_category && transaction.product_name)) {
+      if (transaction.giftcard_code) {
+        return transaction.giftcard_code
+      }
+    }
+    // Fallback to user_id for registered users
+    if (transaction.user_id) {
+      return transaction.user_id
     }
     return "N/A"
   }
@@ -522,16 +527,17 @@ export default function OrdersPage() {
                             placeholder="Enter Giftcard Code"
                             value={giftcardCodes[transaction.id] !== undefined ? giftcardCodes[transaction.id] : (transaction.giftcard_code || '')}
                             onChange={(e) => setGiftcardCodes(prev => ({ ...prev, [transaction.id]: e.target.value }))}
-                            disabled={transaction.status === "Failed"}
-                            className="w-[170px] h-8 text-xs placeholder:text-gray-500"
+                            disabled={transaction.status === "Failed" || (transaction.status === "Completed" && !!transaction.giftcard_code)}
+                            readOnly={transaction.status === "Completed" && !!transaction.giftcard_code}
+                            className={`w-[170px] h-8 text-xs placeholder:text-gray-500 ${transaction.status === "Completed" && transaction.giftcard_code ? "bg-green-50 border-green-200 text-green-800 font-mono" : ""}`}
                           />
                           <Button
                             size="sm"
                             onClick={() => handleSendGiftcardCode(transaction)}
-                            disabled={transaction.status === "Failed" || sendingCodeIds[transaction.id]}
-                            className="h-8 px-2 bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white flex-shrink-0"
+                            disabled={transaction.status === "Failed" || sendingCodeIds[transaction.id] || (transaction.status === "Completed" && !!transaction.giftcard_code)}
+                            className={`h-8 px-2 flex-shrink-0 ${transaction.status === "Completed" && transaction.giftcard_code ? "bg-green-500 hover:bg-green-500 text-white cursor-not-allowed" : "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"}`}
                           >
-                            {sendingCodeIds[transaction.id] ? "..." : <Send className="h-3 w-3" />}
+                            {sendingCodeIds[transaction.id] ? "..." : (transaction.status === "Completed" && transaction.giftcard_code ? "✓" : <Send className="h-3 w-3" />)}
                           </Button>
                         </div>
                       ) : (

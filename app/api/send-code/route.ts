@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     </div>
 
     <div style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 24px; text-align: center;">
-      <p style="color: #4A2A70; font-size: 13px; margin: 0 0 10px 0;">Need help activating? <a href="mailto:support@byiora.store" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+      <p style="color: #4A2A70; font-size: 13px; margin: 0 0 10px 0;">Need help activating? <a href= "https://www.byiora.store/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
       <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
     </div>
 
