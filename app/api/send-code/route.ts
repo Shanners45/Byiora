@@ -70,7 +70,7 @@ export async function POST(request: Request) {
       </div>
 
       <p style="color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center;">
-        To redeem this code, please follow the activation instructions on the ${productName} platform.
+        For steps on how to activate your ${productName} , please check the 'How To Redeem' section on the Byiora product page..
       </p>
 
       <div style="margin-top: 35px; text-align: center;">
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
     `
 
     const data = await resend.emails.send({
-      from: 'Byiora <no_reply@byiora.store>',
+      from: 'Byiora <order-status@byiora.store>',
       replyTo: 'support@byiora.store',
       to: [email],
       subject: emailSubject,
