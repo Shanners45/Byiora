@@ -97,7 +97,7 @@ export async function getAllTransactionsAction() {
 
     const { data, error } = await serviceSupabase
       .from("transactions")
-      .select("*")
+      .select("*, users(id, name)")
       .order("created_at", { ascending: false })
 
     if (error) {

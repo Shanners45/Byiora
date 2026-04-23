@@ -217,7 +217,7 @@ export default function OrdersPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               email: transaction.user_email,
-              userName: transaction.users?.name,
+              userName: transaction.users?.name || transaction.guest_user_data?.name || transaction.user_email.split('@')[0],
               productName: transaction.product_name,
               denomination: transaction.amount,
               status: newStatus,
