@@ -92,7 +92,7 @@ export async function POST(request: Request) {
         </table>
 
         <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0; text-align: center;">
-          We hope you enjoy your purchase! Check your email for your gift card code/details or visit your transaction history.
+          We hope you enjoy your purchase!
         </p>
 
       </td>

@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     const denomination = sanitizeHtml(body.denomination || "")
     const subject = sanitizeHtml(body.subject || "")
     const transactionId = body.transactionId || ""
-    const isCompletionEmail = body.isCompletionEmail || false
+
 
     if (!email || !giftcardCode) {
       return NextResponse.json({ error: 'Email and Giftcard Code are required' }, { status: 400 })
@@ -38,8 +38,8 @@ export async function POST(request: Request) {
 
     const emailSubject = subject || `Your ${productName} Giftcard Code from Byiora`
 
-    // Combined completion + giftcode email template (when admin sends giftcard code)
-    const htmlContent = isCompletionEmail ? `
+    // Giftcode email template
+    const htmlContent = `
 <div style="background-color: #6B3FA0; padding: 40px 20px; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
 
@@ -70,55 +70,17 @@ export async function POST(request: Request) {
       </div>
 
       <p style="color: #6b7280; font-size: 14px; line-height: 1.6; text-align: center;">
-        For steps on how to activate your ${productName} , please check the 'How To Redeem' section on the Byiora product page..
+        For steps on how to activate your ${productName} , please check the description section on the Byiora product page.
       </p>
 
       <div style="margin-top: 35px; text-align: center;">
-         <a href="https://www.byiora.store/transactions" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(107, 63, 160, 0.25);">View Order Details</a>
+         <a href="https://www.byiora.store" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(107, 63, 160, 0.25);">Return to Store</a>
       </div>
     </div>
 
     <div style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 24px; text-align: center;">
       <p style="color: #4A2A70; font-size: 13px; margin: 0 0 10px 0;">Need help activating? <a href= "https://www.byiora.store/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
       <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
-    </div>
-
-  </div>
-</div>
-    ` : `
-<div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
-
-    <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
-      <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
-      <p style="color: #9ca3af; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Your digital order is ready</p>
-    </div>
-
-    <div style="padding: 40px;">
-      <h2 style="color: #1E1E1E; font-size: 20px; margin-top: 0;">Hi ${userName ? userName : 'Valued Customer'},</h2>
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Thank you for your purchase! Your order for <strong>${productName} ${denomination}</strong> has been successfully processed. Here is your digital code, ready to be redeemed immediately.</p>
-
-      <div style="margin: 40px 0; background: linear-gradient(135deg, #4DA8DA 0%, #6B3FA0 100%); border-radius: 16px; padding: 3px; box-shadow: 0 10px 15px -3px rgba(107, 63, 160, 0.25);">
-        <div style="background-color: #ffffff; border-radius: 14px; padding: 30px; text-align: center;">
-          <p style="margin: 0; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Your Gift Card PIN</p>
-          <div style="margin-top: 15px; font-family: 'Courier New', Courier, monospace; font-size: 28px; font-weight: bold; color: #1E1E1E; letter-spacing: 4px; padding: 15px; background-color: #F5F5F5; border-radius: 8px; border: 1px solid #e2e8f0;">
-            ${giftcardCode}
-          </div>
-        </div>
-      </div>
-
-      <p style="color: #4b5563; font-size: 15px; line-height: 1.6; text-align: center;">
-        To redeem this code, Read the description of ${productName}.
-      </p>
-
-      <div style="margin-top: 35px; text-align: center;">
-         <a href="https://www.byiora.store" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Return to Store</a>
-      </div>
-    </div>
-
-    <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
-      <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Need help with your code? <a href="https://www.byiora.store/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">Contact Support</a></p>
-      <p style="color: #9ca3af; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
     </div>
 
   </div>
