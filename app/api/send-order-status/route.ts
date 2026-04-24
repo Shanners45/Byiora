@@ -138,13 +138,13 @@ export async function POST(request: Request) {
           </tr>
         </table>
 
-        <h2 style="color: #111827; font-size: 22px; font-weight: 700; margin: 0 0 8px 0; letter-spacing: -0.5px; text-align: center;">Order Failed</h2>
+        <h2 style="color: #111827; font-size: 22px; font-weight: 700; margin: 0 0 8px 0; letter-spacing: -0.5px; text-align: center;">Order Failed ⚠️</h2>
 
         <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 6px 0; text-align: center;">
           Hi ${displayName},
         </p>
         <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; text-align: center;">
-          We regret to inform you that there was an issue processing your order. Please review the details below.
+          We regret to inform you that there was an issue processing your order.
         </p>
 
         <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 20px;">
@@ -203,6 +203,18 @@ export async function POST(request: Request) {
       subject: emailSubject,
       html: htmlContent,
     })
+
+    // Fire Resend custom event for failed orders to trigger follow-up automation
+    if (!isCompleted) {
+      try {
+        await resend.events.send({
+          event: 'failed_order_email_received',
+          email: email,
+        })
+      } catch (eventError) {
+        console.error('Resend event trigger failed (non-blocking):', eventError)
+      }
+    }
 
     return NextResponse.json({ success: true, data })
   } catch (error) {
