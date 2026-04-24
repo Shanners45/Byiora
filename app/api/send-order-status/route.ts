@@ -44,7 +44,7 @@ export async function POST(request: Request) {
 
     // Completed Order Email Template - Table-based, mobile-optimized
     const completedTemplate = `
-<div style="background-color: #6B3FA0; padding: 20px 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<div style="background-color: #f3f4f6; padding: 20px 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
 
     <tr>
@@ -57,25 +57,8 @@ export async function POST(request: Request) {
     <tr>
       <td style="padding: 30px 20px;">
 
-        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 20px;">
-          <tr>
-            <td align="center">
-              <div style="display: inline-block; background-color: #F4F0F9; border-radius: 50%; width: 72px; height: 72px; line-height: 72px; text-align: center;">
-                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#6B3FA0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                </svg>
-              </div>
-            </td>
-          </tr>
-        </table>
-
-        <h2 style="color: #4A2A70; font-size: 22px; font-weight: 700; margin: 0 0 8px 0; text-align: center;">Order Completed! 🎉</h2>
-
-        <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 6px 0; text-align: center;">
-          Hi ${displayName},
-        </p>
-        <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; text-align: center;">
+        <h2 style="color: #1E1E1E; font-size: 20px; font-weight: 700; margin: 0 0 6px 0;">Hi ${displayName},</h2>
+        <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
           Great news! Your order for <strong>${productName} ${denomination}</strong> has been successfully processed and delivered.
         </p>
 
@@ -111,7 +94,7 @@ export async function POST(request: Request) {
 
     // Failed Order Email Template - Table-based, mobile-optimized
     const failedTemplate = `
-<div style="background-color: #6B3FA0; padding: 20px 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<div style="background-color: #f3f4f6; padding: 20px 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
 
     <tr>
@@ -124,61 +107,32 @@ export async function POST(request: Request) {
     <tr>
       <td style="padding: 30px 20px;">
 
-        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="margin-bottom: 16px;">
-          <tr>
-            <td align="center">
-              <div style="background-color: #fee2e2; width: 48px; height: 48px; border-radius: 12px; margin: 0 auto; text-align: center; line-height: 48px;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="8" x2="12" y2="12"></line>
-                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-              </div>
-            </td>
-          </tr>
-        </table>
-
-        <h2 style="color: #111827; font-size: 22px; font-weight: 700; margin: 0 0 8px 0; letter-spacing: -0.5px; text-align: center;">Order Failed ⚠️</h2>
-
-        <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 6px 0; text-align: center;">
-          Hi ${displayName},
-        </p>
-        <p style="color: #4b5563; font-size: 15px; line-height: 1.6; margin: 0 0 25px 0; text-align: center;">
-          We regret to inform you that there was an issue processing your order.
+        <h2 style="color: #1E1E1E; font-size: 20px; font-weight: 700; margin: 0 0 6px 0;">Hi ${displayName},</h2>
+        <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
+          We regret to inform you that there was an issue processing your order. Please review the details below.
         </p>
 
-        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; margin-bottom: 20px;">
-
-          <tr>
-            <td style="padding: 14px 16px; border-bottom: 1px solid #e5e7eb;">
-              <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Item</p>
-              <p style="margin: 0; color: #111827; font-size: 14px; font-weight: 600;">${productName} ${denomination}</p>
-            </td>
-          </tr>
-
-          <tr>
-            <td style="padding: 14px 16px; border-bottom: 1px solid #e5e7eb;">
-              <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Transaction ID</p>
-              <p style="margin: 0; color: #4b5563; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; word-break: break-all;">${transactionId || 'N/A'}</p>
-            </td>
-          </tr>
-
-          <tr>
-            <td style="padding: 14px 16px;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''}">
-              <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Order Status</p>
-              <p style="margin: 0; color: #dc2626; font-size: 14px; font-weight: 600; text-transform: uppercase;">${statusText}</p>
-            </td>
-          </tr>
-
-          ${remarks ? `
-          <tr>
-            <td style="padding: 14px 16px;">
-              <p style="margin: 0 0 4px 0; color: #6b7280; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Reason</p>
-              <p style="margin: 0; color: #dc2626; font-size: 14px; font-weight: 600;">${remarks}</p>
-            </td>
-          </tr>` : ''}
-
-        </table>
+        <div style="margin-bottom: 20px; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
+          <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+            <tr>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; white-space: nowrap;">Item</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${productName} ${denomination}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; white-space: nowrap;">Transaction ID</td>
+              <td style="padding: 10px 16px; font-size: 13px; color: #4b5563; border-bottom: 1px solid #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; word-break: break-all;">${transactionId || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''} white-space: nowrap;">Order Status</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #dc2626; font-weight: 600; text-transform: uppercase;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''}">${statusText}</td>
+            </tr>
+            ${remarks ? `
+            <tr>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; white-space: nowrap;">Reason</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #dc2626; font-weight: 600;">${remarks}</td>
+            </tr>` : ''}
+          </table>
+        </div>
 
       </td>
     </tr>

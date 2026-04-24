@@ -40,7 +40,7 @@ export async function POST(request: Request) {
 
     // Giftcode email template
     const htmlContent = `
-<div style="background-color: #6B3FA0; padding: 40px 20px; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+<div style="background-color: #f3f4f6; padding: 40px 20px; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
 
     <div style="background-color: #5A3588; padding: 35px 40px; text-align: center;">

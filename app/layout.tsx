@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     template: "%s | Byiora",
   },
   description:
-    "Nepal's fastest & most trusted platform to buy premium gift cards and game top-ups. Steam, PUBG, Free Fire, Netflix & more — instant delivery, secure payments.",
+    "Nepal's trusted platform for game top-ups & gift cards. Buy Steam, PUBG, and Valorant with instant digital delivery. Pay securely via eSewa, Khalti, or Fonepay.",
   keywords: [
     "gift cards Nepal",
     "game top-up Nepal",
@@ -48,13 +48,13 @@ export const metadata: Metadata = {
     siteName: "Byiora",
     title: "Byiora | Premium Digital Game Top-Up Nepal",
     description:
-      "Nepal's fastest & most trusted platform to buy premium gift cards and game top-ups. Instant delivery, secure payments.",
+      "Buy premium game top-ups and gift cards in Nepal instantly. Secure local payments with eSewa, Khalti, and Fonepay QR.",
     images: [
       {
         url: `https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png`,
         width: 1200,
         height: 630,
-        alt: "Byiora – Premium Digital Gift Cards & Game Top-Up",
+        alt: "Byiora | Premium Digital Gift Cards & Game Top-Up",
       },
     ],
   },
@@ -62,7 +62,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Byiora | Premium Digital Game Top-Up Nepal",
     description:
-      "Nepal's fastest & most trusted platform to buy premium gift cards and game top-ups.",
+      "Buy game top-ups and gift cards in Nepal instantly. Pay securely with eSewa, Khalti, or Fonepay.",
     images: [
       `https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png`,
     ],
@@ -72,7 +72,11 @@ export const metadata: Metadata = {
     canonical: '/',
   },
   icons: {
-    icon: "/favicon.ico",
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon.png", type: "image/png", sizes: "192x192" },
+    ],
+    apple: "/icon.png",
   },
   robots: {
     index: true,

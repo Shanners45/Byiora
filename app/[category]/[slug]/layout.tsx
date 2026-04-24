@@ -28,10 +28,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 
     const categoryLabel = product.category === "topup" ? "Top-Up" : "Gift Card"
-    const title = `Buy ${product.name} in Nepal`
+    const title = `Buy ${product.name} in Nepal | eSewa & Khalti`
     const description =
       product.description ||
-      `Buy ${product.name} instantly on Byiora. Secure payments, instant delivery in Nepal.`
+      `Buy ${product.name} instantly using eSewa, Khalti, or Fonepay. Secure payments, instant delivery in Nepal.`
 
     const productUrl = `${BASE_URL}/${category}/${slug}`
 

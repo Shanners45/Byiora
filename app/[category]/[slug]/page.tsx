@@ -63,7 +63,7 @@ export default function ProductDetailPage() {
     const loadProduct = async () => {
       try {
         const productData = await getProductBySlug(productSlug)
-        
+
         // Validate that the product's category matches the URL category
         if (productData && productData.category !== categorySlug) {
           setNotFound(true)
@@ -313,7 +313,7 @@ export default function ProductDetailPage() {
                       className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4]"
                     />
                     <p className="text-xs text-brand-light-gray mt-2">
-                      To find your User ID, click on your avatar on the top left corner, under Basic Info, you can find
+                      To find your User ID, click on your avatar, you can find
                       your User ID under your Nickname.
                     </p>
                   </div>
@@ -350,8 +350,8 @@ export default function ProductDetailPage() {
                         <Label
                           htmlFor={denom.label}
                           className={`group flex flex-col overflow-hidden bg-white rounded-2xl cursor-pointer transition-all h-full ${isSelected
-                              ? "border-2 border-[#00BCD4] shadow-[0_0_15px_rgba(0,188,212,0.4)]"
-                              : "border border-gray-200 hover:border-[#00BCD4] hover:shadow-[0_0_10px_rgba(0,188,212,0.2)]"
+                            ? "border-2 border-[#00BCD4] shadow-[0_0_15px_rgba(0,188,212,0.4)]"
+                            : "border border-gray-200 hover:border-[#00BCD4] hover:shadow-[0_0_10px_rgba(0,188,212,0.2)]"
                             }`}
                         >
                           {hasIcon ? (
@@ -441,8 +441,8 @@ export default function ProductDetailPage() {
               <div className="flex items-center gap-3 mb-4">
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination && email && (!isTopupProduct || userId)
-                      ? "bg-[#00BCD4] text-white"
-                      : "bg-gray-200 text-brand-light-gray"
+                    ? "bg-[#00BCD4] text-white"
+                    : "bg-gray-200 text-brand-light-gray"
                     }`}
                 >
                   {isTopupProduct ? "4" : "3"}
@@ -458,8 +458,8 @@ export default function ProductDetailPage() {
                       <Label
                         htmlFor={method.id}
                         className={`flex items-center gap-3 p-4 bg-white border-2 rounded-lg cursor-pointer hover:bg-gray-50 transition-all ${selectedPayment === method.id
-                            ? "border-brand-sky-blue bg-brand-sky-blue/5 shadow-lg"
-                            : "border-gray-200"
+                          ? "border-brand-sky-blue bg-brand-sky-blue/5 shadow-lg"
+                          : "border-gray-200"
                           }`}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
