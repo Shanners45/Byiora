@@ -204,7 +204,8 @@ export async function POST(request: Request) {
       html: htmlContent,
     })
 
-    // Fire Resend custom event for failed orders to trigger follow-up automation
+    // Resend Automation: fire event for failed orders to trigger follow-up email
+    // (Contact was already added to Audience at order placement)
     if (!isCompleted) {
       try {
         await resend.events.send({
@@ -212,7 +213,7 @@ export async function POST(request: Request) {
           email: email,
         })
       } catch (eventError) {
-        console.error('Resend event trigger failed (non-blocking):', eventError)
+        console.error('Resend automation trigger failed (non-blocking):', eventError)
       }
     }
 

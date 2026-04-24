@@ -93,6 +93,20 @@ export async function POST(request: Request) {
       html: htmlContent,
     })
 
+    // Add Gmail customers to Resend Audience for broadcasts & automation eligibility
+    if (email.toLowerCase().endsWith('@gmail.com')) {
+      try {
+        await resend.contacts.create({
+          audienceId: process.env.RESEND_AUDIENCE_ID!,
+          email: email,
+          firstName: userName || email.split('@')[0],
+          unsubscribed: false,
+        })
+      } catch (contactError) {
+        console.error('Resend audience add failed (non-blocking):', contactError)
+      }
+    }
+
     return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('Error sending order placed email:', error)
