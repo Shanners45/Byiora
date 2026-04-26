@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
-import { Users, ShoppingBag, DollarSign, Package, UserCheck, Bell } from "lucide-react"
+import { Users, ShoppingBag, DollarSign, Package, UserCheck, Bell, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { getDashboardStatsAction } from "@/app/actions/dashboard"
 
@@ -46,14 +46,7 @@ export default function AdminDashboardPage() {
     loadDashboardStats()
   }, [])
 
-  // Refresh stats when window gains focus (e.g., when returning from orders page)
-  useEffect(() => {
-    const handleFocus = () => {
-      loadDashboardStats()
-    }
-    window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [])
+
 
   const loadDashboardStats = async () => {
     try {
@@ -106,11 +99,21 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">
-          Welcome back, {adminUser?.name || "Admin"}!
-        </h1>
-        <p className="text-[#4B5563]">Here's what's happening with your store today.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">
+            Welcome back, {adminUser?.name || "Admin"}!
+          </h1>
+          <p className="text-[#4B5563]">Here's what's happening with your store today.</p>
+        </div>
+        <Button
+          onClick={loadDashboardStats}
+          variant="outline"
+          className="flex items-center gap-2 border-[#F59E0B] text-[#92400E] hover:bg-[#FEF7E0]"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Refresh
+        </Button>
       </div>
 
       {/* Stats Cards */}

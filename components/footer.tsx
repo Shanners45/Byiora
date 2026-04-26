@@ -1,6 +1,7 @@
 import { Facebook, Twitter, Instagram, Clock, Shield, CreditCard, Headphones } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
+import Link from "next/link"
 
 export function Footer() {
   return (
@@ -146,12 +147,15 @@ export function Footer() {
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-brand-light-gray">
             <div className="flex flex-wrap gap-4">
               <span>© 2026 Copyright Byiora</span>
-              <a href="#" className="hover:text-brand-sky-blue">
+              <Link href="/terms-and-conditions" className="hover:text-brand-sky-blue">
                 Terms & Conditions
-              </a>
-              <a href="#" className="hover:text-brand-sky-blue">
+              </Link>
+              <Link href="/privacy-policy" className="hover:text-brand-sky-blue">
                 Privacy Policy
-              </a>
+              </Link>
+              <Link href="/refund-policy" className="hover:text-brand-sky-blue">
+                Refund Policy
+              </Link>
             </div>
             <div className="flex items-center gap-2">
               <div className="h-6 relative">

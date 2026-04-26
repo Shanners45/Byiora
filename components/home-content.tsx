@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { BannerCarousel } from "@/components/banner-carousel"
 import { GiftCard } from "@/components/gift-card"
 
@@ -26,6 +26,14 @@ interface HomeContentProps {
 export function HomeContent({ categories, banners }: HomeContentProps) {
   const router = useRouter()
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener("resize", checkMobile)
+    return () => window.removeEventListener("resize", checkMobile)
+  }, [])
 
   const handleGiftCardClick = (card: any) => {
     if (card.category && card.slug) {
@@ -42,9 +50,9 @@ export function HomeContent({ categories, banners }: HomeContentProps) {
     }))
   }
 
-  // Show max 2 rows of 6 = 12 items; show "View All" if more
-  const ITEMS_PER_ROW = 6
-  const MAX_VISIBLE = ITEMS_PER_ROW * 2
+  // Desktop: 2 rows of 6 = 12 items. Mobile: 6 items.
+  const DESKTOP_MAX = 12
+  const MOBILE_MAX = 6
 
   return (
     <>
@@ -55,8 +63,12 @@ export function HomeContent({ categories, banners }: HomeContentProps) {
 
       {/* Category Sections */}
       {categories.map(
-        (category) =>
-          category.products.length > 0 && (
+        (category) => {
+          const maxVisible = isMobile ? MOBILE_MAX : DESKTOP_MAX
+          const isExpanded = expandedCategories[category.id]
+          const hasMore = category.products.length > maxVisible
+
+          return category.products.length > 0 && (
             <section key={category.id} className="mb-12">
               {/* Section Header */}
               <div className="flex items-center gap-3 mb-6">
@@ -66,10 +78,10 @@ export function HomeContent({ categories, banners }: HomeContentProps) {
                 </h2>
               </div>
 
-              {/* 2-row grid, max 12 items unless expanded */}
+              {/* Product grid */}
               <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
                 {category.products
-                  .slice(0, expandedCategories[category.id] ? undefined : MAX_VISIBLE)
+                  .slice(0, isExpanded ? undefined : maxVisible)
                   .map((card) => (
                     <GiftCard
                       key={card.id}
@@ -80,19 +92,20 @@ export function HomeContent({ categories, banners }: HomeContentProps) {
                   ))}
               </div>
 
-              {/* View All link below grid — only if more than 12 items */}
-              {category.products.length > MAX_VISIBLE && (
+              {/* View All / Show Less button */}
+              {hasMore && (
                 <div className="mt-6 text-center">
                   <button
                     onClick={() => toggleCategory(category.id)}
                     className="inline-flex items-center gap-1.5 text-white font-bold text-base underline underline-offset-4 hover:text-brand-sky-blue transition-colors"
                   >
-                    {expandedCategories[category.id] ? "Show Less" : "View All"}
+                    {isExpanded ? "Show Less" : "View All"}
                   </button>
                 </div>
               )}
             </section>
-          ),
+          )
+        },
       )}
     </>
   )

@@ -36,7 +36,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const emailSubject = subject || `Your ${productName} Giftcard Code from Byiora`
+    const emailSubject = subject || `Your ${productName} from Byiora`
 
     // Giftcode email template
     const htmlContent = `

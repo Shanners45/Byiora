@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { ArrowLeft, Shield, HelpCircle, QrCode } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -48,6 +49,10 @@ export default function ProductDetailPage() {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null)
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [notFound, setNotFound] = useState(false)
+  const [descExpanded, setDescExpanded] = useState(false)
+  const [faqExpanded, setFaqExpanded] = useState(false)
+  const DESC_LIMIT = 300
+  const FAQ_LIMIT = 3
 
   const categorySlug = params.category as string
   const productSlug = params.slug as string
@@ -233,8 +238,8 @@ export default function ProductDetailPage() {
         </Button>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Product Info */}
-          <div className="lg:col-span-1 space-y-6">
+          {/* Product Image — always first */}
+          <div className="lg:col-span-1 space-y-6 order-1">
             <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
               <div className="w-full h-48 relative mb-4 rounded-lg overflow-hidden">
                 <Image
@@ -253,40 +258,57 @@ export default function ProductDetailPage() {
               <h1 className="text-2xl font-bold text-brand-charcoal mb-2">{giftCard.name}</h1>
             </div>
 
-            {/* Description Card */}
-            <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
-              <h3 className="font-semibold text-brand-charcoal mb-3 flex items-center gap-2">
-                <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
-                Description
-              </h3>
-              <p className="text-brand-light-gray text-sm whitespace-pre-wrap leading-relaxed">{giftCard.description}</p>
-            </div>
-
-            {product.faqs && product.faqs.length > 0 ? (
+            {/* Description & FAQ — visible on desktop only in this column */}
+            <div className="hidden lg:block space-y-6">
+              {/* Description Card */}
               <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
-                <h3 className="font-semibold text-brand-charcoal mb-4 flex items-center gap-2">
+                <h3 className="font-semibold text-brand-charcoal mb-3 flex items-center gap-2">
                   <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
-                  Frequently Asked Questions
+                  Description
                 </h3>
-                <div className="space-y-4">
-                  {product.faqs.map((faq: any, index: number) => (
-                    <div key={index} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-                      <h4 className="font-medium text-sm text-brand-charcoal mb-1">{faq.question}</h4>
-                      <p className="text-xs text-brand-light-gray whitespace-pre-wrap">{faq.answer}</p>
-                    </div>
-                  ))}
+                <p className="text-brand-light-gray text-sm whitespace-pre-wrap leading-relaxed">
+                  {descExpanded || giftCard.description.length <= DESC_LIMIT
+                    ? giftCard.description
+                    : giftCard.description.slice(0, DESC_LIMIT) + "..."}
+                </p>
+                {giftCard.description.length > DESC_LIMIT && (
+                  <button onClick={() => setDescExpanded(!descExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-2 hover:underline">
+                    {descExpanded ? "View Less" : "View More"}
+                  </button>
+                )}
+              </div>
+
+              {product.faqs && product.faqs.length > 0 ? (
+                <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
+                  <h3 className="font-semibold text-brand-charcoal mb-4 flex items-center gap-2">
+                    <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
+                    Frequently Asked Questions
+                  </h3>
+                  <div className="space-y-4">
+                    {(faqExpanded ? product.faqs : product.faqs.slice(0, FAQ_LIMIT)).map((faq: any, index: number) => (
+                      <div key={index} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+                        <h4 className="font-medium text-sm text-brand-charcoal mb-1">{faq.question}</h4>
+                        <p className="text-xs text-brand-light-gray whitespace-pre-wrap">{faq.answer}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {product.faqs.length > FAQ_LIMIT && (
+                    <button onClick={() => setFaqExpanded(!faqExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-3 hover:underline">
+                      {faqExpanded ? "View Less" : "View More"}
+                    </button>
+                  )}
                 </div>
-              </div>
-            ) : (
-              <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
-                <h3 className="font-semibold text-brand-charcoal mb-2">How it works:</h3>
-                <p className="text-sm text-brand-light-gray">{giftCard.instructions}</p>
-              </div>
-            )}
+              ) : (
+                <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
+                  <h3 className="font-semibold text-brand-charcoal mb-2">How it works:</h3>
+                  <p className="text-sm text-brand-light-gray">{giftCard.instructions}</p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Purchase Form */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-6 order-2">
             {/* Step 1: User ID (for topup products only) */}
             {isTopupProduct && (
               <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
@@ -487,7 +509,64 @@ export default function ProductDetailPage() {
               >
                 Proceed to Payment
               </Button>
+
+              <div className="mt-4 text-xs text-brand-light-gray leading-relaxed">
+                By clicking "Proceed to Payment", I acknowledge that the purchase of this virtual item will be a license for its use, subject to the publisher providing this service and to their end user license agreement that I accepted.
+                <br /><br />
+                Furthermore:
+                <br />
+                (i) I acknowledge that I have read, understand and agree to Byiora's <Link href="/terms-and-conditions" className="text-brand-sky-blue hover:underline">Terms & Conditions</Link> and <Link href="/privacy-policy" className="text-brand-sky-blue hover:underline">Privacy Policy</Link>, and
+                <br />
+                (ii) I understand and agree that all sales are final and non-refundable. For more details, please view our <Link href="/refund-policy" className="text-brand-sky-blue hover:underline">Refund Policy</Link>.
+              </div>
             </div>
+          </div>
+
+          {/* Description & FAQ — mobile only, appears below payment */}
+          <div className="lg:hidden space-y-6 order-3">
+            <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
+              <h3 className="font-semibold text-brand-charcoal mb-3 flex items-center gap-2">
+                <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
+                Description
+              </h3>
+              <p className="text-brand-light-gray text-sm whitespace-pre-wrap leading-relaxed">
+                {descExpanded || giftCard.description.length <= DESC_LIMIT
+                  ? giftCard.description
+                  : giftCard.description.slice(0, DESC_LIMIT) + "..."}
+              </p>
+              {giftCard.description.length > DESC_LIMIT && (
+                <button onClick={() => setDescExpanded(!descExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-2 hover:underline">
+                  {descExpanded ? "View Less" : "View More"}
+                </button>
+              )}
+            </div>
+
+            {product.faqs && product.faqs.length > 0 ? (
+              <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
+                <h3 className="font-semibold text-brand-charcoal mb-4 flex items-center gap-2">
+                  <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
+                  Frequently Asked Questions
+                </h3>
+                <div className="space-y-4">
+                  {(faqExpanded ? product.faqs : product.faqs.slice(0, FAQ_LIMIT)).map((faq: any, index: number) => (
+                    <div key={index} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
+                      <h4 className="font-medium text-sm text-brand-charcoal mb-1">{faq.question}</h4>
+                      <p className="text-xs text-brand-light-gray whitespace-pre-wrap">{faq.answer}</p>
+                    </div>
+                  ))}
+                </div>
+                {product.faqs.length > FAQ_LIMIT && (
+                  <button onClick={() => setFaqExpanded(!faqExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-3 hover:underline">
+                    {faqExpanded ? "View Less" : "View More"}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
+                <h3 className="font-semibold text-brand-charcoal mb-2">How it works:</h3>
+                <p className="text-sm text-brand-light-gray">{giftCard.instructions}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
