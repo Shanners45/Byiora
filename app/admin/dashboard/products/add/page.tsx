@@ -18,6 +18,7 @@ import { toast } from "sonner"
 import Image from "next/image"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { createProductAction } from "@/app/actions/products"
+import { RichTextEditor } from "@/components/rich-text-editor"
 
 export default function AddProductPage() {
   const supabase = createClient()
@@ -49,6 +50,16 @@ export default function AddProductPage() {
   const [faqs, setFaqs] = useState<Array<{ question: string; answer: string }>>([])
   const [newFaqQuestion, setNewFaqQuestion] = useState("")
   const [newFaqAnswer, setNewFaqAnswer] = useState("")
+  const [editingFaqIndex, setEditingFaqIndex] = useState<number | null>(null)
+
+  const handlePriceChange = (val: string, setter: (val: string) => void) => {
+    const numericVal = val.replace(/\D/g, "");
+    if (!numericVal) {
+      setter("");
+      return;
+    }
+    setter(Number(numericVal).toLocaleString('en-US'));
+  }
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -224,16 +235,30 @@ export default function AddProductPage() {
       return
     }
 
-    setFaqs([
-      ...faqs,
-      {
-        question: newFaqQuestion,
-        answer: newFaqAnswer,
-      },
-    ])
+    if (editingFaqIndex !== null) {
+      const updated = [...faqs]
+      updated[editingFaqIndex] = { question: newFaqQuestion, answer: newFaqAnswer }
+      setFaqs(updated)
+      setEditingFaqIndex(null)
+    } else {
+      setFaqs([
+        ...faqs,
+        {
+          question: newFaqQuestion,
+          answer: newFaqAnswer,
+        },
+      ])
+    }
 
     setNewFaqQuestion("")
     setNewFaqAnswer("")
+  }
+
+  const editFaq = (index: number) => {
+    const faq = faqs[index]
+    setNewFaqQuestion(faq.question)
+    setNewFaqAnswer(faq.answer)
+    setEditingFaqIndex(index)
   }
 
   const removeFaq = (index: number) => {
@@ -272,117 +297,126 @@ export default function AddProductPage() {
             <CardDescription className="text-[#92400E]">Basic information about the product</CardDescription>
           </CardHeader>
           <CardContent className="p-6 space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="name" className="text-[#1F2937]">
-                Product Name *
-              </Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={handleNameChange}
-                className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
-                placeholder="Enter product name"
-              />
+            {/* Row 1 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-[#1F2937]">
+                  Product Name *
+                </Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={handleNameChange}
+                  className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
+                  placeholder="Enter product name"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="slug" className="text-[#1F2937]">
+                  URL Slug
+                </Label>
+                <Input
+                  id="slug"
+                  value={slug}
+                  onChange={handleSlugChange}
+                  className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
+                  placeholder="auto-generated-from-product-name"
+                />
+                <p className="text-xs text-[#4B5563]">
+                  URL: byiora.store/{category}/{slug || generateSlug(name) || 'product-slug'}
+                </p>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="slug" className="text-[#1F2937]">
-                URL Slug
-              </Label>
-              <Input
-                id="slug"
-                value={slug}
-                onChange={handleSlugChange}
-                className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
-                placeholder="auto-generated-from-product-name"
-              />
-              <p className="text-xs text-[#4B5563]">
-                URL: byiora.store/{category}/{slug || generateSlug(name) || 'product-slug'}
-              </p>
-            </div>
+            {/* Row 2 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="category" className="text-[#1F2937]">
+                  Category *
+                </Label>
+                <Select value={category} onValueChange={(value: "topup" | "digital-goods") => setCategory(value)}>
+                  <SelectTrigger className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="digital-goods">Digital Goods</SelectItem>
+                    <SelectItem value="topup">Top-up</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="category" className="text-[#1F2937]">
-                Category *
-              </Label>
-              <Select value={category} onValueChange={(value: "topup" | "digital-goods") => setCategory(value)}>
-                <SelectTrigger className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="digital-goods">Digital Goods</SelectItem>
-                  <SelectItem value="topup">Top-up</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between md:pt-6">
+                <div className="space-y-0.5">
+                  <Label htmlFor="active" className="text-[#1F2937]">
+                    Product Status
+                  </Label>
+                  <p className="text-sm text-[#4B5563]">
+                    {isActive ? "Visible on the homepage" : "Hidden from the homepage"}
+                  </p>
+                </div>
+                <Switch id="active" checked={isActive} onCheckedChange={setIsActive} />
+              </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="description" className="text-[#1F2937]">
                 Description
               </Label>
-              <Textarea
+              <RichTextEditor
                 id="description"
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] min-h-[120px] placeholder:text-gray-500"
+                onChange={setDescription}
                 placeholder="Enter product description"
+                className="border-[#F59E0B]/30 focus-within:border-[#F59E0B] focus-within:ring-[#F59E0B]"
               />
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <Label htmlFor="active" className="text-[#1F2937]">
-                  Product Status
+            {/* Row 3 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="ribbon" className="text-[#1F2937]">
+                  Ribbon Text <span className="text-gray-400 font-normal">(Optional)</span>
                 </Label>
-                <p className="text-sm text-[#4B5563]">
-                  {isActive ? "Product will be visible on the homepage" : "Product will be hidden from the homepage"}
-                </p>
+                <Input
+                  id="ribbon"
+                  value={ribbonText}
+                  onChange={(e) => setRibbonText(e.target.value)}
+                  className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
+                  placeholder='e.g. Hot, New, Discount, 10% Off'
+                  maxLength={20}
+                />
+                <p className="text-xs text-[#4B5563]">Displayed as a badge on the product card (max 20 chars).</p>
               </div>
-              <Switch id="active" checked={isActive} onCheckedChange={setIsActive} />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="ribbon" className="text-[#1F2937]">
-                Ribbon Text <span className="text-gray-400 font-normal">(Optional)</span>
-              </Label>
-              <Input
-                id="ribbon"
-                value={ribbonText}
-                onChange={(e) => setRibbonText(e.target.value)}
-                className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
-                placeholder='e.g. Hot, New, Discount, 10% Off'
-                maxLength={20}
-              />
-              <p className="text-xs text-[#4B5563]">Short label displayed as a badge on the product card homepage (max 20 chars).</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-[#1F2937]">
-                Denomination Icon <span className="text-gray-400 font-normal">(Optional — applies to all denominations)</span>
-              </Label>
-              <div className="flex items-center gap-3">
-                {denomIconUrl && (
-                  <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#F59E0B]/40 flex-shrink-0 bg-white flex items-center justify-center">
-                    <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
+              <div className="space-y-2">
+                <Label className="text-[#1F2937]">
+                  Denomination Icon <span className="text-gray-400 font-normal">(Optional)</span>
+                </Label>
+                <div className="flex items-center gap-3">
+                  {denomIconUrl && (
+                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#F59E0B]/40 flex-shrink-0 bg-white flex items-center justify-center">
+                      <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
+                    </div>
+                  )}
+                  <div className="flex-1 space-y-1.5">
+                    <Input
+                      value={denomIconUrl}
+                      onChange={(e) => setDenomIconUrl(e.target.value)}
+                      className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
+                      placeholder="Paste icon URL or upload"
+                    />
+                    <input type="file" accept="image/*" id="denom-icon-upload" onChange={handleDenomIconUpload} className="hidden" />
+                    <Button
+                      type="button" variant="outline" disabled={isUploadingIcon}
+                      onClick={() => document.getElementById('denom-icon-upload')?.click()}
+                      className="w-full border-[#F59E0B]/30 hover:bg-[#F59E0B]/10 text-sm h-8"
+                    >
+                      {isUploadingIcon
+                        ? <><div className="animate-spin h-3 w-3 border-2 border-[#F59E0B] border-t-transparent rounded-full mr-2" />Uploading...</>
+                        : <><Upload className="h-3 w-3 mr-2 text-[#F59E0B]" />Upload Icon</>}
+                    </Button>
                   </div>
-                )}
-                <div className="flex-1 space-y-1.5">
-                  <Input
-                    value={denomIconUrl}
-                    onChange={(e) => setDenomIconUrl(e.target.value)}
-                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
-                    placeholder="Paste icon URL or upload"
-                  />
-                  <input type="file" accept="image/*" id="denom-icon-upload" onChange={handleDenomIconUpload} className="hidden" />
-                  <Button
-                    type="button" variant="outline" disabled={isUploadingIcon}
-                    onClick={() => document.getElementById('denom-icon-upload')?.click()}
-                    className="w-full border-[#F59E0B]/30 hover:bg-[#F59E0B]/10 text-sm h-8"
-                  >
-                    {isUploadingIcon
-                      ? <><div className="animate-spin h-3 w-3 border-2 border-[#F59E0B] border-t-transparent rounded-full mr-2" />Uploading...</>
-                      : <><Upload className="h-3 w-3 mr-2 text-[#F59E0B]" />Upload Icon</>}
-                  </Button>
                 </div>
               </div>
             </div>
@@ -503,7 +537,7 @@ export default function AddProductPage() {
                     <Input
                       id="price"
                       value={newDenomPrice}
-                      onChange={(e) => setNewDenomPrice(e.target.value)}
+                      onChange={(e) => handlePriceChange(e.target.value, setNewDenomPrice)}
                       className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
                       placeholder="e.g. 2,333"
                     />
@@ -567,14 +601,24 @@ export default function AddProductPage() {
                         <TableCell className="font-medium text-[#1F2937] break-words">{faq.question}</TableCell>
                         <TableCell className="text-[#4B5563] break-words">{faq.answer}</TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-[#EF4444] hover:text-[#EF4444]/80 hover:bg-red-50"
-                            onClick={() => removeFaq(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => editFaq(index)}
+                              className="h-8 w-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-[#EF4444] hover:text-[#EF4444]/80 hover:bg-red-50"
+                              onClick={() => removeFaq(index)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -609,17 +653,17 @@ export default function AddProductPage() {
                     <Label htmlFor="answer" className="text-[#1F2937]">
                       Answer
                     </Label>
-                    <Textarea
+                    <RichTextEditor
                       id="answer"
                       value={newFaqAnswer}
-                      onChange={(e) => setNewFaqAnswer(e.target.value)}
-                      className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
+                      onChange={setNewFaqAnswer}
+                      className="border-[#F59E0B]/30 focus-within:border-[#F59E0B] focus-within:ring-[#F59E0B]"
                       placeholder="e.g. You can redeem it on the official website..."
                     />
                   </div>
                 </div>
                 <Button className="mt-4 bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addFaq}>
-                  Add FAQ
+                  {editingFaqIndex !== null ? "Update FAQ" : "Add FAQ"}
                 </Button>
               </div>
             </div>

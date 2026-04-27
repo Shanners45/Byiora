@@ -19,7 +19,8 @@ import { getProductBySlug } from "@/lib/product-categories"
 import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
 import { LoadingScreen } from "@/components/loading-screen"
-
+import { FaqAccordion } from "@/components/faq-accordion"
+import DOMPurify from "isomorphic-dompurify"
 interface PaymentMethod {
   id: string
   name: string
@@ -266,11 +267,10 @@ export default function ProductDetailPage() {
                   <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
                   Description
                 </h3>
-                <p className="text-brand-light-gray text-sm whitespace-pre-wrap leading-relaxed">
-                  {descExpanded || giftCard.description.length <= DESC_LIMIT
-                    ? giftCard.description
-                    : giftCard.description.slice(0, DESC_LIMIT) + "..."}
-                </p>
+                <div 
+                  className={`prose-rich-text text-brand-light-gray text-sm leading-relaxed ${!descExpanded && giftCard.description.length > DESC_LIMIT ? 'line-clamp-4' : ''}`}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(giftCard.description, { ADD_ATTR: ['target', 'rel', 'class'] }) }}
+                />
                 {giftCard.description.length > DESC_LIMIT && (
                   <button onClick={() => setDescExpanded(!descExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-2 hover:underline">
                     {descExpanded ? "View Less" : "View More"}
@@ -285,15 +285,10 @@ export default function ProductDetailPage() {
                     Frequently Asked Questions
                   </h3>
                   <div className="space-y-4">
-                    {(faqExpanded ? product.faqs : product.faqs.slice(0, FAQ_LIMIT)).map((faq: any, index: number) => (
-                      <div key={index} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-                        <h4 className="font-medium text-sm text-brand-charcoal mb-1">{faq.question}</h4>
-                        <p className="text-xs text-brand-light-gray whitespace-pre-wrap">{faq.answer}</p>
-                      </div>
-                    ))}
+                    <FaqAccordion faqs={faqExpanded ? product.faqs : product.faqs.slice(0, FAQ_LIMIT)} />
                   </div>
                   {product.faqs.length > FAQ_LIMIT && (
-                    <button onClick={() => setFaqExpanded(!faqExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-3 hover:underline">
+                    <button onClick={() => setFaqExpanded(!faqExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-4 hover:underline">
                       {faqExpanded ? "View Less" : "View More"}
                     </button>
                   )}
@@ -529,11 +524,10 @@ export default function ProductDetailPage() {
                 <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
                 Description
               </h3>
-              <p className="text-brand-light-gray text-sm whitespace-pre-wrap leading-relaxed">
-                {descExpanded || giftCard.description.length <= DESC_LIMIT
-                  ? giftCard.description
-                  : giftCard.description.slice(0, DESC_LIMIT) + "..."}
-              </p>
+              <div 
+                className={`prose-rich-text text-brand-light-gray text-sm leading-relaxed ${!descExpanded && giftCard.description.length > DESC_LIMIT ? 'line-clamp-4' : ''}`}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(giftCard.description, { ADD_ATTR: ['target', 'rel', 'class'] }) }}
+              />
               {giftCard.description.length > DESC_LIMIT && (
                 <button onClick={() => setDescExpanded(!descExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-2 hover:underline">
                   {descExpanded ? "View Less" : "View More"}
@@ -548,15 +542,10 @@ export default function ProductDetailPage() {
                   Frequently Asked Questions
                 </h3>
                 <div className="space-y-4">
-                  {(faqExpanded ? product.faqs : product.faqs.slice(0, FAQ_LIMIT)).map((faq: any, index: number) => (
-                    <div key={index} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-                      <h4 className="font-medium text-sm text-brand-charcoal mb-1">{faq.question}</h4>
-                      <p className="text-xs text-brand-light-gray whitespace-pre-wrap">{faq.answer}</p>
-                    </div>
-                  ))}
+                  <FaqAccordion faqs={faqExpanded ? product.faqs : product.faqs.slice(0, FAQ_LIMIT)} />
                 </div>
                 {product.faqs.length > FAQ_LIMIT && (
-                  <button onClick={() => setFaqExpanded(!faqExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-3 hover:underline">
+                  <button onClick={() => setFaqExpanded(!faqExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-4 hover:underline">
                     {faqExpanded ? "View Less" : "View More"}
                   </button>
                 )}

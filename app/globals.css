@@ -91,6 +91,55 @@
   .footer-yellow {
     @apply bg-brand-soft-yellow text-brand-charcoal;
   }
+  
+  .prose-rich-text b, .prose-rich-text strong {
+    font-weight: 700;
+    color: inherit;
+  }
+  .prose-rich-text i, .prose-rich-text em {
+    font-style: italic;
+  }
+  .prose-rich-text a {
+    color: #7E3AF2;
+    text-decoration: underline;
+  }
+  .prose-rich-text a:hover {
+    color: #6D28D9;
+  }
+  .prose-rich-text ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+    margin-top: 0.15em;
+    margin-bottom: 0.15em;
+  }
+  .prose-rich-text ol {
+    list-style-type: decimal;
+    padding-left: 1.5rem;
+    margin-top: 0.15em;
+    margin-bottom: 0.15em;
+  }
+  .prose-rich-text li {
+    margin-top: 0.1em;
+    margin-bottom: 0.1em;
+  }
+  .prose-rich-text h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-top: 0.5em;
+    margin-bottom: 0.25em;
+  }
+  .prose-rich-text p {
+    margin-bottom: 0.15em;
+    line-height: 1.4;
+  }
+  .prose-rich-text p:last-child {
+    margin-bottom: 0;
+  }
+  .prose-rich-text br {
+    display: block;
+    content: "";
+    margin-top: 0.15em;
+  }
 }
 
 /* Hide Next.js badge and error messages */

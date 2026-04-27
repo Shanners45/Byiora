@@ -19,6 +19,7 @@ import { toast } from "sonner"
 import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { RichTextEditor } from "@/components/rich-text-editor"
 
 export default function ProductEditPage() {
   const supabase = createClient()
@@ -55,6 +56,16 @@ export default function ProductEditPage() {
   const [faqs, setFaqs] = useState<Array<{ question: string; answer: string }>>([])
   const [newFaqQuestion, setNewFaqQuestion] = useState("")
   const [newFaqAnswer, setNewFaqAnswer] = useState("")
+  const [editingFaqIndex, setEditingFaqIndex] = useState<number | null>(null)
+
+  const handlePriceChange = (val: string, setter: (val: string) => void) => {
+    const numericVal = val.replace(/\D/g, "");
+    if (!numericVal) {
+      setter("");
+      return;
+    }
+    setter(Number(numericVal).toLocaleString('en-US'));
+  }
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -295,16 +306,30 @@ export default function ProductEditPage() {
       return
     }
 
-    setFaqs([
-      ...faqs,
-      {
-        question: newFaqQuestion,
-        answer: newFaqAnswer,
-      },
-    ])
+    if (editingFaqIndex !== null) {
+      const updated = [...faqs]
+      updated[editingFaqIndex] = { question: newFaqQuestion, answer: newFaqAnswer }
+      setFaqs(updated)
+      setEditingFaqIndex(null)
+    } else {
+      setFaqs([
+        ...faqs,
+        {
+          question: newFaqQuestion,
+          answer: newFaqAnswer,
+        },
+      ])
+    }
 
     setNewFaqQuestion("")
     setNewFaqAnswer("")
+  }
+
+  const editFaq = (index: number) => {
+    const faq = faqs[index]
+    setNewFaqQuestion(faq.question)
+    setNewFaqAnswer(faq.answer)
+    setEditingFaqIndex(index)
   }
 
   const removeFaq = (index: number) => {
@@ -419,11 +444,11 @@ export default function ProductEditPage() {
               <Label htmlFor="description" className="text-[#1F2937]">
                 Description
               </Label>
-              <Textarea
+              <RichTextEditor
                 id="description"
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="bg-[#F9FAFB] border-[#E5E7EB] min-h-[120px]"
+                onChange={setDescription}
+                placeholder="Enter product description"
               />
             </div>
 
@@ -592,7 +617,7 @@ export default function ProductEditPage() {
                     <Input
                       placeholder="e.g. 2,333"
                       value={newDenomPrice}
-                      onChange={(e) => setNewDenomPrice(e.target.value)}
+                      onChange={(e) => handlePriceChange(e.target.value, setNewDenomPrice)}
                       className="border-[#E5E7EB] bg-white text-[#1F2937] placeholder:text-gray-400 focus-visible:ring-[#7E3AF2]"
                     />
                   </div>
@@ -647,14 +672,24 @@ export default function ProductEditPage() {
                         <TableCell className="font-medium text-[#1F2937] break-words">{faq.question}</TableCell>
                         <TableCell className="text-[#4B5563] break-words">{faq.answer}</TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-[#EF4444] hover:text-[#EF4444]/80 hover:bg-red-50"
-                            onClick={() => removeFaq(index)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => editFaq(index)}
+                              className="h-8 w-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0 text-[#EF4444] hover:text-[#EF4444]/80 hover:bg-red-50"
+                              onClick={() => removeFaq(index)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -689,17 +724,16 @@ export default function ProductEditPage() {
                     <Label htmlFor="answer" className="text-[#1F2937]">
                       Answer
                     </Label>
-                    <Textarea
+                    <RichTextEditor
                       id="answer"
                       value={newFaqAnswer}
-                      onChange={(e) => setNewFaqAnswer(e.target.value)}
-                      className="bg-white border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-500"
+                      onChange={setNewFaqAnswer}
                       placeholder="e.g. You can redeem it on the official website..."
                     />
                   </div>
                 </div>
                 <Button className="mt-4 bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white" onClick={addFaq}>
-                  Add FAQ
+                  {editingFaqIndex !== null ? "Update FAQ" : "Add FAQ"}
                 </Button>
               </div>
             </div>

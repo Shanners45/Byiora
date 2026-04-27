@@ -67,7 +67,7 @@ export function Header() {
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex items-center cursor-pointer" onClick={() => router.push("/")}>
-              <div className="h-10 relative">
+              <div className="h-10 relative" suppressHydrationWarning>
                 <Image
                   src="/byiora-logo-full.png"
                   alt="Byiora Logo"
@@ -82,11 +82,9 @@ export function Header() {
           <div className="hidden md:flex items-center flex-1 max-w-md mx-8">
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-brand-light-gray h-4 w-4" />
-              <input
-                type="text"
-                placeholder="Search gift cards..."
-                className="w-full pl-10 pr-4 py-2 bg-brand-white border border-gray-200 rounded-lg text-brand-charcoal placeholder-brand-light-gray focus:outline-none focus:ring-2 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
-              />
+              <div className="w-full pl-10 pr-4 py-2 bg-brand-white border border-gray-200 rounded-lg text-brand-light-gray">
+                Search gift cards...
+              </div>
             </div>
           </div>
 
@@ -123,7 +121,7 @@ export function Header() {
               <SheetContent side="left" className="w-80 bg-brand-white border-gray-200">
                 <div className="py-6">
                   <div className="flex items-center mb-6">
-                    <div className="h-10 relative">
+                    <div className="h-10 relative" suppressHydrationWarning>
                       <Image
                         src="/logo-final.png"
                         alt="Byiora Logo"
@@ -252,7 +250,7 @@ export function Header() {
             </Sheet>
 
             <div className="flex items-center cursor-pointer" onClick={() => router.push("/")}>
-              <div className="h-10 relative">
+              <div className="h-10 relative" suppressHydrationWarning>
                 <Image
                   src="/logo-final.png"
                   alt="Byiora Logo"
@@ -352,7 +350,7 @@ export function Header() {
                     <User className="h-5 w-5" />
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-md bg-brand-white border-gray-200" aria-describedby={undefined}>
+                <DialogContent className="w-[calc(100%-2rem)] sm:w-full rounded-xl sm:rounded-lg sm:max-w-md bg-brand-white border-gray-200" aria-describedby={undefined}>
                   <DialogTitle className="sr-only">Sign In</DialogTitle>
                   <SignInForm onSuccess={() => setIsSignInOpen(false)} />
                 </DialogContent>
