@@ -6,7 +6,7 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/admin", "/admin/*", "/api/*"],
+        disallow: ["/admin", "/admin/*", "/api/*", "/settings", "/transactions"],
       },
     ],
     sitemap: "https://www.byiora.store/sitemap.xml",

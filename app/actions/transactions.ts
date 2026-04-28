@@ -24,6 +24,38 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     const serviceSupabase = createServiceRoleClient()
 
     const productId = transactionData.productId || transactionData.product.toLowerCase().replace(/\s+/g, "-")
+    
+    // SECURITY: Validate price against the database to prevent tampering
+    const { data: productData, error: productError } = await serviceSupabase
+      .from("products")
+      .select("denominations")
+      .eq("id", productId)
+      .single()
+      
+    if (productError || !productData) {
+      // Fallback to slug search if id lookup fails
+      const { data: slugProduct, error: slugError } = await serviceSupabase
+        .from("products")
+        .select("denominations")
+        .eq("slug", productId)
+        .single()
+        
+      if (slugError || !slugProduct) {
+        return { success: false, error: "Product not found or unavailable." }
+      }
+      productData.denominations = slugProduct.denominations
+    }
+    
+    // Find matching denomination and set verified price
+    const matchedDenom = productData.denominations?.find(
+      (d: any) => d.label === transactionData.amount
+    )
+    
+    if (!matchedDenom) {
+      return { success: false, error: "Invalid product denomination." }
+    }
+    
+    const verifiedPrice = matchedDenom.price.toString()
     const now = new Date()
     const yy = String(now.getFullYear()).slice(-2)
     const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -36,7 +68,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       product_id: productId,
       product_name: transactionData.product,
       amount: transactionData.amount,
-      price: transactionData.price,
+      price: verifiedPrice,
       status: "Processing",
       payment_method: transactionData.paymentMethod,
       transaction_id: transactionId,

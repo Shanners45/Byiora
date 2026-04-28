@@ -5,14 +5,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { revalidatePath } from "next/cache"
 import DOMPurify from "isomorphic-dompurify"
 
-async function verifyAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return false
-  const { data: adminUser } = await supabase.from('admin_users').select('id').eq('id', user.id).single()
-  if (!adminUser) return false
-  return true
-}
+import { verifyAdmin } from "./admin-utils"
 
 export async function addBannerAction(title: string, linkUrl: string, imageUrl: string, sortOrder: number) {
   if (!(await verifyAdmin())) return { error: "Unauthorized" }

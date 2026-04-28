@@ -4,23 +4,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
-/**
- * Verifies the current user is an admin
- */
-async function verifyAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return false
-
-  const { data: adminUser } = await supabase
-    .from('admin_users')
-    .select('id, role')
-    .eq('id', user.id)
-    .single()
-
-  if (!adminUser) return false
-  return true
-}
+import { verifyAdmin } from "./admin-utils"
 
 /**
  * Creates a new product (admin only)

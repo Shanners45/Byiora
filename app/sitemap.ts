@@ -5,6 +5,7 @@ const BASE_URL = "https://www.byiora.store"
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const supabase = await createClient()
+
   // Static routes
   const staticRoutes: MetadataRoute.Sitemap = [
     {
@@ -20,15 +21,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     },
     {
-      url: `${BASE_URL}/transactions`,
+      url: `${BASE_URL}/terms-and-conditions`,
       lastModified: new Date(),
-      changeFrequency: "weekly",
-      priority: 0.4,
+      changeFrequency: "yearly",
+      priority: 0.3,
     },
     {
-      url: `${BASE_URL}/settings`,
+      url: `${BASE_URL}/privacy-policy`,
       lastModified: new Date(),
-      changeFrequency: "monthly",
+      changeFrequency: "yearly",
+      priority: 0.3,
+    },
+    {
+      url: `${BASE_URL}/refund-policy`,
+      lastModified: new Date(),
+      changeFrequency: "yearly",
       priority: 0.3,
     },
   ]

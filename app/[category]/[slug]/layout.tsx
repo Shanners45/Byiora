@@ -8,6 +8,11 @@ interface Props {
   children: React.ReactNode
 }
 
+// Strip HTML tags for clean text in meta descriptions
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { category, slug } = await params
   const supabase = await createClient()
@@ -15,7 +20,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
     const { data: product, error } = await supabase
       .from("products")
-      .select("name, description, logo, category, slug")
+      .select("name, description, logo, category, slug, denominations")
       .eq("slug", slug)
       .eq("is_active", true)
       .single()
@@ -28,22 +33,28 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 
     const categoryLabel = product.category === "topup" ? "Top-Up" : "Gift Card"
-    const title = `Buy ${product.name} in Nepal | eSewa & Khalti`
-    const description =
-      product.description ||
-      `Buy ${product.name} instantly using eSewa, Khalti, or Fonepay. Secure payments, instant delivery in Nepal.`
+    const title = `Buy ${product.name} ${categoryLabel} in Nepal – Instant Delivery | Byiora`
+
+    // Build a rich meta description with pricing info
+    const cleanDesc = product.description ? stripHtml(product.description).slice(0, 120) : ''
+    const priceInfo = product.denominations && product.denominations.length > 0
+      ? ` Starting from Rs. ${product.denominations[0].price}.`
+      : ''
+    const description = cleanDesc
+      ? `${cleanDesc}${priceInfo} Pay via eSewa, Khalti or Fonepay. Instant delivery in Nepal.`
+      : `Buy ${product.name} ${categoryLabel} instantly in Nepal.${priceInfo} Secure payment with eSewa, Khalti, Fonepay. Fast digital delivery by Byiora.`
 
     const productUrl = `${BASE_URL}/${category}/${slug}`
 
     return {
       title,
-      description,
+      description: description.slice(0, 160),
       alternates: {
         canonical: productUrl,
       },
       openGraph: {
-        title: `${title} | Byiora`,
-        description,
+        title,
+        description: description.slice(0, 160),
         url: productUrl,
         siteName: "Byiora",
         images: product.logo
@@ -52,18 +63,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
               url: product.logo,
               width: 600,
               height: 600,
-              alt: `${product.name} – Byiora`,
+              alt: `Buy ${product.name} in Nepal – Byiora`,
             },
           ]
           : [],
         type: "website",
       },
-      twitter: {
-        card: "summary_large_image",
-        title: `${title} | Byiora`,
-        description,
-        images: product.logo ? [product.logo] : [],
-      },
+
     }
   } catch {
     return {
@@ -73,6 +79,87 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default function ProductLayout({ children }: { children: React.ReactNode }) {
-  return <>{children}</>
+export default async function ProductLayout({ params, children }: Props) {
+  const { category, slug } = await params
+  const supabase = await createClient()
+
+  // Fetch product data for JSON-LD structured data
+  let jsonLd = null
+  try {
+    const { data: product } = await supabase
+      .from("products")
+      .select("name, description, logo, category, slug, denominations, faqs")
+      .eq("slug", slug)
+      .eq("is_active", true)
+      .single()
+
+    if (product) {
+      const productUrl = `${BASE_URL}/${category}/${slug}`
+      const cleanDesc = product.description ? stripHtml(product.description).slice(0, 300) : `Buy ${product.name} in Nepal with instant delivery.`
+
+      // Build Product schema
+      const productSchema: any = {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: product.name,
+        description: cleanDesc,
+        image: product.logo || `${BASE_URL}/icon.png`,
+        url: productUrl,
+        brand: {
+          "@type": "Brand",
+          name: "Byiora",
+        },
+        offers: product.denominations && product.denominations.length > 0
+          ? product.denominations.map((d: any) => ({
+              "@type": "Offer",
+              price: d.price,
+              priceCurrency: "NPR",
+              availability: "https://schema.org/InStock",
+              seller: {
+                "@type": "Organization",
+                name: "Byiora",
+              },
+            }))
+          : undefined,
+      }
+
+      // Build FAQPage schema if FAQs exist
+      const faqSchema = product.faqs && product.faqs.length > 0
+        ? {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: product.faqs.map((faq: any) => ({
+              "@type": "Question",
+              name: faq.question,
+              acceptedAnswer: {
+                "@type": "Answer",
+                text: stripHtml(faq.answer),
+              },
+            })),
+          }
+        : null
+
+      jsonLd = { productSchema, faqSchema }
+    }
+  } catch {
+    // Structured data is optional — don't break the page
+  }
+
+  return (
+    <>
+      {jsonLd?.productSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd.productSchema).replace(/</g, '\\u003c') }}
+        />
+      )}
+      {jsonLd?.faqSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd.faqSchema).replace(/</g, '\\u003c') }}
+        />
+      )}
+      {children}
+    </>
+  )
 }

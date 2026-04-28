@@ -285,13 +285,8 @@ export default function ProductDetailPage() {
                     Frequently Asked Questions
                   </h3>
                   <div className="space-y-4">
-                    <FaqAccordion faqs={faqExpanded ? product.faqs : product.faqs.slice(0, FAQ_LIMIT)} />
+                    <FaqAccordion faqs={product.faqs} />
                   </div>
-                  {product.faqs.length > FAQ_LIMIT && (
-                    <button onClick={() => setFaqExpanded(!faqExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-4 hover:underline">
-                      {faqExpanded ? "View Less" : "View More"}
-                    </button>
-                  )}
                 </div>
               ) : (
                 <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
@@ -542,13 +537,8 @@ export default function ProductDetailPage() {
                   Frequently Asked Questions
                 </h3>
                 <div className="space-y-4">
-                  <FaqAccordion faqs={faqExpanded ? product.faqs : product.faqs.slice(0, FAQ_LIMIT)} />
+                  <FaqAccordion faqs={product.faqs} />
                 </div>
-                {product.faqs.length > FAQ_LIMIT && (
-                  <button onClick={() => setFaqExpanded(!faqExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-4 hover:underline">
-                    {faqExpanded ? "View Less" : "View More"}
-                  </button>
-                )}
               </div>
             ) : (
               <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
