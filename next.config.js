@@ -5,6 +5,7 @@ const remotePatterns = [
   { protocol: "https", hostname: "cdn.worldvectorlogo.com" },
   { protocol: "https", hostname: "upload.wikimedia.org" },
   { protocol: "https", hostname: "logos-world.net" },
+  { protocol: "https", hostname: "tkovigthghwpwbtjikyp.supabase.co" },
 ]
 
 try {
