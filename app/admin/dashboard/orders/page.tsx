@@ -376,7 +376,7 @@ export default function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">Orders</h1>
           <p className="text-[#4B5563]">Manage all customer transactions and orders</p>
@@ -466,7 +466,7 @@ export default function OrdersPage() {
             </Select>
           </div>
 
-          <div className="rounded-md border-2 border-[#F59E0B]/20 overflow-hidden">
+          <div className="rounded-md border-2 border-[#F59E0B]/20 overflow-x-auto">
             <Table>
               <TableHeader className="bg-white">
                 <TableRow>

@@ -290,15 +290,7 @@ export default function ProductDetailPage() {
                   currency: "NPR",
                 },
               },
-            },
-            aggregateRating: {
-              "@type": "AggregateRating",
-              ratingValue: "0",
-              reviewCount: "0",
-              bestRating: "5",
-              worstRating: "1",
-            },
-          }).replace(/</g, "\\u003c"),
+            }).replace(/</g, "\\u003c"),
         }}
       />
       <Header />
@@ -338,7 +330,7 @@ export default function ProductDetailPage() {
                   <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
                   Description
                 </h3>
-                <div 
+                <div
                   className={`prose-rich-text text-brand-light-gray text-sm leading-relaxed ${!descExpanded && giftCard.description.length > DESC_LIMIT ? 'line-clamp-4' : ''}`}
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(giftCard.description) }}
                 />
@@ -590,7 +582,7 @@ export default function ProductDetailPage() {
                 <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
                 Description
               </h3>
-              <div 
+              <div
                 className={`prose-rich-text text-brand-light-gray text-sm leading-relaxed ${!descExpanded && giftCard.description.length > DESC_LIMIT ? 'line-clamp-4' : ''}`}
                 dangerouslySetInnerHTML={{ __html: sanitizeHtml(giftCard.description) }}
               />
@@ -634,12 +626,11 @@ export default function ProductDetailPage() {
             <div className="text-center">
               <div className="w-48 h-48 mx-auto bg-gray-100 rounded-lg flex items-center justify-center mb-4 overflow-hidden">
                 {selectedPaymentMethod?.qr_url ? (
-                  <Image
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
                     src={selectedPaymentMethod.qr_url}
                     alt="Payment QR Code"
-                    width={192}
-                    height={192}
-                    className="object-contain"
+                    className="w-48 h-48 object-contain"
                   />
                 ) : (
                   <QrCode className="h-16 w-16 text-gray-400" />

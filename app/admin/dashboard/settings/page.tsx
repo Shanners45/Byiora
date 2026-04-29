@@ -577,12 +577,11 @@ export default function AdminSettingsPage() {
                             <div className="flex items-center gap-4">
                               {editForm.qr_url && (
                                 <div className="w-24 h-24 border border-gray-200 rounded overflow-hidden flex-shrink-0">
-                                  <Image
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img
                                     src={editForm.qr_url}
                                     alt="QR"
-                                    width={96}
-                                    height={96}
-                                    className="object-contain w-full h-full"
+                                    className="object-contain w-full h-full max-w-[96px] max-h-[96px]"
                                   />
                                 </div>
                               )}
@@ -625,12 +624,11 @@ export default function AdminSettingsPage() {
                           {/* QR thumbnail or placeholder */}
                           <div className="w-14 h-14 border border-gray-200 rounded overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-50">
                             {method.qr_url ? (
-                              <Image
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
                                 src={method.qr_url}
                                 alt={method.name}
-                                width={56}
-                                height={56}
-                                className="object-contain w-full h-full"
+                                className="object-contain w-full h-full max-w-[56px] max-h-[56px]"
                               />
                             ) : (
                               <QrCode className="h-6 w-6 text-gray-300" />

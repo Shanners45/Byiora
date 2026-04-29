@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 /**
  * Shared utility to verify the current user is an admin.
@@ -9,7 +10,10 @@ export async function verifyAdmin(): Promise<boolean> {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return false
   
-  const { data: adminUser } = await supabase
+  // Use Service Role to bypass RLS for verification
+  // This is safe because we are searching by the verified user.id from auth.getUser()
+  const serviceSupabase = createServiceRoleClient()
+  const { data: adminUser } = await serviceSupabase
     .from('admin_users')
     .select('id, role')
     .eq('id', user.id)
