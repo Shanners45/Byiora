@@ -20,7 +20,7 @@ import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
 import { ProductSkeleton } from "@/components/product-skeleton"
 import { FaqAccordion } from "@/components/faq-accordion"
-import DOMPurify from "isomorphic-dompurify"
+import { sanitizeHtml } from "@/lib/sanitize"
 interface PaymentMethod {
   id: string
   name: string
@@ -274,7 +274,7 @@ export default function ProductDetailPage() {
                 </h3>
                 <div 
                   className={`prose-rich-text text-brand-light-gray text-sm leading-relaxed ${!descExpanded && giftCard.description.length > DESC_LIMIT ? 'line-clamp-4' : ''}`}
-                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(giftCard.description, { ADD_ATTR: ['target', 'rel', 'class'] }) }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(giftCard.description) }}
                 />
                 {giftCard.description.length > DESC_LIMIT && (
                   <button onClick={() => setDescExpanded(!descExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-2 hover:underline">
@@ -526,7 +526,7 @@ export default function ProductDetailPage() {
               </h3>
               <div 
                 className={`prose-rich-text text-brand-light-gray text-sm leading-relaxed ${!descExpanded && giftCard.description.length > DESC_LIMIT ? 'line-clamp-4' : ''}`}
-                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(giftCard.description, { ADD_ATTR: ['target', 'rel', 'class'] }) }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(giftCard.description) }}
               />
               {giftCard.description.length > DESC_LIMIT && (
                 <button onClick={() => setDescExpanded(!descExpanded)} className="text-brand-sky-blue text-sm font-semibold mt-2 hover:underline">

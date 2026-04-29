@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { revalidatePath } from "next/cache"
-import DOMPurify from "isomorphic-dompurify"
+import { sanitizeHtml } from "@/lib/sanitize"
 
 import { verifyAdmin } from "./admin-utils"
 
@@ -11,9 +11,9 @@ export async function addBannerAction(title: string, linkUrl: string, imageUrl: 
   if (!(await verifyAdmin())) return { error: "Unauthorized" }
   const supabase = createServiceRoleClient()
 
-  const sanitizedTitle = DOMPurify.sanitize(title || "")
+  const sanitizedTitle = sanitizeHtml(title || "")
   // Sanitize links to prevent malicious javascript URIs
-  const sanitizedLink = linkUrl ? DOMPurify.sanitize(linkUrl) : ""
+  const sanitizedLink = linkUrl ? sanitizeHtml(linkUrl) : ""
   
   const { data, error } = await supabase.from("banners").insert([{
     title: sanitizedTitle,
@@ -32,8 +32,8 @@ export async function updateBannerAction(id: string, title: string, linkUrl: str
   if (!(await verifyAdmin())) return { error: "Unauthorized" }
   const supabase = createServiceRoleClient()
 
-  const sanitizedTitle = DOMPurify.sanitize(title || "")
-  const sanitizedLink = linkUrl ? DOMPurify.sanitize(linkUrl) : ""
+  const sanitizedTitle = sanitizeHtml(title || "")
+  const sanitizedLink = linkUrl ? sanitizeHtml(linkUrl) : ""
 
   const { error } = await supabase.from("banners").update({
     title: sanitizedTitle,
@@ -50,7 +50,7 @@ export async function addCategoryAction(title: string, sortOrder: number) {
   if (!(await verifyAdmin())) return { error: "Unauthorized" }
   const supabase = createServiceRoleClient()
 
-  const sanitizedTitle = DOMPurify.sanitize(title || "")
+  const sanitizedTitle = sanitizeHtml(title || "")
 
   const { data, error } = await supabase.from("homepage_categories").insert([{
     title: sanitizedTitle,
@@ -67,7 +67,7 @@ export async function updateCategoryTitleAction(id: string, title: string) {
   if (!(await verifyAdmin())) return { error: "Unauthorized" }
   const supabase = createServiceRoleClient()
 
-  const sanitizedTitle = DOMPurify.sanitize(title || "")
+  const sanitizedTitle = sanitizeHtml(title || "")
 
   const { error } = await supabase.from("homepage_categories").update({
     title: sanitizedTitle

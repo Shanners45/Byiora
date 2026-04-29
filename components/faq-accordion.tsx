@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { Plus, Minus } from "lucide-react"
-import DOMPurify from "isomorphic-dompurify"
+import { sanitizeHtml } from "@/lib/sanitize"
 
 interface FaqItemProps {
   question: string
@@ -58,7 +58,7 @@ export function FaqAccordion({ faqs }: { faqs: FaqItemProps[] }) {
                 <div 
                   className="p-4 pt-0 text-xs text-brand-light-gray prose-rich-text"
                   dangerouslySetInnerHTML={{ 
-                    __html: DOMPurify.sanitize(faq.answer, { ADD_ATTR: ['target', 'rel', 'class'] }) 
+                    __html: sanitizeHtml(faq.answer) 
                   }} 
                 />
               </div>
