@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 
     const categoryLabel = product.category === "topup" ? "Top-Up" : "Gift Card"
-    const title = `Buy ${product.name} in Nepal – Instant Delivery | Byiora`
+    const title = `Buy ${product.name} in Nepal | Byiora`
 
     // Build a rich meta description with pricing info
     const cleanDesc = product.description ? stripHtml(product.description).slice(0, 120) : ''
