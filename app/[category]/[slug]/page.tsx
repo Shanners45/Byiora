@@ -233,64 +233,74 @@ export default function ProductDetailPage() {
     }
   }
 
+  const productJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.name,
+    description: product.description,
+    image: product.logo,
+    sku: product.id,
+    brand: {
+      "@type": "Brand",
+      name: "Byiora",
+    },
+    offers: {
+      "@type": "Offer",
+      url: `https://www.byiora.store/${categorySlug}/${productSlug}`,
+      priceCurrency: "NPR",
+      price: giftCard.denominations[0]?.price || 0,
+      availability: "https://schema.org/InStock",
+      itemCondition: "https://schema.org/NewCondition",
+      hasMerchantReturnPolicy: {
+        "@type": "MerchantReturnPolicy",
+        applicableCountry: "NP",
+        returnPolicyCategory: "https://schema.org/NoReturns",
+        merchantReturnLink: "https://www.byiora.store/refund-policy",
+      },
+      shippingDetails: {
+        "@type": "OfferShippingDetails",
+        shippingDestination: {
+          "@type": "DefinedRegion",
+          addressCountry: "NP",
+        },
+        deliveryTime: {
+          "@type": "ShippingDeliveryTime",
+          handlingTime: {
+            "@type": "QuantitativeValue",
+            minValue: 0,
+            maxValue: 5,
+            unitCode: "MIN",
+          },
+          transitTime: {
+            "@type": "QuantitativeValue",
+            minValue: 0,
+            maxValue: 5,
+            unitCode: "MIN",
+          },
+        },
+        shippingRate: {
+          "@type": "MonetaryAmount",
+          value: 0,
+          currency: "NPR",
+        },
+      },
+    },
+    aggregateRating: {
+      "@type": "AggregateRating",
+      ratingValue: "0",
+      reviewCount: "0",
+      bestRating: "5",
+      worstRating: "1",
+    },
+  }
+
   return (
     <div className="min-h-screen bg-brand-purple">
       {/* Product JSON-LD Schema */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "Product",
-            name: product.name,
-            description: product.description,
-            image: product.logo,
-            sku: product.id,
-            brand: {
-              "@type": "Brand",
-              name: "Byiora",
-            },
-            offers: {
-              "@type": "Offer",
-              url: `https://www.byiora.store/${categorySlug}/${productSlug}`,
-              priceCurrency: "NPR",
-              price: giftCard.denominations[0]?.price || 0,
-              availability: "https://schema.org/InStock",
-              itemCondition: "https://schema.org/NewCondition",
-              hasMerchantReturnPolicy: {
-                "@type": "MerchantReturnPolicy",
-                applicableCountry: "NP",
-                returnPolicyCategory: "https://schema.org/NoReturns",
-                merchantReturnLink: "https://www.byiora.store/refund-policy",
-              },
-              shippingDetails: {
-                "@type": "OfferShippingDetails",
-                shippingDestination: {
-                  "@type": "DefinedRegion",
-                  addressCountry: "NP",
-                },
-                deliveryTime: {
-                  "@type": "ShippingDeliveryTime",
-                  handlingTime: {
-                    "@type": "QuantitativeValue",
-                    minValue: 0,
-                    maxValue: 5,
-                    unitCode: "MIN",
-                  },
-                  transitTime: {
-                    "@type": "QuantitativeValue",
-                    minValue: 0,
-                    maxValue: 5,
-                    unitCode: "MIN",
-                  },
-                },
-                shippingRate: {
-                  "@type": "MonetaryAmount",
-                  value: 0,
-                  currency: "NPR",
-                },
-              },
-            }).replace(/</g, "\\u003c"),
+          __html: JSON.stringify(productJsonLd).replace(/</g, "\\u003c"),
         }}
       />
       <Header />
@@ -626,7 +636,6 @@ export default function ProductDetailPage() {
             <div className="text-center">
               <div className="w-48 h-48 mx-auto bg-gray-100 rounded-lg flex items-center justify-center mb-4 overflow-hidden">
                 {selectedPaymentMethod?.qr_url ? (
-                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={selectedPaymentMethod.qr_url}
                     alt="Payment QR Code"
