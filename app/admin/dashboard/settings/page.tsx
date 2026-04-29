@@ -310,11 +310,12 @@ export default function AdminSettingsPage() {
 
       const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, file, {
         cacheControl: "3600",
-        upsert: true,
+        upsert: false,
       })
 
       if (uploadError) {
-        toast.error("Failed to upload QR code")
+        console.error("QR Upload Error:", uploadError)
+        toast.error(`Failed to upload QR code: ${uploadError.message}`)
         return
       }
 

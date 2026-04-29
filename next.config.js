@@ -23,6 +23,7 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  allowedDevOrigins: ["192.168.1.70", "localhost"],
   images: {
     remotePatterns,
     // Mitigation for Next.js image cache exhaustion advisories

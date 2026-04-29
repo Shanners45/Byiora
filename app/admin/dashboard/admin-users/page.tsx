@@ -147,7 +147,8 @@ export default function AdminUsersPage() {
       // Reload admin users
       await loadAdminUsers();
       toast.success(
-        `User promoted to ${promoteUserRole === "sub_admin" ? "Sub-admin" : "Order Manager"} successfully!`
+        `User promoted successfully! Temporary Password: ${result.newPassword}`,
+        { duration: 10000 }
       );
     } catch (error) {
       console.error("Error promoting user:", error);
@@ -250,7 +251,7 @@ export default function AdminUsersPage() {
 
   const handleResetPassword = async (userId: string, userEmail: string) => {
     try {
-      const newPassword = "newpass123"
+      const newPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8) + "!"
       
       const result = await resetAdminPasswordAction(userId, newPassword)
 
@@ -259,7 +260,7 @@ export default function AdminUsersPage() {
         return
       }
 
-      toast.success(`Password reset successfully! New password: ${newPassword}`)
+      toast.success(`Password reset successfully! New password: ${newPassword}`, { duration: 10000 })
     } catch (error) {
       console.error("Error resetting password:", error)
       toast.error("Failed to reset password")
@@ -380,7 +381,7 @@ export default function AdminUsersPage() {
 
                 <div className="bg-[#FEF3C7] border border-[#F59E0B] rounded-md p-3">
                   <p className="text-sm text-[#92400E]">
-                    <strong>Note:</strong> The promoted user will receive a default password: <code>temppass123</code>
+                    <strong>Note:</strong> The promoted user will receive a randomly generated temporary password.
                     <br />
                     They should change this password after their first login.
                   </p>

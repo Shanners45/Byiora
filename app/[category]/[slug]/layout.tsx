@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
 
 const BASE_URL = "https://www.byiora.store"
@@ -79,12 +80,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function ProductLayout({ params, children }: Props) {
-  const { category, slug } = await params
+// Separate async component for JSON-LD — wrapped in Suspense so it doesn't
+// block the layout from rendering {children} immediately.
+async function ProductJsonLd({ category, slug }: { category: string; slug: string }) {
   const supabase = await createClient()
 
-  // Fetch product data for JSON-LD structured data
-  let jsonLd = null
   try {
     const { data: product } = await supabase
       .from("products")
@@ -93,72 +93,81 @@ export default async function ProductLayout({ params, children }: Props) {
       .eq("is_active", true)
       .single()
 
-    if (product) {
-      const productUrl = `${BASE_URL}/${category}/${slug}`
-      const cleanDesc = product.description ? stripHtml(product.description).slice(0, 300) : `Buy ${product.name} in Nepal with instant delivery.`
+    if (!product) return null
 
-      // Build Product schema
-      const productSchema: any = {
-        "@context": "https://schema.org",
-        "@type": "Product",
-        name: product.name,
-        description: cleanDesc,
-        image: product.logo || `${BASE_URL}/icon.png`,
-        url: productUrl,
-        brand: {
-          "@type": "Brand",
-          name: "Byiora",
-        },
-        offers: product.denominations && product.denominations.length > 0
-          ? product.denominations.map((d: any) => ({
-            "@type": "Offer",
-            price: d.price,
-            priceCurrency: "NPR",
-            availability: "https://schema.org/InStock",
-            seller: {
-              "@type": "Organization",
-              name: "Byiora",
-            },
-          }))
-          : undefined,
-      }
+    const productUrl = `${BASE_URL}/${category}/${slug}`
+    const cleanDesc = product.description ? stripHtml(product.description).slice(0, 300) : `Buy ${product.name} in Nepal with instant delivery.`
 
-      // Build FAQPage schema if FAQs exist
-      const faqSchema = product.faqs && product.faqs.length > 0
-        ? {
-          "@context": "https://schema.org",
-          "@type": "FAQPage",
-          mainEntity: product.faqs.map((faq: any) => ({
-            "@type": "Question",
-            name: faq.question,
-            acceptedAnswer: {
-              "@type": "Answer",
-              text: stripHtml(faq.answer),
-            },
-          })),
-        }
-        : null
-
-      jsonLd = { productSchema, faqSchema }
+    const productSchema: any = {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: product.name,
+      description: cleanDesc,
+      image: product.logo || `${BASE_URL}/icon.png`,
+      url: productUrl,
+      brand: {
+        "@type": "Brand",
+        name: "Byiora",
+      },
+      offers: product.denominations && product.denominations.length > 0
+        ? product.denominations.map((d: any) => ({
+          "@type": "Offer",
+          price: d.price,
+          priceCurrency: "NPR",
+          availability: "https://schema.org/InStock",
+          seller: {
+            "@type": "Organization",
+            name: "Byiora",
+          },
+        }))
+        : undefined,
     }
+
+    const faqSchema = product.faqs && product.faqs.length > 0
+      ? {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        mainEntity: product.faqs.map((faq: any) => ({
+          "@type": "Question",
+          name: faq.question,
+          acceptedAnswer: {
+            "@type": "Answer",
+            text: stripHtml(faq.answer),
+          },
+        })),
+      }
+      : null
+
+    return (
+      <>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(productSchema).replace(/</g, '\\u003c') }}
+        />
+        {faqSchema && (
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema).replace(/</g, '\\u003c') }}
+          />
+        )}
+      </>
+    )
   } catch {
-    // Structured data is optional — don't break the page
+    return null
   }
+}
+
+export default async function ProductLayout({ params, children }: Props) {
+  const { category, slug } = await params
 
   return (
     <>
-      {jsonLd?.productSchema && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd.productSchema).replace(/</g, '\\u003c') }}
-        />
-      )}
-      {jsonLd?.faqSchema && (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd.faqSchema).replace(/</g, '\\u003c') }}
-        />
-      )}
+      {/* JSON-LD streams in asynchronously — does NOT block {children} from
+          rendering, so the route transition is instant and loading.tsx
+          shows immediately instead of the old page staying visible. */}
+      <Suspense fallback={null}>
+        <ProductJsonLd category={category} slug={slug} />
+      </Suspense>
       {children}
     </>
   )

@@ -28,9 +28,10 @@ export async function promoteUserAction(userId: string, newRole: "sub_admin" | "
       return { error: `Failed to promote user: ${error.message}` }
     }
 
-    // 2. Reset their password to the default mentioned in the UI (temppass123)
+    // 2. Generate a secure random password and update auth
+    const newPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8) + "!"
     const { error: authError } = await serviceSupabase.auth.admin.updateUserById(userId, {
-      password: "temppass123",
+      password: newPassword,
     })
 
     if (authError) {
@@ -40,7 +41,7 @@ export async function promoteUserAction(userId: string, newRole: "sub_admin" | "
     }
 
     revalidatePath("/admin/dashboard/admin-users")
-    return { success: true }
+    return { success: true, newPassword }
   } catch (error: any) {
     console.error("Error in promoteUserAction:", error)
     return { error: error.message || "An unexpected error occurred" }
