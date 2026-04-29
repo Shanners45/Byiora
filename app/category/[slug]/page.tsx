@@ -32,6 +32,11 @@ export default function CategoryPage() {
     "games": "Games",
   }
 
+  // Reset scroll position on mount
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
   useEffect(() => {
     const loadProducts = async () => {
       try {
@@ -160,7 +165,7 @@ export default function CategoryPage() {
       <div className="container mx-auto px-4 py-8">
         <Button 
           variant="ghost" 
-          onClick={() => router.push("/")} 
+          onClick={() => router.back()} 
           className="mb-6 text-white hover:bg-white/10"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />

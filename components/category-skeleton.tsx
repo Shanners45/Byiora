@@ -1,18 +1,10 @@
 "use client"
 
-import { useLayoutEffect } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Header } from "@/components/header"
-import { Footer } from "@/components/footer"
 import { ArrowLeft } from "lucide-react"
 
 export function CategorySkeleton() {
-  // Always scroll to top so the skeleton is visible, even when the user
-  // was scrolled near the footer on the previous page.
-  useLayoutEffect(() => {
-    window.scrollTo(0, 0)
-  }, [])
-
   return (
     <div className="min-h-screen bg-brand-purple">
       <Header />
@@ -45,8 +37,6 @@ export function CategorySkeleton() {
           ))}
         </div>
       </div>
-      
-      <Footer />
     </div>
   )
 }
