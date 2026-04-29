@@ -18,7 +18,7 @@ import { useNotifications } from "@/lib/notification-context"
 import { getProductBySlug } from "@/lib/product-categories"
 import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
-import { LoadingScreen } from "@/components/loading-screen"
+import { ProductSkeleton } from "@/components/product-skeleton"
 import { FaqAccordion } from "@/components/faq-accordion"
 import DOMPurify from "isomorphic-dompurify"
 interface PaymentMethod {
@@ -110,7 +110,7 @@ export default function ProductDetailPage() {
 
 
   if (isLoading) {
-    return <LoadingScreen />
+    return <ProductSkeleton />
   }
 
   if (notFound || !product) {

@@ -119,74 +119,14 @@ export async function getWebStoreGames(): Promise<Product[]> {
 
 // Get product by ID
 export async function getProductById(id: string): Promise<Product | null> {
-  if (!isSupabaseConfigured()) {
-    return null
-  }
-
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase.from("products").select("*").eq("id", id).single()
-
-    if (error) {
-      console.error("Error fetching product:", error)
-      return null
-    }
-
-    return {
-      id: data.id,
-      name: data.name,
-      slug: data.slug,
-      logo: data.logo,
-      category: data.category,
-      isNew: data.is_new,
-      hasUpdate: data.has_update,
-      isActive: data.is_active,
-      description: data.description,
-      denom_icon_url: data.denom_icon_url || undefined,
-      ribbon_text: data.ribbon_text || undefined,
-      denominations: data.denominations || [],
-      faqs: data.faqs || [],
-    }
-  } catch (error) {
-    console.error("Error fetching product:", error)
-    return null
-  }
+  const allProducts = await getAllProducts()
+  return allProducts.find(p => p.id === id) || null
 }
 
 // Get product by slug
 export async function getProductBySlug(slug: string): Promise<Product | null> {
-  if (!isSupabaseConfigured()) {
-    return null
-  }
-
-  try {
-    const supabase = createClient()
-    const { data, error } = await supabase.from("products").select("*").eq("slug", slug).single()
-
-    if (error) {
-      console.error("Error fetching product by slug:", error)
-      return null
-    }
-
-    return {
-      id: data.id,
-      name: data.name,
-      slug: data.slug,
-      logo: data.logo,
-      category: data.category,
-      isNew: data.is_new,
-      hasUpdate: data.has_update,
-      isActive: data.is_active,
-      description: data.description,
-      denom_icon_url: data.denom_icon_url || undefined,
-      ribbon_text: data.ribbon_text || undefined,
-      denominations: data.denominations || [],
-      faqs: data.faqs || [],
-    }
-  } catch (error) {
-    console.error("Error fetching product by slug:", error)
-    return null
-  }
+  const allProducts = await getAllProducts()
+  return allProducts.find(p => p.slug === slug) || null
 }
 
 // Legacy exports and unused code removed

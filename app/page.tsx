@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@supabase/supabase-js"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { HomeContent } from "@/components/home-content"
@@ -18,7 +18,10 @@ interface Banner {
 }
 
 export default async function Home() {
-  const supabase = await createClient()
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   // Fetch categories, products, and banners in parallel — all on the server
   const [{ data: cats }, { data: prods }, { data: bannerData }] = await Promise.all([

@@ -1,52 +1,54 @@
-import Image from "next/image"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
 
 export default function Loading() {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0a1525]">
-      <div className="text-center">
-        {/* Brand Icon */}
-        <div className="mb-8 flex justify-center">
-          <div className="w-20 h-20 relative">
-            <Image
-              src="/icon.png"
-              alt="Loading"
-              width={80}
-              height={80}
-              className="object-contain animate-pulse"
-              priority
-            />
+    <div className="min-h-screen bg-brand-purple">
+      <Header />
+      
+      {/* Banner Skeleton */}
+      <div className="w-full relative bg-black/40">
+        <Skeleton className="w-full aspect-[21/9] md:aspect-[3/1] bg-white/5" />
+      </div>
+
+      <div className="container mx-auto px-4 py-12">
+        {/* Category section skeleton */}
+        <div className="mb-12">
+          <Skeleton className="h-8 w-48 mb-6 bg-white/10" />
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="glassmorphism bg-white/5 rounded-xl overflow-hidden border border-white/10 flex flex-col h-full">
+                <div className="p-4 flex-1 flex flex-col items-center justify-center min-h-[120px] relative">
+                  <Skeleton className="w-16 h-16 rounded-lg bg-white/10" />
+                </div>
+                <div className="p-3 bg-black/20 mt-auto text-center border-t border-white/5">
+                  <Skeleton className="h-4 w-3/4 mx-auto bg-white/10" />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Animated Progress Bar */}
-        <div className="w-64 h-2 bg-white/10 rounded-full mb-6 mx-auto overflow-hidden relative">
-          <div
-            className="absolute top-0 bottom-0 left-0 rounded-full animate-loading-bar"
-            style={{
-              background: "linear-gradient(90deg, #00BCD4, #4ECDC4, #00BCD4)",
-              backgroundSize: "200% 100%",
-              boxShadow:
-                "0 0 20px rgba(78, 205, 196, 0.9), 0 0 8px rgba(0, 188, 212, 0.6)",
-            }}
-          />
+        {/* Second section skeleton */}
+        <div className="mb-12">
+          <Skeleton className="h-8 w-48 mb-6 bg-white/10" />
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="glassmorphism bg-white/5 rounded-xl overflow-hidden border border-white/10 flex flex-col h-full">
+                <div className="p-4 flex-1 flex flex-col items-center justify-center min-h-[120px] relative">
+                  <Skeleton className="w-16 h-16 rounded-lg bg-white/10" />
+                </div>
+                <div className="p-3 bg-black/20 mt-auto text-center border-t border-white/5">
+                  <Skeleton className="h-4 w-3/4 mx-auto bg-white/10" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-
-        <style>{`
-          @keyframes loadingBar {
-            0% { width: 0%; background-position: 0% 0%; }
-            50% { width: 70%; }
-            100% { width: 95%; background-position: 200% 0%; }
-          }
-          .animate-loading-bar {
-            animation: loadingBar 2s ease-in-out infinite;
-          }
-        `}</style>
-
-        {/* Loading Text */}
-        <p className="text-brand-sky-blue text-sm font-medium uppercase tracking-widest drop-shadow-md">
-          Loading...
-        </p>
       </div>
+      
+      <Footer />
     </div>
   )
 }

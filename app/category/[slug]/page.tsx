@@ -7,25 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { createClient } from "@/lib/supabase/client"
-import { LoadingScreen } from "@/components/loading-screen"
+import { CategorySkeleton } from "@/components/category-skeleton"
+import { getAllProducts, Product } from "@/lib/product-categories"
 import Image from "next/image"
 import Link from "next/link"
 
-interface Product {
-  id: string
-  name: string
-  slug: string
-  logo: string
-  category: string
-  description?: string
-  is_new?: boolean
-  has_update?: boolean
-  ribbon_text?: string
-  denominations?: Array<{
-    price: string
-    label: string
-  }>
-}
+// Using Product interface from lib/product-categories
 
 export default function CategoryPage() {
   const params = useParams()
@@ -54,21 +41,16 @@ export default function CategoryPage() {
           categorySlug.charAt(0).toUpperCase() + categorySlug.slice(1).replace(/-/g, " ")
         )
 
-        // Fetch products for this category
-        const { data, error } = await supabase
-          .from("products")
-          .select("*")
-          .eq("category", categorySlug)
-          .eq("is_active", true)
-          .order("created_at", { ascending: true })
-
-        if (error) {
-          console.error("Error fetching products:", error)
-          // Try fallback data
+        // Fetch all products (utilizes in-memory cache)
+        const allProducts = await getAllProducts()
+        const categoryProducts = allProducts.filter(p => p.category === categorySlug)
+        
+        if (categoryProducts.length > 0) {
+          setProducts(categoryProducts)
+        } else {
+          // Try fallback data if empty (just in case)
           const fallbackProducts = getFallbackProducts(categorySlug)
           setProducts(fallbackProducts)
-        } else {
-          setProducts(data || [])
         }
       } catch (error) {
         console.error("Error loading products:", error)
@@ -168,7 +150,7 @@ export default function CategoryPage() {
   }
 
   if (isLoading) {
-    return <LoadingScreen />
+    return <CategorySkeleton />
   }
 
   return (
@@ -223,7 +205,7 @@ export default function CategoryPage() {
                     <div className="absolute top-2 left-2 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase tracking-wide">
                       {product.ribbon_text}
                     </div>
-                  ) : product.is_new ? (
+                  ) : product.isNew ? (
                     <div className="absolute top-2 left-2 bg-yellow-400 text-black text-xs font-bold px-2 py-1 rounded transform -rotate-12 z-10">
                       NEW
                     </div>

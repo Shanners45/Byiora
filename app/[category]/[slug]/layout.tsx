@@ -33,7 +33,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
 
     const categoryLabel = product.category === "topup" ? "Top-Up" : "Gift Card"
-    const title = `Buy ${product.name} ${categoryLabel} in Nepal – Instant Delivery | Byiora`
+    const title = `Buy ${product.name} in Nepal – Instant Delivery | Byiora`
 
     // Build a rich meta description with pricing info
     const cleanDesc = product.description ? stripHtml(product.description).slice(0, 120) : ''
@@ -111,32 +111,32 @@ export default async function ProductLayout({ params, children }: Props) {
         },
         offers: product.denominations && product.denominations.length > 0
           ? product.denominations.map((d: any) => ({
-              "@type": "Offer",
-              price: d.price,
-              priceCurrency: "NPR",
-              availability: "https://schema.org/InStock",
-              seller: {
-                "@type": "Organization",
-                name: "Byiora",
-              },
-            }))
+            "@type": "Offer",
+            price: d.price,
+            priceCurrency: "NPR",
+            availability: "https://schema.org/InStock",
+            seller: {
+              "@type": "Organization",
+              name: "Byiora",
+            },
+          }))
           : undefined,
       }
 
       // Build FAQPage schema if FAQs exist
       const faqSchema = product.faqs && product.faqs.length > 0
         ? {
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            mainEntity: product.faqs.map((faq: any) => ({
-              "@type": "Question",
-              name: faq.question,
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: stripHtml(faq.answer),
-              },
-            })),
-          }
+          "@context": "https://schema.org",
+          "@type": "FAQPage",
+          mainEntity: product.faqs.map((faq: any) => ({
+            "@type": "Question",
+            name: faq.question,
+            acceptedAnswer: {
+              "@type": "Answer",
+              text: stripHtml(faq.answer),
+            },
+          })),
+        }
         : null
 
       jsonLd = { productSchema, faqSchema }
