@@ -244,11 +244,12 @@ export default function ProductDetailPage() {
       "@type": "Brand",
       name: "Byiora",
     },
-    offers: {
+    offers: giftCard.denominations.map((denom: any) => ({
       "@type": "Offer",
+      name: `${product.name} - ${denom.label}`,
       url: `https://www.byiora.store/${categorySlug}/${productSlug}`,
       priceCurrency: "NPR",
-      price: giftCard.denominations[0]?.price || 0,
+      price: parseFloat(String(denom.price).replace(/,/g, "")) || 0,
       availability: "https://schema.org/InStock",
       itemCondition: "https://schema.org/NewCondition",
       hasMerchantReturnPolicy: {
@@ -268,14 +269,14 @@ export default function ProductDetailPage() {
           handlingTime: {
             "@type": "QuantitativeValue",
             minValue: 0,
-            maxValue: 5,
-            unitCode: "MIN",
+            maxValue: 0,
+            unitCode: "DAY",
           },
           transitTime: {
             "@type": "QuantitativeValue",
             minValue: 0,
-            maxValue: 5,
-            unitCode: "MIN",
+            maxValue: 0,
+            unitCode: "DAY",
           },
         },
         shippingRate: {
@@ -284,14 +285,7 @@ export default function ProductDetailPage() {
           currency: "NPR",
         },
       },
-    },
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: "0",
-      reviewCount: "0",
-      bestRating: "5",
-      worstRating: "1",
-    },
+    })),
   }
 
   return (
