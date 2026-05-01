@@ -439,13 +439,17 @@ export default function ProductDetailPage() {
                                 <div className="text-gray-900 font-bold text-base md:text-lg text-center mb-2">
                                   {denom.label}
                                 </div>
-                                <div className="w-16 h-16 relative bg-transparent">
-                                  <Image
+                                <div className="w-16 h-16 relative bg-transparent flex items-center justify-center">
+                                  {/* Using plain <img> instead of Next.js <Image> to guarantee
+                                      loading on real phones (2x/3x DPR). Next.js image
+                                      optimization can silently fail for Supabase URLs on
+                                      actual mobile devices. */}
+                                  <img
                                     src={product.denom_icon_url}
                                     alt={denom.label}
-                                    fill
-                                    className="object-contain"
-                                    sizes="64px"
+                                    width={64}
+                                    height={64}
+                                    className="object-contain w-full h-full"
                                   />
                                 </div>
                               </div>
