@@ -1,4 +1,4 @@
-import { Facebook, Instagram, Clock, Shield, CreditCard, Headphones } from "lucide-react"
+import { Facebook, Instagram, Youtube, Clock, Shield, CreditCard, Headphones } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import Link from "next/link"
@@ -125,6 +125,16 @@ export function Footer() {
                     className="text-brand-charcoal hover:text-pink-500 hover:bg-pink-50"
                   >
                     <Instagram className="h-5 w-5" />
+                  </Button>
+                </a>
+
+                <a href="https://www.youtube.com/@byiora" target="_blank" rel="noopener noreferrer">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-brand-charcoal hover:text-red-600 hover:bg-red-50"
+                  >
+                    <Youtube className="h-5 w-5" />
                   </Button>
                 </a>
               </div>

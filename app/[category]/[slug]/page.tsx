@@ -269,14 +269,14 @@ export default function ProductDetailPage() {
           handlingTime: {
             "@type": "QuantitativeValue",
             minValue: 0,
-            maxValue: 0,
-            unitCode: "DAY",
+            maxValue: 30,
+            unitCode: "MIN",
           },
           transitTime: {
             "@type": "QuantitativeValue",
             minValue: 0,
-            maxValue: 0,
-            unitCode: "DAY",
+            maxValue: 30,
+            unitCode: "MIN",
           },
         },
         shippingRate: {

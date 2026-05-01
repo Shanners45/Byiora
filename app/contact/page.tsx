@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "sonner"
-import { Mail, MessageCircle, Facebook, Instagram, MapPin, Clock, Send, ChevronRight, ArrowLeft } from "lucide-react"
+import { Mail, MessageCircle, Facebook, Instagram, Youtube, Clock, Send, ChevronRight, ArrowLeft } from "lucide-react"
 
 const CONTACT_DETAILS = {
   email: "support@byiora.store",
@@ -16,8 +16,7 @@ const CONTACT_DETAILS = {
   whatsappLink: "https://wa.me/9779842864103",
   facebook: "https://www.facebook.com/byiora",
   instagram: "https://www.instagram.com/byiora",
-  location: "Kathmandu, Nepal",
-  locationLink: "https://maps.google.com/?q=Kathmandu,+Nepal",
+  youtube: "https://www.youtube.com/@byiora",
   supportHours: "Sun – Fri, 9 AM – 6 PM NPT",
 }
 
@@ -154,19 +153,19 @@ export default function ContactPage() {
               <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-purple-600 ml-auto transition-colors" />
             </a>
 
-            {/* Location */}
+            {/* YouTube */}
             <a
-              href={CONTACT_DETAILS.locationLink}
+              href={CONTACT_DETAILS.youtube}
               target="_blank"
               rel="noopener noreferrer"
               className="group flex items-center gap-4 bg-white hover:bg-slate-50 border border-slate-200 shadow-sm rounded-2xl px-5 py-4 transition-all"
             >
               <div className="w-11 h-11 rounded-full bg-purple-50 flex items-center justify-center flex-shrink-0">
-                <MapPin className="h-5 w-5 text-purple-600" />
+                <Youtube className="h-5 w-5 text-purple-600" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">Location</p>
-                <p className="text-slate-800 font-semibold text-sm">{CONTACT_DETAILS.location}</p>
+                <p className="text-xs text-slate-500 uppercase tracking-wider mb-0.5">YouTube</p>
+                <p className="text-slate-800 font-semibold text-sm">@byiora</p>
               </div>
               <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-purple-600 ml-auto transition-colors" />
             </a>
