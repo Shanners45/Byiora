@@ -161,36 +161,27 @@ export default function AdminUsersPage() {
       toast.error("Please fill in all fields");
       return;
     }
-    // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(newAdminEmail)) {
       toast.error("Please enter a valid email address");
       return;
     }
+    if (newAdminPassword.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
     try {
-      // 1. Register user with Supabase Auth
-      const { data, error } = await supabase.auth.signUp({
-        email: newAdminEmail,
-        password: newAdminPassword,
-      });
-      if (error || !data.user) {
-        toast.error(error?.message || "Failed to create admin Auth user");
-        return;
-      }
-      const uid = data.user.id;
-      // 2. Insert into admin_users using Server Action with Service Role
-      const result = await addAdminUserAction(uid, newAdminEmail, newAdminName, newAdminRole);
+      // All done server-side — no client signUp so admin session is never overwritten
+      const result = await addAdminUserAction(newAdminEmail, newAdminName, newAdminPassword, newAdminRole);
       if (result.error) {
         toast.error(result.error);
         return;
       }
-      // Reset form
       setNewAdminName("");
       setNewAdminEmail("");
       setNewAdminPassword("");
       setNewAdminRole("sub_admin");
       setIsAddDialogOpen(false);
-      // Reload admin users
       await loadAdminUsers();
       toast.success("Admin user added successfully");
     } catch (error) {

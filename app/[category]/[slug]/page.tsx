@@ -255,7 +255,7 @@ export default function ProductDetailPage() {
       hasMerchantReturnPolicy: {
         "@type": "MerchantReturnPolicy",
         applicableCountry: "NP",
-        returnPolicyCategory: "https://schema.org/NoReturns",
+        returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
         merchantReturnLink: "https://www.byiora.store/refund-policy",
       },
       shippingDetails: {

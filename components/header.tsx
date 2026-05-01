@@ -118,8 +118,8 @@ export function Header() {
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-80 bg-brand-white border-gray-200">
-                <div className="py-6">
+              <SheetContent side="left" className="w-80 bg-brand-white border-gray-200 flex flex-col">
+                <div className="py-6 flex flex-col flex-1">
                   <div className="flex items-center mb-6">
                     <div className="h-10 relative" suppressHydrationWarning>
                       <Image
@@ -133,7 +133,7 @@ export function Header() {
                   </div>
 
                   {isLoggedIn ? (
-                    <>
+                    <div className="flex flex-col flex-1">
                       <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg mb-4">
                         <div className="w-10 h-10 rounded-full bg-brand-sky-blue flex items-center justify-center text-white">
                           {user?.name?.charAt(0) || user?.email?.charAt(0) || "U"}
@@ -143,7 +143,7 @@ export function Header() {
                           <p className="text-xs text-brand-light-gray">{user?.email}</p>
                         </div>
                       </div>
-                      <nav className="space-y-2">
+                      <nav className="space-y-2 flex-1">
                         <Button
                           variant="ghost"
                           className="w-full justify-start text-brand-charcoal hover:bg-brand-sky-blue/10"
@@ -182,9 +182,13 @@ export function Header() {
                           <Headset className="h-4 w-4 mr-2" />
                           Contact Us
                         </Button>
+                      </nav>
+                      {/* Sign Out pushed to the very bottom */}
+                      <div className="mt-auto">
+                        <div className="border-t border-dashed border-gray-300 my-4" />
                         <Button
                           variant="ghost"
-                          className="w-full justify-start text-red-500 hover:bg-red-50 mt-4"
+                          className="w-full justify-start text-red-500 hover:bg-red-50"
                           onClick={() => {
                             logout()
                             setIsMobileSidebarOpen(false)
@@ -193,8 +197,8 @@ export function Header() {
                           <LogOut className="h-4 w-4 mr-2" />
                           Sign Out
                         </Button>
-                      </nav>
-                    </>
+                      </div>
+                    </div>
                   ) : (
                     <>
                       <nav className="space-y-2">

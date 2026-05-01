@@ -50,12 +50,13 @@ export async function promoteUserAction(userId: string, newRole: "sub_admin" | "
 
 /**
  * Adds a new admin user (admin only)
- * Uses Service Role to bypass RLS
+ * Creates the Auth user server-side using Service Role to avoid
+ * polluting the calling admin's session with a signUp().
  */
 export async function addAdminUserAction(
-  uid: string,
   email: string,
   name: string,
+  password: string,
   role: "sub_admin" | "order_management"
 ) {
   if (!(await verifyAdmin())) {
@@ -65,6 +66,21 @@ export async function addAdminUserAction(
   try {
     const serviceSupabase = createServiceRoleClient()
 
+    // Step 1: Create the Auth user using Service Role (does NOT touch the caller's session)
+    const { data: authData, error: authError } = await serviceSupabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true, // auto-confirm so the new admin can log in immediately
+    })
+
+    if (authError || !authData.user) {
+      console.error("Error creating auth user:", authError)
+      return { error: authError?.message || "Failed to create auth user" }
+    }
+
+    const uid = authData.user.id
+
+    // Step 2: Insert into admin_users table
     const { error } = await serviceSupabase
       .from("admin_users")
       .insert({
@@ -76,6 +92,8 @@ export async function addAdminUserAction(
       })
 
     if (error) {
+      // Rollback: delete the auth user we just created
+      await serviceSupabase.auth.admin.deleteUser(uid)
       console.error("Error adding admin user:", error)
       return { error: `Failed to add admin user: ${error.message}` }
     }
