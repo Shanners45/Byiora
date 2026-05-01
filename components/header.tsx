@@ -2,9 +2,9 @@
 
 import type React from "react"
 
-import { Menu, Search, User, Bell, LogOut, Settings, History, Home, Headset } from "lucide-react"
+import { Menu, Search, User, Bell, LogOut, Settings, History, Home, Headset, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Dialog, DialogContent, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { NotificationPanel } from "./notification-panel"
@@ -13,7 +13,7 @@ import { SignInForm } from "./sign-in-form"
 import { useAuth } from "@/lib/auth-context"
 import { useNotifications } from "@/lib/notification-context"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import Image from "next/image"
 
 export function Header() {
@@ -26,6 +26,18 @@ export function Header() {
   const [showSearchResults, setShowSearchResults] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false)
+  const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false)
+  const mobileSearchRef = useRef<HTMLInputElement>(null)
+
+  // Auto-focus mobile search input when overlay opens
+  useEffect(() => {
+    if (isMobileSearchOpen) {
+      setTimeout(() => mobileSearchRef.current?.focus(), 50)
+    } else {
+      setSearchQuery("")
+      setShowSearchResults(false)
+    }
+  }, [isMobileSearchOpen])
 
   const handleTransactionsClick = () => {
     if (isLoggedIn) {
@@ -58,6 +70,7 @@ export function Header() {
   const handleSearchItemClick = (category: string, slug: string) => {
     setSearchQuery("")
     setShowSearchResults(false)
+    setIsMobileSearchOpen(false)
     router.push(`/${category}/${slug}`)
   }
 
@@ -92,7 +105,7 @@ export function Header() {
             <Button variant="ghost" size="icon" className="text-brand-charcoal hover:bg-brand-sky-blue/10">
               <Bell className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="text-brand-charcoal hover:bg-brand-sky-blue/10">
+            <Button variant="ghost" size="icon" className="hidden md:flex text-brand-charcoal hover:bg-brand-sky-blue/10">
               <User className="h-5 w-5" />
             </Button>
           </div>
@@ -103,10 +116,48 @@ export function Header() {
 
   return (
     <>
+      {/* ── Mobile Search Overlay ── */}
+      {isMobileSearchOpen && (
+        <div className="fixed inset-0 z-[100] bg-brand-white/98 backdrop-blur-md flex flex-col md:hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-brand-light-gray h-4 w-4" />
+              <input
+                ref={mobileSearchRef}
+                type="text"
+                placeholder="Search gift cards..."
+                value={searchQuery}
+                onChange={handleSearchChange}
+                onFocus={() => searchQuery.trim() && setShowSearchResults(true)}
+                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-brand-charcoal placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
+              />
+              {showSearchResults && (
+                <SearchResults query={searchQuery} onItemClick={handleSearchItemClick} />
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-brand-charcoal hover:bg-gray-100 flex-shrink-0"
+              onClick={() => setIsMobileSearchOpen(false)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+          {/* Empty state hint */}
+          {!searchQuery && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-8 gap-3">
+              <Search className="h-12 w-12 text-gray-200" />
+              <p className="text-sm text-gray-400">Start typing to search for gift cards and top-ups</p>
+            </div>
+          )}
+        </div>
+      )}
+
       <header className="sticky top-0 z-50 w-full border-b border-gray-200 bg-brand-white/95 backdrop-blur-lg shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {/* Mobile sidebar */}
+            {/* Mobile sidebar trigger */}
             <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
               <SheetTrigger asChild>
                 <Button
@@ -119,6 +170,8 @@ export function Header() {
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-80 bg-brand-white border-gray-200 flex flex-col">
+                <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+                <SheetDescription className="sr-only">Main navigation and account options</SheetDescription>
                 <div className="py-6 flex flex-col flex-1">
                   <div className="flex items-center mb-6">
                     <div className="h-10 relative" suppressHydrationWarning>
@@ -253,6 +306,7 @@ export function Header() {
               </SheetContent>
             </Sheet>
 
+            {/* Logo */}
             <div className="flex items-center cursor-pointer" onClick={() => router.push("/")}>
               <div className="h-10 relative" suppressHydrationWarning>
                 <Image
@@ -266,6 +320,7 @@ export function Header() {
             </div>
           </div>
 
+          {/* Desktop search bar */}
           <div className="hidden md:flex items-center flex-1 max-w-md mx-8">
             <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-brand-light-gray h-4 w-4" />
@@ -282,89 +337,104 @@ export function Header() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-brand-charcoal hover:bg-brand-sky-blue/10"
-                onClick={() => setIsNotificationOpen(true)}
-              >
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center p-0">
-                    {unreadCount > 9 ? "9+" : unreadCount}
-                  </Badge>
-                )}
-              </Button>
-            </div>
+          {/* Right icons */}
+          <div className="flex items-center gap-1">
+            {/* Mobile-only search icon */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden text-brand-charcoal hover:bg-brand-sky-blue/10"
+              onClick={() => setIsMobileSearchOpen(true)}
+            >
+              <Search className="h-5 w-5" />
+            </Button>
 
             {isLoggedIn ? (
-              <div className="relative">
-                <Button
-                  variant="ghost"
-                  className="flex items-center gap-2 text-brand-charcoal hover:bg-brand-sky-blue/10 px-3 py-2"
-                  onClick={handleUserIconClick}
-                >
-                  <User className="h-4 w-4" />
-                  <span className="hidden md:block text-sm">{user?.name || user?.email}</span>
-                </Button>
-
-                {isAccountMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-50 border border-gray-200">
-                    <div className="py-1">
-                      <button
-                        onClick={handleTransactionsClick}
-                        className="w-full text-left px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-sky-blue/10 flex items-center"
-                      >
-                        <History className="h-4 w-4 mr-2" />
-                        Transaction History
-                      </button>
-                      <button
-                        onClick={handleSettingsClick}
-                        className="w-full text-left px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-sky-blue/10 flex items-center"
-                      >
-                        <Settings className="h-4 w-4 mr-2" />
-                        Account Settings
-                      </button>
-                      <div className="border-t border-gray-200 my-1"></div>
-                      <button
-                        onClick={() => {
-                          logout()
-                          setIsAccountMenuOpen(false)
-                        }}
-                        className="w-full text-left px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-sky-blue/10 flex items-center"
-                      >
-                        <LogOut className="h-4 w-4 mr-2" />
-                        Sign Out
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Dialog open={isSignInOpen} onOpenChange={setIsSignInOpen}>
-                <DialogTrigger asChild>
+              <>
+                {/* Bell — visible on all screen sizes when logged in */}
+                <div className="relative">
                   <Button
                     variant="ghost"
                     size="icon"
                     className="text-brand-charcoal hover:bg-brand-sky-blue/10"
+                    onClick={() => setIsNotificationOpen(true)}
+                  >
+                    <Bell className="h-5 w-5" />
+                    {unreadCount > 0 && (
+                      <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center p-0">
+                        {unreadCount > 9 ? "9+" : unreadCount}
+                      </Badge>
+                    )}
+                  </Button>
+                </div>
+
+                {/* Account dropdown — desktop only */}
+                <div className="relative hidden md:block">
+                  <Button
+                    variant="ghost"
+                    className="flex items-center gap-2 text-brand-charcoal hover:bg-brand-sky-blue/10 px-3 py-2"
                     onClick={handleUserIconClick}
                   >
-                    <User className="h-5 w-5" />
+                    <User className="h-4 w-4" />
+                    <span className="text-sm">{user?.name || user?.email}</span>
                   </Button>
-                </DialogTrigger>
-                <DialogContent className="w-[calc(100%-2rem)] sm:w-full rounded-xl sm:rounded-lg sm:max-w-md bg-brand-white border-gray-200" aria-describedby={undefined}>
-                  <DialogTitle className="sr-only">Sign In</DialogTitle>
-                  <SignInForm onSuccess={() => setIsSignInOpen(false)} />
-                </DialogContent>
-              </Dialog>
+
+                  {isAccountMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg z-50 border border-gray-200">
+                      <div className="py-1">
+                        <button
+                          onClick={handleTransactionsClick}
+                          className="w-full text-left px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-sky-blue/10 flex items-center"
+                        >
+                          <History className="h-4 w-4 mr-2" />
+                          Transaction History
+                        </button>
+                        <button
+                          onClick={handleSettingsClick}
+                          className="w-full text-left px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-sky-blue/10 flex items-center"
+                        >
+                          <Settings className="h-4 w-4 mr-2" />
+                          Account Settings
+                        </button>
+                        <div className="border-t border-gray-200 my-1"></div>
+                        <button
+                          onClick={() => {
+                            logout()
+                            setIsAccountMenuOpen(false)
+                          }}
+                          className="w-full text-left px-4 py-2 text-sm text-brand-charcoal hover:bg-brand-sky-blue/10 flex items-center"
+                        >
+                          <LogOut className="h-4 w-4 mr-2" />
+                          Sign Out
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* Sign Up button — visible on ALL screen sizes when logged out */
+              <Button
+                size="sm"
+                className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white font-semibold px-4 py-1.5 h-8 rounded-full text-sm"
+                onClick={() => setIsSignInOpen(true)}
+              >
+                Sign Up
+              </Button>
             )}
           </div>
         </div>
       </header>
 
       <NotificationPanel isOpen={isNotificationOpen} onClose={() => setIsNotificationOpen(false)} />
+
+      {/* Sign In dialog for mobile (triggered from sidebar) */}
+      <Dialog open={isSignInOpen} onOpenChange={setIsSignInOpen}>
+        <DialogContent className="w-[calc(100%-2rem)] sm:w-full rounded-xl sm:rounded-lg sm:max-w-md bg-brand-white border-gray-200" aria-describedby={undefined}>
+          <DialogTitle className="sr-only">Sign In</DialogTitle>
+          <SignInForm onSuccess={() => setIsSignInOpen(false)} />
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
