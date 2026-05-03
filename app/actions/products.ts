@@ -14,14 +14,15 @@ export async function createProductAction(productData: {
   id: string
   name: string
   slug: string
-  category: "topup" | "digital-goods"
+  category: "topup" | "digital-goods" | "games" | "direct-login"
   logo: string
   description: string
   is_active: boolean
-  denominations: Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean }>
+  denominations: Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean }>
   denom_icon_url: string | null
   ribbon_text: string | null
   faqs: Array<{ question: string; answer: string }>
+  checkout_fields?: Array<{ key: string; label: string; type: string; required: boolean }>
 }) {
   if (!(await verifyAdmin())) {
     return { error: "Unauthorized: Admin access required" }
@@ -59,14 +60,15 @@ export async function updateProductAction(
   productData: {
     name?: string
     slug?: string
-    category?: "topup" | "digital-goods"
+    category?: "topup" | "digital-goods" | "games" | "direct-login"
     logo?: string
     description?: string
     is_active?: boolean
-    denominations?: Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean }>
+    denominations?: Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean }>
     denom_icon_url?: string | null
     ribbon_text?: string | null
     faqs?: Array<{ question: string; answer: string }>
+    checkout_fields?: Array<{ key: string; label: string; type: string; required: boolean }>
   }
 ) {
   if (!(await verifyAdmin())) {

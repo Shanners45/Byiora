@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Save, Upload, Trash2, Pencil } from "lucide-react"
+import { ArrowLeft, Save, Upload, Trash2, Pencil, Plus } from "lucide-react"
 import { type Product } from "@/lib/product-categories"
 import { createClient } from "@/lib/supabase/client"
 import { getProductByIdAction, updateProductAction } from "@/app/actions/products"
@@ -37,20 +37,28 @@ export default function ProductEditPage() {
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
-  const [category, setCategory] = useState<"topup" | "digital-goods">("digital-goods")
+  const [category, setCategory] = useState<"topup" | "digital-goods" | "games" | "direct-login">("digital-goods")
   const [logo, setLogo] = useState("")
   const [description, setDescription] = useState("")
   const [isActive, setIsActive] = useState(true)
   const [ribbonText, setRibbonText] = useState("")
-  const [denominations, setDenominations] = useState<Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean }>>([])
+  const [denominations, setDenominations] = useState<Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean }>>([])
   const [denomIconUrl, setDenomIconUrl] = useState("")
-  
+
   // New Denomination Form state
   const [newDenomPrice, setNewDenomPrice] = useState("")
   const [newDenomLabel, setNewDenomLabel] = useState("")
   const [newDenomIconUrl, setNewDenomIconUrl] = useState("")
   const [newDenomBestseller, setNewDenomBestseller] = useState(false)
+  const [newDenomInStock, setNewDenomInStock] = useState(true)
   const [editingDenomIndex, setEditingDenomIndex] = useState<number | null>(null)
+
+  // Checkout Fields state (for direct-login category)
+  const [checkoutFields, setCheckoutFields] = useState<Array<{ key: string; label: string; type: "text" | "email" | "password"; required: boolean }>>([])
+  const [newFieldLabel, setNewFieldLabel] = useState("")
+  const [newFieldType, setNewFieldType] = useState<"text" | "email" | "password">("text")
+  const [newFieldRequired, setNewFieldRequired] = useState(true)
+  const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null)
 
   // FAQ state
   const [faqs, setFaqs] = useState<Array<{ question: string; answer: string }>>([])
@@ -97,6 +105,10 @@ export default function ProductEditPage() {
 
         if (productData.faqs && Array.isArray(productData.faqs)) {
           setFaqs(productData.faqs)
+        }
+
+        if (productData.checkout_fields && Array.isArray(productData.checkout_fields)) {
+          setCheckoutFields(productData.checkout_fields)
         }
 
         setIsLoading(false)
@@ -250,6 +262,7 @@ export default function ProductEditPage() {
         slug: slug.trim() || generateSlug(name.trim()),
         denom_icon_url: denomIconUrl || null,
         ribbon_text: ribbonText.trim() || null,
+        checkout_fields: category === "direct-login" ? checkoutFields : [],
       })
 
       if (result.error) {
@@ -275,17 +288,18 @@ export default function ProductEditPage() {
 
     if (editingDenomIndex !== null) {
       const updated = [...denominations]
-      updated[editingDenomIndex] = { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomBestseller }
+      updated[editingDenomIndex] = { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomBestseller, in_stock: newDenomInStock }
       setDenominations(updated)
       setEditingDenomIndex(null)
     } else {
-      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomBestseller }])
+      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomBestseller, in_stock: newDenomInStock }])
     }
 
     setNewDenomPrice("")
     setNewDenomLabel("")
     setNewDenomIconUrl("")
     setNewDenomBestseller(false)
+    setNewDenomInStock(true)
   }
 
   const removeDenomination = (index: number) => {
@@ -297,6 +311,7 @@ export default function ProductEditPage() {
     setNewDenomPrice(denom.price)
     setNewDenomLabel(denom.label)
     setNewDenomBestseller(denom.bestseller || false)
+    setNewDenomInStock(denom.in_stock !== false)
     setEditingDenomIndex(index)
   }
 
@@ -372,139 +387,143 @@ export default function ProductEditPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Product Details */}
-        <Card className="border-none shadow-md lg:col-span-2">
-          <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
-            <CardTitle className="text-[#1F2937]">Product Details</CardTitle>
-            <CardDescription className="text-[#4B5563]">Basic information about the product</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 space-y-6">
-            {/* Row 1: Product Name and URL Slug side by side */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-[#1F2937]">
-                  Product Name
-                </Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={handleNameChange}
-                  className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="slug" className="text-[#1F2937]">
-                  URL Slug
-                </Label>
-                <Input
-                  id="slug"
-                  value={slug}
-                  onChange={handleSlugChange}
-                  className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]"
-                  placeholder="auto-generated-from-product-name"
-                />
-                <p className="text-xs text-[#4B5563]">
-                  URL: byiora.store/{category}/{slug || generateSlug(name) || 'product-slug'}
-                </p>
-              </div>
-            </div>
-
-            {/* Row 2: Category and Product Status side by side */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="category" className="text-[#1F2937]">
-                  Category
-                </Label>
-                <Select value={category} onValueChange={(value: "topup" | "digital-goods") => setCategory(value)}>
-                  <SelectTrigger className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="digital-goods">Digital Goods</SelectItem>
-                    <SelectItem value="topup">Top-up</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="flex items-center justify-between md:pt-6">
-                <div className="space-y-0.5">
-                  <Label htmlFor="active" className="text-[#1F2937]">
-                    Product Status
+        <div className="lg:col-span-2 space-y-6">
+          {/* Product Details */}
+          <Card className="border-none shadow-md">
+            <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
+              <CardTitle className="text-[#1F2937]">Product Details</CardTitle>
+              <CardDescription className="text-[#4B5563]">Basic information about the product</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              {/* Row 1: Product Name and URL Slug side by side */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-[#1F2937]">
+                    Product Name
                   </Label>
-                  <p className="text-sm text-[#4B5563]">
-                    {isActive ? "Product is visible on the homepage" : "Product is hidden from the homepage"}
+                  <Input
+                    id="name"
+                    value={name}
+                    onChange={handleNameChange}
+                    className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="slug" className="text-[#1F2937]">
+                    URL Slug
+                  </Label>
+                  <Input
+                    id="slug"
+                    value={slug}
+                    onChange={handleSlugChange}
+                    className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]"
+                    placeholder="auto-generated-from-product-name"
+                  />
+                  <p className="text-xs text-[#4B5563]">
+                    URL: byiora.store/{category}/{slug || generateSlug(name) || 'product-slug'}
                   </p>
                 </div>
-                <Switch id="active" checked={isActive} onCheckedChange={setIsActive} />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="description" className="text-[#1F2937]">
-                Description
-              </Label>
-              <RichTextEditor
-                id="description"
-                value={description}
-                onChange={setDescription}
-                placeholder="Enter product description"
-              />
-            </div>
+              {/* Row 2: Category and Product Status side by side */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="category" className="text-[#1F2937]">
+                    Category
+                  </Label>
+                  <Select value={category} onValueChange={(value: "topup" | "digital-goods" | "games" | "direct-login") => setCategory(value)}>
+                    <SelectTrigger className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]">
+                      <SelectValue placeholder="Select category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="digital-goods">Digital Goods</SelectItem>
+                      <SelectItem value="topup">Top-up</SelectItem>
+                      <SelectItem value="games">Games</SelectItem>
+                      <SelectItem value="direct-login">Direct Login</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* Row 3: Ribbon Text and Denomination Icon side by side */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between md:pt-6">
+                  <div className="space-y-0.5">
+                    <Label htmlFor="active" className="text-[#1F2937]">
+                      Product Status
+                    </Label>
+                    <p className="text-sm text-[#4B5563]">
+                      {isActive ? "Product is visible on the homepage" : "Product is hidden from the homepage"}
+                    </p>
+                  </div>
+                  <Switch id="active" checked={isActive} onCheckedChange={setIsActive} />
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="ribbon" className="text-[#1F2937]">
-                  Ribbon Text <span className="text-[#4B5563] font-normal">(Optional)</span>
+                <Label htmlFor="description" className="text-[#1F2937]">
+                  Description
                 </Label>
-                <Input
-                  id="ribbon"
-                  value={ribbonText}
-                  onChange={(e) => setRibbonText(e.target.value)}
-                  className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-400"
-                  placeholder='e.g. Hot, New, Discount, 10% Off'
-                  maxLength={20}
+                <RichTextEditor
+                  id="description"
+                  value={description}
+                  onChange={setDescription}
+                  placeholder="Enter product description"
                 />
-                <p className="text-xs text-[#4B5563]">Short label shown as a badge on the product card (max 20 chars).</p>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-[#1F2937]">
-                  Denomination Icon <span className="text-[#4B5563] font-normal">(Optional)</span>
-                </Label>
-                <div className="flex items-center gap-3">
-                  {denomIconUrl && (
-                    <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#E5E7EB] flex-shrink-0 bg-white flex items-center justify-center">
-                      <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
+              {/* Row 3: Ribbon Text and Denomination Icon side by side */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="ribbon" className="text-[#1F2937]">
+                    Ribbon Text <span className="text-[#4B5563] font-normal">(Optional)</span>
+                  </Label>
+                  <Input
+                    id="ribbon"
+                    value={ribbonText}
+                    onChange={(e) => setRibbonText(e.target.value)}
+                    className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-400"
+                    placeholder='e.g. Hot, New, Discount, 10% Off'
+                    maxLength={20}
+                  />
+                  <p className="text-xs text-[#4B5563]">Short label shown as a badge on the product card (max 20 chars).</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-[#1F2937]">
+                    Denomination Icon <span className="text-[#4B5563] font-normal">(Optional)</span>
+                  </Label>
+                  <div className="flex items-center gap-3">
+                    {denomIconUrl && (
+                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#E5E7EB] flex-shrink-0 bg-white flex items-center justify-center">
+                        <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
+                      </div>
+                    )}
+                    <div className="flex-1 space-y-1.5">
+                      <Input
+                        value={denomIconUrl}
+                        onChange={(e) => setDenomIconUrl(e.target.value)}
+                        className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-400"
+                        placeholder="Paste icon URL or upload"
+                      />
+                      <input type="file" accept="image/*" id="denom-icon-upload-edit" onChange={handleDenomIconUpload} className="hidden" />
+                      <Button
+                        type="button" variant="outline" disabled={isUploadingIcon}
+                        onClick={() => document.getElementById('denom-icon-upload-edit')?.click()}
+                        className="w-full border-[#E5E7EB] hover:bg-gray-50 text-sm h-8 text-[#4B5563]"
+                      >
+                        {isUploadingIcon
+                          ? <><div className="animate-spin h-3 w-3 border-2 border-[#7E3AF2] border-t-transparent rounded-full mr-2" />Uploading...</>
+                          : <><Upload className="h-3 w-3 mr-2" />Upload Icon</>}
+                      </Button>
                     </div>
-                  )}
-                  <div className="flex-1 space-y-1.5">
-                    <Input
-                      value={denomIconUrl}
-                      onChange={(e) => setDenomIconUrl(e.target.value)}
-                      className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-400"
-                      placeholder="Paste icon URL or upload"
-                    />
-                    <input type="file" accept="image/*" id="denom-icon-upload-edit" onChange={handleDenomIconUpload} className="hidden" />
-                    <Button
-                      type="button" variant="outline" disabled={isUploadingIcon}
-                      onClick={() => document.getElementById('denom-icon-upload-edit')?.click()}
-                      className="w-full border-[#E5E7EB] hover:bg-gray-50 text-sm h-8 text-[#4B5563]"
-                    >
-                      {isUploadingIcon
-                        ? <><div className="animate-spin h-3 w-3 border-2 border-[#7E3AF2] border-t-transparent rounded-full mr-2" />Uploading...</>
-                        : <><Upload className="h-3 w-3 mr-2" />Upload Icon</>}
-                    </Button>
                   </div>
                 </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Product Image */}
-        <Card className="border-none shadow-md">
+        <Card className="border-none shadow-md h-fit">
           <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
             <CardTitle className="text-[#1F2937]">Product Image</CardTitle>
             <CardDescription className="text-[#4B5563]">Upload or update product logo</CardDescription>
@@ -528,7 +547,7 @@ export default function ProductEditPage() {
                   id="logo"
                   value={logo}
                   onChange={(e) => setLogo(e.target.value)}
-                  className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]"
+                  className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-50"
                   placeholder="https://example.com/logo.png"
                 />
               </div>
@@ -551,6 +570,156 @@ export default function ProductEditPage() {
           </CardContent>
         </Card>
 
+        {/* Checkout Fields — only for direct-login category */}
+        {category === "direct-login" && (
+          <Card className="border-none shadow-md lg:col-span-3">
+            <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
+              <CardTitle className="text-[#1F2937]">Checkout Fields</CardTitle>
+              <CardDescription className="text-[#4B5563]">
+                Configure the input fields customers fill out when ordering this product (max 3)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-6">
+                {/* Current fields */}
+                {checkoutFields.length > 0 && (
+                  <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-[#F9FAFB]">
+                        <TableRow>
+                          <TableHead className="text-[#4B5563]">Label</TableHead>
+                          <TableHead className="text-[#4B5563]">Type</TableHead>
+                          <TableHead className="text-[#4B5563]">Required</TableHead>
+                          <TableHead className="w-[100px] text-right text-[#4B5563]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {checkoutFields.map((field, index) => (
+                          <TableRow key={index} className="border-t border-[#E5E7EB]">
+                            <TableCell className="text-[#1F2937] font-medium">{field.label}</TableCell>
+                            <TableCell className="text-[#4B5563] capitalize">{field.type}</TableCell>
+                            <TableCell className="text-[#4B5563]">{field.required ? "Yes" : "No"}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setNewFieldLabel(field.label)
+                                  setNewFieldType(field.type as any)
+                                  setNewFieldRequired(field.required)
+                                  setEditingFieldIndex(index)
+                                }}
+                                className="h-8 w-8 p-0 text-[#7E3AF2] hover:text-[#6D28D9] hover:bg-[#F3E8FF] mr-1"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCheckoutFields(checkoutFields.filter((_, i) => i !== index))}
+                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {/* Add / Edit field */}
+                {(checkoutFields.length < 3 || editingFieldIndex !== null) && (
+                  <div className="bg-[#F9FAFB] p-4 rounded-lg border border-[#E5E7EB]">
+                    <h3 className="text-[#1F2937] font-medium mb-4">
+                      {editingFieldIndex !== null ? "Edit Checkout Field" : "Add Checkout Field"}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-[#4B5563]">Label</Label>
+                        <Input
+                          value={newFieldLabel}
+                          onChange={(e) => setNewFieldLabel(e.target.value)}
+                          className="bg-white border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-400 text-gray-900"
+                          placeholder="e.g. Email Address"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[#4B5563]">Input Type</Label>
+                        <Select value={newFieldType} onValueChange={(v: "text" | "email" | "password") => setNewFieldType(v)}>
+                          <SelectTrigger className="bg-white border-2 border-[#E5E7EB] focus:border-[#7E3AF2]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Text</SelectItem>
+                            <SelectItem value="email">Email</SelectItem>
+                            <SelectItem value="password">Password</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2 flex flex-col justify-center">
+                        <Label className="text-[#4B5563] mb-2">Required?</Label>
+                        <Switch checked={newFieldRequired} onCheckedChange={setNewFieldRequired} />
+                      </div>
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Button
+                        className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white"
+                        onClick={() => {
+                          if (!newFieldLabel.trim()) { toast.error("Label is required"); return }
+                          const key = newFieldLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
+                          const newField = { key, label: newFieldLabel.trim(), type: newFieldType, required: newFieldRequired }
+                          if (editingFieldIndex !== null) {
+                            const updated = [...checkoutFields]
+                            updated[editingFieldIndex] = newField
+                            setCheckoutFields(updated)
+                            setEditingFieldIndex(null)
+                          } else {
+                            setCheckoutFields([...checkoutFields, newField])
+                          }
+                          setNewFieldLabel("")
+                          setNewFieldType("text")
+                          setNewFieldRequired(true)
+                        }}
+                      >
+                        {editingFieldIndex !== null ? (
+                          <>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Update Field
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Field
+                          </>
+                        )}
+                      </Button>
+                      
+                      {editingFieldIndex !== null && (
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setEditingFieldIndex(null)
+                            setNewFieldLabel("")
+                            setNewFieldType("text")
+                            setNewFieldRequired(true)
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {checkoutFields.length >= 3 && editingFieldIndex === null && (
+                  <p className="text-sm text-amber-600 font-medium">Maximum 3 checkout fields reached.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Denominations */}
         <Card className="border-none shadow-md lg:col-span-3">
           <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
@@ -568,6 +737,7 @@ export default function ProductEditPage() {
                         <TableHead className="text-[#4B5563]">Price</TableHead>
                         <TableHead className="text-[#4B5563]">Label</TableHead>
                         <TableHead className="text-[#4B5563]">Best Seller</TableHead>
+                        <TableHead className="text-[#4B5563]">Stock</TableHead>
                         <TableHead className="w-[100px] text-right text-[#4B5563]">Action</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -578,6 +748,9 @@ export default function ProductEditPage() {
                           <TableCell className="text-[#4B5563]">{denom.label}</TableCell>
                           <TableCell className="text-[#4B5563]">
                             {denom.bestseller ? <Badge className="bg-pink-500 hover:bg-pink-600 border-none text-white">Best Seller</Badge> : <span className="text-gray-400">No</span>}
+                          </TableCell>
+                          <TableCell className="text-[#4B5563]">
+                            {denom.in_stock !== false ? <Badge className="bg-green-500 hover:bg-green-600 border-none text-white">In Stock</Badge> : <Badge className="bg-gray-400 hover:bg-gray-500 border-none text-white">Out of Stock</Badge>}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1">
@@ -606,12 +779,14 @@ export default function ProductEditPage() {
                 </div>
               )}
 
-              {/* Add new denomination */}
+              {/* Add / Edit denomination */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <Label className="text-[#1F2937]">Add New Denomination</Label>
+                  <Label className="text-[#1F2937]">
+                    {editingDenomIndex !== null ? "Edit Denomination" : "Add New Denomination"}
+                  </Label>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end bg-[#F9FAFB] p-4 rounded-lg border border-[#E5E7EB]">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end bg-[#F9FAFB] p-4 rounded-lg border border-[#E5E7EB]">
                   <div className="space-y-2 col-span-1">
                     <Label className="text-[#4B5563]">Price (Rs) *</Label>
                     <Input
@@ -639,10 +814,46 @@ export default function ProductEditPage() {
                       />
                     </div>
                   </div>
+                  <div className="space-y-2 col-span-1 flex flex-col justify-center h-full pb-2">
+                    <Label className="text-[#4B5563] mb-2">In Stock?</Label>
+                    <div>
+                      <Switch
+                        checked={newDenomInStock}
+                        onCheckedChange={setNewDenomInStock}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <Button className="mt-4 bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white" onClick={addDenomination}>
-                  Add Denomination
-                </Button>
+                <div className="mt-4 flex gap-2">
+                  <Button className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white" onClick={addDenomination}>
+                    {editingDenomIndex !== null ? (
+                      <>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Update Denomination
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Denomination
+                      </>
+                    )}
+                  </Button>
+                  
+                  {editingDenomIndex !== null && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditingDenomIndex(null)
+                        setNewDenomPrice("")
+                        setNewDenomLabel("")
+                        setNewDenomBestseller(false)
+                        setNewDenomInStock(true)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </CardContent>
@@ -739,6 +950,8 @@ export default function ProductEditPage() {
             </div>
           </CardContent>
         </Card>
+
+
       </div>
     </div>
   )

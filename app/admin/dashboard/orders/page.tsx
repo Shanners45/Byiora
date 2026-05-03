@@ -10,11 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Search, Filter, RefreshCw, Download, Send, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, Filter, RefreshCw, Download, Send, ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { updateTransactionStatusAction, sendGiftcardCodeAction, insertNotificationAction } from "@/app/actions/orders"
 import { getAllTransactionsAction } from "@/app/actions/dashboard"
+import { decryptCheckoutData, clearCheckoutData } from "@/app/actions/checkout-encryption"
 
 interface Transaction {
   id: string
@@ -36,8 +37,72 @@ interface Transaction {
     id: string
     name: string
   } | null
+  encrypted_checkout_data?: string | null
 }
 
+// Component to handle decryption and display of direct-login checkout data
+function DirectLoginCell({ transaction }: { transaction: Transaction }) {
+  const [decryptedData, setDecryptedData] = useState<Record<string, string> | null>(null)
+  const [isRevealed, setIsRevealed] = useState(false)
+  const [isDecrypting, setIsDecrypting] = useState(false)
+
+  const handleReveal = async () => {
+    if (decryptedData) {
+      setIsRevealed(!isRevealed)
+      return
+    }
+
+    if (!transaction.encrypted_checkout_data) {
+      toast.error("No encrypted data available")
+      return
+    }
+
+    setIsDecrypting(true)
+    try {
+      const result = await decryptCheckoutData(transaction.encrypted_checkout_data)
+      if (result.error) {
+        toast.error(result.error)
+        return
+      }
+      setDecryptedData(result.data || null)
+      setIsRevealed(true)
+    } catch (error) {
+      toast.error("Failed to decrypt data")
+    } finally {
+      setIsDecrypting(false)
+    }
+  }
+
+  if (!transaction.encrypted_checkout_data) {
+    return <span className="text-gray-400 text-xs">Data cleared</span>
+  }
+
+  return (
+    <div className="space-y-1">
+      {isRevealed && decryptedData ? (
+        <div className="space-y-0.5">
+          {Object.entries(decryptedData).map(([key, value]) => (
+            <div key={key} className="text-xs">
+              <span className="text-gray-400 capitalize">{key.replace(/_/g, " ")}:</span>{" "}
+              <span className="font-mono bg-amber-50 px-1 rounded text-amber-800">{value}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <span className="text-xs text-purple-600 font-medium">🔒 Encrypted</span>
+      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={handleReveal}
+        disabled={isDecrypting}
+        className="h-6 px-2 text-[10px]"
+      >
+        {isDecrypting ? "..." : isRevealed ? <><EyeOff className="h-3 w-3 mr-1" />Hide</> : <><Eye className="h-3 w-3 mr-1" />Reveal</>}
+      </Button>
+    </div>
+  )
+}
 export default function OrdersPage() {
   const supabase = createClient()
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -230,6 +295,19 @@ export default function OrdersPage() {
         }
       }
 
+      // Auto-clear encrypted checkout data when marking as completed or failed
+      if ((newStatus === "Completed" || newStatus === "Failed") && transaction?.encrypted_checkout_data) {
+        try {
+          await clearCheckoutData(transactionId)
+          // Update local state to clear the encrypted data
+          setTransactions((prev) => prev.map((t) => (
+            t.transaction_id === transactionId ? { ...t, encrypted_checkout_data: null } : t
+          )))
+        } catch (clearError) {
+          console.error("Failed to clear checkout data:", clearError)
+        }
+      }
+
       toast.success("Transaction status updated successfully")
     } catch (error) {
       console.error("Error updating transaction status:", error)
@@ -307,6 +385,10 @@ export default function OrdersPage() {
       } else if (transaction.guest_user_data?.uid) {
         return transaction.guest_user_data.uid
       }
+    }
+    // For direct-login products, show "Direct Login" label
+    if (transaction.product_category === "direct-login") {
+      return "Direct Login"
     }
     // For digital-goods, show giftcard code if available
     if (transaction.product_category === "digital-goods" || (!transaction.product_category && transaction.product_name)) {
@@ -521,7 +603,9 @@ export default function OrdersPage() {
                       {new Date(transaction.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-[#4B5563] text-sm">
-                      {(transaction.product_category === "digital-goods" || (!transaction.product_category && transaction.product_name)) ? (
+                      {transaction.product_category === "direct-login" ? (
+                        <DirectLoginCell transaction={transaction} />
+                      ) : (transaction.product_category === "digital-goods" || (!transaction.product_category && transaction.product_name)) ? (
                         <div className="flex items-center gap-1.5">
                           <Input
                             placeholder="Enter Giftcard Code"

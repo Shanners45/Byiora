@@ -21,6 +21,7 @@ import Image from "next/image"
 import { ProductSkeleton } from "@/components/product-skeleton"
 import { FaqAccordion } from "@/components/faq-accordion"
 import { sanitizeHtml } from "@/lib/sanitize"
+import { encryptCheckoutData } from "@/app/actions/checkout-encryption"
 interface PaymentMethod {
   id: string
   name: string
@@ -40,6 +41,7 @@ export default function ProductDetailPage() {
   const [selectedPayment, setSelectedPayment] = useState("")
   const [email, setEmail] = useState(user?.email || "")
   const [userId, setUserId] = useState("")
+  const [checkoutFieldValues, setCheckoutFieldValues] = useState<Record<string, string>>({})
   const [marketingConsent, setMarketingConsent] = useState(false)
   const [smsConsent, setSmsConsent] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -52,7 +54,7 @@ export default function ProductDetailPage() {
   const [notFound, setNotFound] = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
   const [faqExpanded, setFaqExpanded] = useState(false)
-  const DESC_LIMIT = 300
+  const DESC_LIMIT = 600
   const FAQ_LIMIT = 3
 
   const categorySlug = params.category as string
@@ -111,6 +113,8 @@ export default function ProductDetailPage() {
   }, [productSlug, categorySlug])
 
   const isTopupProduct = product?.category === "topup"
+  const isDirectLoginProduct = product?.category === "direct-login"
+  const checkoutFields = product?.checkout_fields || []
 
 
 
@@ -141,7 +145,12 @@ export default function ProductDetailPage() {
   }
 
   const handlePurchase = async () => {
-    if (!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !userId)) {
+    // Validate checkout fields for direct-login
+    const missingCheckoutField = isDirectLoginProduct && checkoutFields.some(
+      (f: any) => f.required && !checkoutFieldValues[f.key]?.trim()
+    )
+
+    if (!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !userId) || missingCheckoutField) {
       toast.error("Please complete all required fields")
       return
     }
@@ -167,9 +176,21 @@ export default function ProductDetailPage() {
         paymentMethod: paymentMethodName,
         email: email,
         productId: product?.id || productSlug,
-        productCategory: product?.category || (isTopupProduct ? "topup" : "digital-goods"),
+        productCategory: product?.category || (isTopupProduct ? "topup" : isDirectLoginProduct ? "direct-login" : "digital-goods"),
         guestData: isTopupProduct ? { userId } : null,
       })
+
+      // Encrypt checkout field values for direct-login products
+      if (isDirectLoginProduct && Object.keys(checkoutFieldValues).length > 0) {
+        try {
+          await encryptCheckoutData(transactionId, checkoutFieldValues)
+        } catch (encryptError) {
+          console.error("Failed to encrypt checkout data:", encryptError)
+          toast.error("Failed to secure your login details. Please try again.")
+          setIsProcessing(false)
+          return
+        }
+      }
 
       // Send email confirmation using Resend API
       try {
@@ -269,14 +290,14 @@ export default function ProductDetailPage() {
           handlingTime: {
             "@type": "QuantitativeValue",
             minValue: 0,
-            maxValue: 30,
-            unitCode: "MIN",
+            maxValue: 0,
+            unitCode: "DAY",
           },
           transitTime: {
             "@type": "QuantitativeValue",
             minValue: 0,
-            maxValue: 30,
-            unitCode: "MIN",
+            maxValue: 0,
+            unitCode: "DAY",
           },
         },
         shippingRate: {
@@ -335,7 +356,7 @@ export default function ProductDetailPage() {
                   Description
                 </h3>
                 <div
-                  className={`prose-rich-text text-brand-light-gray text-sm leading-relaxed ${!descExpanded && giftCard.description.length > DESC_LIMIT ? 'line-clamp-4' : ''}`}
+                  className={`prose-rich-text text-brand-light-gray text-sm leading-relaxed ${!descExpanded && giftCard.description.length > DESC_LIMIT ? 'line-clamp-[8]' : ''}`}
                   dangerouslySetInnerHTML={{ __html: sanitizeHtml(giftCard.description) }}
                 />
                 {giftCard.description.length > DESC_LIMIT && (
@@ -349,7 +370,7 @@ export default function ProductDetailPage() {
                 <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
                   <h3 className="font-semibold text-brand-charcoal mb-4 flex items-center gap-2">
                     <span className="w-1 h-5 bg-brand-sky-blue rounded-full inline-block"></span>
-                    Frequently Asked Questions
+                    Frequently Asked Questions (FAQs)
                   </h3>
                   <div className="space-y-4">
                     <FaqAccordion faqs={product.faqs} />
@@ -374,7 +395,6 @@ export default function ProductDetailPage() {
                     1
                   </div>
                   <h2 className="text-xl font-semibold text-brand-charcoal">Enter User ID</h2>
-                  <HelpCircle className="h-5 w-5 text-brand-light-gray" />
                 </div>
 
                 <div className="space-y-4">
@@ -400,10 +420,15 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Step 2: Select Voucher */}
+
+
+            {/* Step 1 or 2: Select Voucher */}
             <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 rounded-full bg-[#00BCD4] text-white flex items-center justify-center text-sm font-semibold">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${(isTopupProduct && userId) || (!isTopupProduct)
+                  ? "bg-[#00BCD4] text-white"
+                  : "bg-gray-200 text-brand-light-gray"
+                  }`}>
                   {isTopupProduct ? "2" : "1"}
                 </div>
                 <h2 className="text-xl font-semibold text-brand-charcoal">Select voucher</h2>
@@ -414,6 +439,7 @@ export default function ProductDetailPage() {
                   {giftCard.denominations.map((denom: any) => {
                     const isSelected = selectedDenomination === denom.label;
                     const hasIcon = !!(product.denom_icon_url);
+                    const isOutOfStock = denom.in_stock === false;
 
                     return (
                       <div key={denom.label} className={`relative ${isSelected && hasIcon ? "z-10" : ""}`}>
@@ -425,17 +451,19 @@ export default function ProductDetailPage() {
                             Best Seller
                           </div>
                         )}
-                        <RadioGroupItem value={denom.label} id={denom.label} className="peer sr-only" />
+                        <RadioGroupItem value={denom.label} id={denom.label} className="peer sr-only" disabled={isOutOfStock} />
                         <Label
                           htmlFor={denom.label}
-                          className={`group flex flex-col overflow-hidden bg-white rounded-2xl cursor-pointer transition-all h-full ${isSelected
-                            ? "border-2 border-[#00BCD4] shadow-[0_0_15px_rgba(0,188,212,0.4)]"
-                            : "border border-gray-200 hover:border-[#00BCD4] hover:shadow-[0_0_10px_rgba(0,188,212,0.2)]"
+                          className={`group flex flex-col overflow-hidden rounded-2xl transition-all h-full ${isOutOfStock
+                            ? "cursor-not-allowed opacity-40 border border-gray-300 bg-gray-100 grayscale hover:border-gray-400 hover:shadow-[0_0_10px_rgba(156,163,175,0.4)]"
+                            : isSelected
+                              ? "cursor-pointer border-2 border-[#00BCD4] shadow-[0_0_15px_rgba(0,188,212,0.4)]"
+                              : "cursor-pointer border border-gray-200 hover:border-[#00BCD4] hover:shadow-[0_0_10px_rgba(0,188,212,0.2)]"
                             }`}
                         >
                           {hasIcon ? (
                             <>
-                              <div className="px-3 py-4 flex-1 flex flex-col items-center justify-center">
+                              <div className={`px-3 py-4 flex-1 flex flex-col items-center justify-center ${isOutOfStock ? 'bg-gray-50/50' : ''}`}>
                                 <div className="text-gray-900 font-bold text-base md:text-lg text-center mb-2">
                                   {denom.label}
                                 </div>
@@ -453,7 +481,7 @@ export default function ProductDetailPage() {
                                   />
                                 </div>
                               </div>
-                              <div className={`p-3 text-right transition-colors ${isSelected ? "bg-[#e5e7eb]" : "bg-[#f3f4f6] group-hover:bg-[#e5e7eb]"}`}>
+                              <div className={`p-3 text-right transition-colors ${isOutOfStock ? "bg-gray-200/50" : isSelected ? "bg-[#e5e7eb]" : "bg-[#f3f4f6] group-hover:bg-[#e5e7eb]"}`}>
                                 <div className="text-[10px] text-[#FFA6C9] font-medium uppercase mb-0.5 tracking-wide">
                                   From
                                 </div>
@@ -464,12 +492,12 @@ export default function ProductDetailPage() {
                             </>
                           ) : (
                             <>
-                              <div className="px-3 py-3 flex-1 flex items-center justify-center text-center">
+                              <div className={`px-3 py-3 flex-1 flex items-center justify-center text-center ${isOutOfStock ? 'bg-gray-50/50' : ''}`}>
                                 <div className="text-black font-extrabold text-base md:text-xl leading-tight w-full max-w-[120px]">
                                   {denom.label}
                                 </div>
                               </div>
-                              <div className={`px-3 pt-4 pb-3 text-right flex flex-col justify-end min-h-[56px] transition-colors ${isSelected ? "bg-[#e5e7eb]" : "bg-[#f3f4f6] group-hover:bg-[#e5e7eb]"}`}>
+                              <div className={`px-3 pt-4 pb-3 text-right flex flex-col justify-end min-h-[56px] transition-colors ${isOutOfStock ? "bg-gray-200/50" : isSelected ? "bg-[#e5e7eb]" : "bg-[#f3f4f6] group-hover:bg-[#e5e7eb]"}`}>
                                 <div className="text-[10px] text-[#FFA6C9] font-medium uppercase mb-0.5 tracking-wide">From</div>
                                 <div className="text-[#FF6B93] font-extrabold text-base md:text-xl leading-none">
                                   Rs. {denom.price}
@@ -485,16 +513,59 @@ export default function ProductDetailPage() {
               </RadioGroup>
             </div>
 
-            {/* Step 3: Enter Details */}
+            {/* Step 2 Alternative: Direct Login checkout fields */}
+            {isDirectLoginProduct && checkoutFields.length > 0 && (
+              <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray"
+                    }`}>
+                    2
+                  </div>
+                  <h2 className="text-xl font-semibold text-brand-charcoal">
+                    Account Details
+                  </h2>
+                </div>
+
+                <div className="space-y-4">
+                  {checkoutFields.map((field: any) => (
+                    <div key={field.key}>
+                      <Label htmlFor={field.key} className="font-semibold text-base text-brand-charcoal flex items-center gap-2 mb-2">
+                        {field.label} {field.required && "*"}
+                      </Label>
+                      <Input
+                        id={field.key}
+                        type={field.type}
+                        value={checkoutFieldValues[field.key] || ""}
+                        onChange={(e) => setCheckoutFieldValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                        placeholder={`Enter ${field.label.toLowerCase()}`}
+                        required={field.required}
+                        className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4]"
+                      />
+                      {field.type === "password" && (
+                        <p className="text-xs text-brand-light-gray mt-2 flex gap-1">
+                          <span>Temporary access is required for delivery. We recommend changing your password after the top-up is complete.</span>
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Enter Details / Contact Information */}
             <div className="glassmorphism p-6 rounded-lg shadow-md border bg-white border-gray-200">
               <div className="flex items-center gap-3 mb-4">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray"
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${(isDirectLoginProduct && checkoutFields.length > 0)
+                    ? (selectedDenomination && !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()) ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray")
+                    : (selectedDenomination ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray")
                     }`}
                 >
-                  {isTopupProduct ? "3" : "2"}
+                  {(isTopupProduct || (isDirectLoginProduct && checkoutFields.length > 0)) ? "3" : "2"}
                 </div>
-                <h2 className="text-xl font-semibold text-brand-charcoal">Enter Details</h2>
+                <h2 className="text-xl font-semibold text-brand-charcoal">
+                  {isDirectLoginProduct ? "Contact Information" : "Enter Details"}
+                </h2>
               </div>
 
               <div className="space-y-4">
@@ -511,24 +582,51 @@ export default function ProductDetailPage() {
                     required
                     className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4]"
                   />
-                  <p className="text-xs mt-1 text-brand-light-gray">
-                    Make sure your email address is correct, we will use it to deliver your voucher code.
-                  </p>
+                  
+                  {!isDirectLoginProduct && (
+                    <p className="text-xs mt-1 text-brand-light-gray">
+                      Make sure your email address is correct, we will use it to deliver your voucher code.
+                    </p>
+                  )}
+                  
+                  {isDirectLoginProduct && (
+                    <div className="flex items-center space-x-2 mt-3">
+                      <Checkbox 
+                        id="use-account-email" 
+                        className="rounded border-gray-300 data-[state=checked]:bg-[#00BCD4] data-[state=checked]:border-[#00BCD4]"
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            const emailKey = checkoutFields.find((f: any) => f.type === "email" || f.label.toLowerCase().includes("email"))?.key;
+                            if (emailKey && checkoutFieldValues[emailKey]) {
+                              setEmail(checkoutFieldValues[emailKey]);
+                            }
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor="use-account-email"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-brand-charcoal cursor-pointer"
+                      >
+                        Use my {giftCard?.name || "Product"} email for order updates.
+                      </label>
+                    </div>
+                  )}
                 </div>
-
               </div>
             </div>
+
+
 
             {/* Step 4: Select Payment */}
             <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
               <div className="flex items-center gap-3 mb-4">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination && email && (!isTopupProduct || userId)
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination && email && (!isTopupProduct || userId) && (!isDirectLoginProduct || !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))
                     ? "bg-[#00BCD4] text-white"
                     : "bg-gray-200 text-brand-light-gray"
                     }`}
                 >
-                  {isTopupProduct ? "4" : "3"}
+                  {(isTopupProduct || (isDirectLoginProduct && checkoutFields.length > 0)) ? "4" : "3"}
                 </div>
                 <h2 className="text-xl font-semibold text-brand-charcoal">Select payment</h2>
               </div>
@@ -565,7 +663,7 @@ export default function ProductDetailPage() {
 
               <Button
                 onClick={() => setShowQRDialog(true)}
-                disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !userId)}
+                disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !userId) || (isDirectLoginProduct && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
                 className="w-full mt-6 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white py-3 text-lg font-semibold"
               >
                 Proceed to Payment

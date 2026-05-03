@@ -12,7 +12,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Save, Upload, Trash2, Pencil } from "lucide-react"
+import { ArrowLeft, Save, Upload, Trash2, Pencil, HelpCircle, Plus } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import Image from "next/image"
@@ -32,18 +33,26 @@ export default function AddProductPage() {
   const [name, setName] = useState("")
   const [slug, setSlug] = useState("")
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false)
-  const [category, setCategory] = useState<"topup" | "digital-goods">("digital-goods")
+  const [category, setCategory] = useState<"topup" | "digital-goods" | "games" | "direct-login">("digital-goods")
   const [logo, setLogo] = useState("")
   const [description, setDescription] = useState("")
   const [isActive, setIsActive] = useState(true)
   const [ribbonText, setRibbonText] = useState("")
-  const [denominations, setDenominations] = useState<Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean }>>([])
+  const [denominations, setDenominations] = useState<Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean }>>([])
   const [denomIconUrl, setDenomIconUrl] = useState("")
   
   // New Denomination Form state
   const [newDenomPrice, setNewDenomPrice] = useState("")
   const [newDenomLabel, setNewDenomLabel] = useState("")
   const [newDenomBestseller, setNewDenomBestseller] = useState(false)
+  const [newDenomInStock, setNewDenomInStock] = useState(true)
+
+  // Checkout Fields state (for direct-login category)
+  const [checkoutFields, setCheckoutFields] = useState<Array<{ key: string; label: string; type: "text" | "email" | "password"; required: boolean }>>([])
+  const [newFieldLabel, setNewFieldLabel] = useState("")
+  const [newFieldType, setNewFieldType] = useState<"text" | "email" | "password">("text")
+  const [newFieldRequired, setNewFieldRequired] = useState(true)
+  const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null)
   const [editingDenomIndex, setEditingDenomIndex] = useState<number | null>(null)
 
   // FAQ state
@@ -176,6 +185,7 @@ export default function AddProductPage() {
         denom_icon_url: denomIconUrl || null,
         ribbon_text: ribbonText.trim() || null,
         faqs,
+        checkout_fields: category === "direct-login" ? checkoutFields : [],
       })
 
       if (result.error) {
@@ -204,17 +214,19 @@ export default function AddProductPage() {
       updated[editingDenomIndex] = { 
         price: newDenomPrice, 
         label: newDenomLabel,
-        bestseller: newDenomBestseller
+        bestseller: newDenomBestseller,
+        in_stock: newDenomInStock,
       }
       setDenominations(updated)
       setEditingDenomIndex(null)
     } else {
-      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomBestseller }])
+      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomBestseller, in_stock: newDenomInStock }])
     }
 
     setNewDenomPrice("")
     setNewDenomLabel("")
     setNewDenomBestseller(false)
+    setNewDenomInStock(true)
   }
 
   const removeDenomination = (index: number) => {
@@ -226,6 +238,7 @@ export default function AddProductPage() {
     setNewDenomPrice(denom.price)
     setNewDenomLabel(denom.label)
     setNewDenomBestseller(denom.bestseller || false)
+    setNewDenomInStock(denom.in_stock !== false)
     setEditingDenomIndex(index)
   }
 
@@ -290,8 +303,9 @@ export default function AddProductPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Product Details */}
-        <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6">
+          {/* Product Details */}
+          <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
           <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
             <CardTitle className="text-[#1F2937]">Product Details</CardTitle>
             <CardDescription className="text-[#92400E]">Basic information about the product</CardDescription>
@@ -335,13 +349,15 @@ export default function AddProductPage() {
                 <Label htmlFor="category" className="text-[#1F2937]">
                   Category *
                 </Label>
-                <Select value={category} onValueChange={(value: "topup" | "digital-goods") => setCategory(value)}>
+                <Select value={category} onValueChange={(value: "topup" | "digital-goods" | "games" | "direct-login") => setCategory(value)}>
                   <SelectTrigger className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]">
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="digital-goods">Digital Goods</SelectItem>
                     <SelectItem value="topup">Top-up</SelectItem>
+                    <SelectItem value="games">Games</SelectItem>
+                    <SelectItem value="direct-login">Direct Login</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -422,9 +438,10 @@ export default function AddProductPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
 
         {/* Product Image */}
-        <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+        <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md h-fit">
           <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
             <CardTitle className="text-[#1F2937]">Product Image</CardTitle>
             <CardDescription className="text-[#92400E]">Upload product logo</CardDescription>
@@ -471,6 +488,160 @@ export default function AddProductPage() {
           </CardContent>
         </Card>
 
+        {/* Checkout Fields — only for direct-login category */}
+        {category === "direct-login" && (
+          <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
+            <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+              <CardTitle className="text-[#1F2937]">Checkout Fields</CardTitle>
+              <CardDescription className="text-[#92400E]">
+                Configure the input fields customers fill out when ordering this product (max 3)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-6">
+                {/* Current fields */}
+                {checkoutFields.length > 0 && (
+                  <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-[#F9FAFB]">
+                        <TableRow>
+                          <TableHead className="text-[#4B5563]">Label</TableHead>
+                          <TableHead className="text-[#4B5563]">Type</TableHead>
+                          <TableHead className="text-[#4B5563]">Required</TableHead>
+                          <TableHead className="w-[100px] text-right text-[#4B5563]">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {checkoutFields.map((field, index) => (
+                          <TableRow key={index} className="border-t border-[#E5E7EB]">
+                            <TableCell className="text-[#1F2937] font-medium">{field.label}</TableCell>
+                            <TableCell className="text-[#4B5563] capitalize">{field.type}</TableCell>
+                            <TableCell className="text-[#4B5563]">{field.required ? "Yes" : "No"}</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setNewFieldLabel(field.label)
+                                  setNewFieldType(field.type as any)
+                                  setNewFieldRequired(field.required)
+                                  setEditingFieldIndex(index)
+                                }}
+                                className="h-8 w-8 p-0 text-[#F59E0B] hover:text-[#D97706] hover:bg-[#FEF7E0] mr-1"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setCheckoutFields(checkoutFields.filter((_, i) => i !== index))}
+                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {/* Add / Edit field */}
+                {(checkoutFields.length < 3 || editingFieldIndex !== null) && (
+                  <div className="flex flex-col gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-[#E5E7EB]">
+                    <div className="flex items-end gap-3">
+                      <div className="flex-1 space-y-2">
+                        <Label className="text-xs text-[#6B7280]">Field Label</Label>
+                        <Input
+                          value={newFieldLabel}
+                          onChange={(e) => setNewFieldLabel(e.target.value)}
+                          placeholder="e.g. Email Address"
+                          className="h-9 placeholder:text-gray-400 text-gray-900"
+                        />
+                      </div>
+                      <div className="w-[120px] space-y-2">
+                        <Label className="text-xs text-[#6B7280]">Type</Label>
+                        <Select value={newFieldType} onValueChange={(val: "text" | "email" | "password") => setNewFieldType(val)}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Text</SelectItem>
+                            <SelectItem value="email">Email</SelectItem>
+                            <SelectItem value="password">Password</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex flex-col justify-center space-y-2 pb-2">
+                        <Label htmlFor="new-field-req" className="text-xs text-[#6B7280]">Required?</Label>
+                        <Switch
+                          id="new-field-req"
+                          checked={newFieldRequired}
+                          onCheckedChange={setNewFieldRequired}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      <Button
+                        onClick={() => {
+                          if (!newFieldLabel.trim()) { toast.error("Label is required"); return }
+                          const key = newFieldLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
+                          const newField = { key, label: newFieldLabel.trim(), type: newFieldType, required: newFieldRequired }
+                          if (editingFieldIndex !== null) {
+                            const updated = [...checkoutFields]
+                            updated[editingFieldIndex] = newField
+                            setCheckoutFields(updated)
+                            setEditingFieldIndex(null)
+                          } else {
+                            setCheckoutFields([...checkoutFields, newField])
+                          }
+                          setNewFieldLabel("")
+                          setNewFieldType("text")
+                          setNewFieldRequired(true)
+                        }}
+                        size="sm"
+                        className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white h-9 px-4"
+                      >
+                        {editingFieldIndex !== null ? (
+                          <>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Update Field
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Field
+                          </>
+                        )}
+                      </Button>
+                      {editingFieldIndex !== null && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9"
+                          onClick={() => {
+                            setEditingFieldIndex(null)
+                            setNewFieldLabel("")
+                            setNewFieldType("text")
+                            setNewFieldRequired(true)
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {checkoutFields.length >= 3 && editingFieldIndex === null && (
+                  <p className="text-sm text-amber-600 font-medium">Maximum of 3 fields reached.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+
         {/* Denominations */}
         <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
           <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
@@ -488,6 +659,7 @@ export default function AddProductPage() {
                         <TableHead className="text-[#4B5563]">Price</TableHead>
                         <TableHead className="text-[#4B5563]">Label</TableHead>
                         <TableHead className="text-[#4B5563]">Best Seller</TableHead>
+                        <TableHead className="text-[#4B5563]">Stock</TableHead>
                         <TableHead className="w-[100px] text-right text-[#4B5563]">Action</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -498,6 +670,9 @@ export default function AddProductPage() {
                           <TableCell className="text-[#4B5563]">{denom.label}</TableCell>
                           <TableCell className="text-[#4B5563]">
                             {denom.bestseller ? <Badge className="bg-pink-500 hover:bg-pink-600 border-none text-white">Best Seller</Badge> : <span className="text-gray-400">—</span>}
+                          </TableCell>
+                          <TableCell className="text-[#4B5563]">
+                            {denom.in_stock !== false ? <Badge className="bg-green-500 hover:bg-green-600 border-none text-white">In Stock</Badge> : <Badge className="bg-gray-400 hover:bg-gray-500 border-none text-white">Out of Stock</Badge>}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center justify-end gap-1">
@@ -526,10 +701,12 @@ export default function AddProductPage() {
                 </div>
               )}
 
-              {/* Add new denomination */}
+              {/* Add / Edit denomination */}
               <div className="bg-white p-4 rounded-md border-2 border-[#F59E0B]/20">
-                <h3 className="text-[#1F2937] font-medium mb-4">Add New Denomination</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <h3 className="text-[#1F2937] font-medium mb-4">
+                  {editingDenomIndex !== null ? "Edit Denomination" : "Add New Denomination"}
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="price" className="text-[#1F2937]">
                       Price (Rs.)
@@ -566,10 +743,49 @@ export default function AddProductPage() {
                       />
                     </div>
                   </div>
+                  <div className="space-y-2 flex flex-col justify-center">
+                    <Label htmlFor="in-stock" className="text-[#1F2937] mb-2">
+                      In Stock?
+                    </Label>
+                    <div>
+                      <Switch
+                        id="in-stock"
+                        checked={newDenomInStock}
+                        onCheckedChange={setNewDenomInStock}
+                      />
+                    </div>
+                  </div>
                 </div>
-                <Button className="mt-4 bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addDenomination}>
-                  Add Denomination
-                </Button>
+                <div className="mt-4 flex gap-2">
+                  <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addDenomination}>
+                    {editingDenomIndex !== null ? (
+                      <>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Update Denomination
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Denomination
+                      </>
+                    )}
+                  </Button>
+                  
+                  {editingDenomIndex !== null && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEditingDenomIndex(null)
+                        setNewDenomPrice("")
+                        setNewDenomLabel("")
+                        setNewDenomBestseller(false)
+                        setNewDenomInStock(true)
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* (Denomination Icon is managed in Product Details above) */}
@@ -669,6 +885,8 @@ export default function AddProductPage() {
             </div>
           </CardContent>
         </Card>
+
+
       </div>
     </div>
   )

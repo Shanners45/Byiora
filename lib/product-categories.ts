@@ -5,7 +5,7 @@ export interface Product {
   name: string
   slug: string
   logo: string
-  category: "topup" | "digital-goods"
+  category: "topup" | "digital-goods" | "games" | "direct-login"
   isNew?: boolean
   hasUpdate?: boolean
   isActive?: boolean
@@ -17,20 +17,22 @@ export interface Product {
     label: string
     icon_url?: string
     bestseller?: boolean
+    in_stock?: boolean
   }>
   faqs?: Array<{
     question: string
     answer: string
   }>
+  checkout_fields?: Array<{
+    key: string
+    label: string
+    type: "text" | "email" | "password"
+    required: boolean
+  }>
 }
 
 // Note: We used to have fallback arrays here, but they were removed for bundle optimization.
 // All data is now purely fetched from the database.
-
-// Cache for products
-let productsCache: Product[] = []
-let lastFetch = 0
-const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
 // Check if Supabase is properly configured
 function isSupabaseConfigured(): boolean {
@@ -38,13 +40,6 @@ function isSupabaseConfigured(): boolean {
 }
 
 export async function getAllProducts(): Promise<Product[]> {
-  const now = Date.now()
-
-  // Return cached data if it's still fresh
-  if (productsCache.length > 0 && now - lastFetch < CACHE_DURATION) {
-    return productsCache
-  }
-
   // If Supabase is not configured, return fallback data
   if (!isSupabaseConfigured()) {
     console.warn("Supabase not configured, using empty array")
@@ -57,10 +52,6 @@ export async function getAllProducts(): Promise<Product[]> {
 
     if (error) {
       console.error("Error fetching products:", error)
-      // If we have cached data, return it; otherwise return fallback
-      if (productsCache.length > 0) {
-        return productsCache
-      }
       console.warn("Using empty array due to Supabase error")
       return []
     }
@@ -80,19 +71,12 @@ export async function getAllProducts(): Promise<Product[]> {
       ribbon_text: product.ribbon_text || undefined,
       denominations: product.denominations || [],
       faqs: product.faqs || [],
+      checkout_fields: product.checkout_fields || [],
     }))
-
-    // Update cache
-    productsCache = products
-    lastFetch = now
 
     return products
   } catch (error) {
     console.error("Error fetching products:", error)
-    // Return cached data if available, otherwise fallback
-    if (productsCache.length > 0) {
-      return productsCache
-    }
     console.warn("Using empty array due to network error")
     return []
   }
