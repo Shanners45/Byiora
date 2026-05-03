@@ -605,7 +605,7 @@ export default function OrdersPage() {
                     <TableCell className="text-[#4B5563] text-sm">
                       {transaction.product_category === "direct-login" ? (
                         <DirectLoginCell transaction={transaction} />
-                      ) : (transaction.product_category === "digital-goods" || (!transaction.product_category && transaction.product_name)) ? (
+                      ) : (transaction.product_category === "digital-goods" || transaction.product_category === "games" || (!transaction.product_category && transaction.product_name)) ? (
                         <div className="flex items-center gap-1.5">
                           <Input
                             placeholder="Enter Giftcard Code"
