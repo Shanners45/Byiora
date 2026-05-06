@@ -409,6 +409,7 @@ export default function ProductDetailPage() {
                       onChange={(e) => setUserId(e.target.value)}
                       placeholder="Enter User ID"
                       required
+                      autoComplete="off"
                       className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4]"
                     />
                     <p className="text-xs text-brand-light-gray mt-2">
@@ -539,6 +540,7 @@ export default function ProductDetailPage() {
                         onChange={(e) => setCheckoutFieldValues(prev => ({ ...prev, [field.key]: e.target.value }))}
                         placeholder={`Enter ${field.label.toLowerCase()}`}
                         required={field.required}
+                        autoComplete={field.type === "password" ? "new-password" : "off"}
                         className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4]"
                       />
                       {field.type === "password" && (
@@ -580,6 +582,7 @@ export default function ProductDetailPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="Enter your email address"
                     required
+                    autoComplete="off"
                     className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4]"
                   />
                   

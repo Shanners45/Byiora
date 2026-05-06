@@ -110,6 +110,41 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       return { success: false, error: error.message || error.code || "Failed to add transaction" }
     }
 
+    // Send Discord Webhook Notification
+    if (process.env.DISCORD_WEBHOOK_URL) {
+      try {
+        const webhookUrl = process.env.DISCORD_WEBHOOK_URL
+        const embed = {
+          title: "🚨 NEW ORDER RECEIVED!",
+          color: 0x00BCD4, // Match the brand color
+          fields: [
+            { name: "Transaction ID", value: transactionId, inline: true },
+            { name: "Status", value: "Processing", inline: true },
+            { name: "Product", value: transactionData.product, inline: false },
+            { name: "Amount", value: transactionData.amount, inline: true },
+            { name: "Price", value: `Rs. ${verifiedPrice}`, inline: true },
+            { name: "Email", value: transactionData.email, inline: false },
+            { name: "Payment Method", value: transactionData.paymentMethod, inline: true },
+          ],
+          timestamp: new Date().toISOString(),
+          footer: { text: "Byiora Order System" }
+        }
+
+        if (transactionData.guestData && transactionData.guestData.userId) {
+          embed.fields.push({ name: "User ID / Account", value: transactionData.guestData.userId, inline: true })
+        }
+
+        await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ embeds: [embed] }),
+        })
+      } catch (webhookError) {
+        // Fail silently as requested
+        console.error("Discord Webhook Error:", webhookError)
+      }
+    }
+
     return { success: true, transactionId, data }
   } catch (error: any) {
     console.error("Add transaction error:", error)
