@@ -380,10 +380,10 @@ export default function OrdersPage() {
   const getUIDForDisplay = (transaction: Transaction) => {
     // For topup products, UID comes from guest_user_data
     if (transaction.product_name.toLowerCase().includes("topup") || transaction.product_category === "topup") {
-      if (transaction.guest_user_data?.userId) {
-        return transaction.guest_user_data.userId
-      } else if (transaction.guest_user_data?.uid) {
-        return transaction.guest_user_data.uid
+      const uid = transaction.guest_user_data?.userId || transaction.guest_user_data?.uid;
+      const server = transaction.guest_user_data?.server;
+      if (uid) {
+        return server ? `UID: ${uid} | Server: ${server}` : `UID: ${uid}`
       }
     }
     // For direct-login products, show "Direct Login" label

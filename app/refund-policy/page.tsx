@@ -1,23 +1,20 @@
-"use client"
-
-import { useRouter } from "next/navigation"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft } from "lucide-react"
+import { BackButton } from "@/components/back-button"
+import type { Metadata } from "next"
+
+export const metadata: Metadata = {
+  title: "Refund & Return Policy | Byiora - Buy Game Gift Cards Nepal",
+  description: "Learn about the Refund and Return Policy at Byiora. Understand our terms for refunds on game top-ups and digital gift cards in Nepal.",
+}
 
 export default function RefundPolicyPage() {
-  const router = useRouter()
-
   return (
     <div className="min-h-screen bg-brand-purple">
       <Header />
 
       <main className="container mx-auto px-4 py-12 max-w-4xl">
-        <Button variant="ghost" onClick={() => router.back()} className="mb-6 text-white hover:bg-white/10">
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
+        <BackButton className="mb-6 text-white hover:bg-white/10" />
 
         <div className="bg-white shadow-md border border-slate-200 rounded-2xl p-8 md:p-12">
           <div className="text-center mb-10">

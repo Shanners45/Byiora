@@ -23,6 +23,9 @@ export async function createProductAction(productData: {
   ribbon_text: string | null
   faqs: Array<{ question: string; answer: string }>
   checkout_fields?: Array<{ key: string; label: string; type: string; required: boolean }>
+  uid_instructions?: string | null
+  uid_guide_image?: string | null
+  servers?: Array<{ id: string; name: string }>
 }) {
   if (!(await verifyAdmin())) {
     return { error: "Unauthorized: Admin access required" }
@@ -69,6 +72,9 @@ export async function updateProductAction(
     ribbon_text?: string | null
     faqs?: Array<{ question: string; answer: string }>
     checkout_fields?: Array<{ key: string; label: string; type: string; required: boolean }>
+    uid_instructions?: string | null
+    uid_guide_image?: string | null
+    servers?: Array<{ id: string; name: string }>
   }
 ) {
   if (!(await verifyAdmin())) {

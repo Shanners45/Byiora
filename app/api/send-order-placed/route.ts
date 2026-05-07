@@ -36,8 +36,8 @@ export async function POST(request: Request) {
 
     const row = (label: string, value: string) => `
       <tr>
-        <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; white-space: nowrap; width: 40%;">${label}</td>
-        <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb;">${value}</td>
+        <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">${label}</td>
+        <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb; word-break: break-word;">${value}</td>
       </tr>`
 
     const htmlContent = `

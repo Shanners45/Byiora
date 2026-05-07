@@ -11,6 +11,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { useAuth } from "@/lib/auth-context"
@@ -40,7 +47,15 @@ export default function ProductDetailPage() {
   const [selectedDenomination, setSelectedDenomination] = useState("")
   const [selectedPayment, setSelectedPayment] = useState("")
   const [email, setEmail] = useState(user?.email || "")
+
+  // Auto-fill email when user is logged in
+  useEffect(() => {
+    if (user?.email) {
+      setEmail(user.email)
+    }
+  }, [user?.email])
   const [userId, setUserId] = useState("")
+  const [selectedServer, setSelectedServer] = useState("")
   const [checkoutFieldValues, setCheckoutFieldValues] = useState<Record<string, string>>({})
   const [marketingConsent, setMarketingConsent] = useState(false)
   const [smsConsent, setSmsConsent] = useState(false)
@@ -150,8 +165,15 @@ export default function ProductDetailPage() {
       (f: any) => f.required && !checkoutFieldValues[f.key]?.trim()
     )
 
-    if (!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !userId) || missingCheckoutField) {
-      toast.error("Please complete all required fields")
+    const hasServers = product.servers && product.servers.length > 0
+    const missingServer = isTopupProduct && hasServers && !selectedServer
+
+    if (!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !userId) || missingServer || missingCheckoutField) {
+      if (missingServer) {
+        toast.error("Please select a server")
+      } else {
+        toast.error("Please complete all required fields")
+      }
       return
     }
 
@@ -177,7 +199,7 @@ export default function ProductDetailPage() {
         email: email,
         productId: product?.id || productSlug,
         productCategory: product?.category || (isTopupProduct ? "topup" : isDirectLoginProduct ? "direct-login" : "digital-goods"),
-        guestData: isTopupProduct ? { userId } : null,
+        guestData: isTopupProduct ? { userId, server: selectedServer } : null,
       })
 
       // Encrypt checkout field values for direct-login products
@@ -242,6 +264,7 @@ export default function ProductDetailPage() {
         setSelectedDenomination("")
         setSelectedPayment("")
         setUserId("")
+        setSelectedServer("")
         if (!user) setEmail("") // Only reset email if not logged in
         setMarketingConsent(false)
         setSmsConsent(false)
@@ -394,27 +417,67 @@ export default function ProductDetailPage() {
                   <div className="w-8 h-8 rounded-full bg-[#00BCD4] text-white flex items-center justify-center text-sm font-semibold">
                     1
                   </div>
-                  <h2 className="text-xl font-semibold text-brand-charcoal">Enter User ID</h2>
+                  <h2 className="text-xl font-semibold text-brand-charcoal">
+                    {product.servers && product.servers.length > 0 ? "Enter User ID and Server" : "Enter User ID"}
+                  </h2>
                 </div>
 
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="userId" className="text-brand-charcoal font-semibold text-base">
-                      User ID *
+                      Enter User ID *
                     </Label>
-                    <Input
-                      id="userId"
-                      type="text"
-                      value={userId}
-                      onChange={(e) => setUserId(e.target.value)}
-                      placeholder="Enter User ID"
-                      required
-                      autoComplete="off"
-                      className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4]"
-                    />
+                    <div className="flex flex-row items-center gap-2 mt-2">
+                      <div className="relative flex-1 min-w-0">
+                        <Input
+                          id="userId"
+                          type="text"
+                          value={userId}
+                          onChange={(e) => setUserId(e.target.value)}
+                          placeholder="User ID"
+                          required
+                          autoComplete="off"
+                          className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4] w-full h-10 text-sm"
+                        />
+                      </div>
+
+                      {product.servers && product.servers.length > 0 && (
+                        <div className="w-28 md:w-48 flex-shrink-0">
+                          <Select value={selectedServer} onValueChange={setSelectedServer}>
+                            <SelectTrigger className="bg-white border-gray-200 text-brand-charcoal focus:ring-[#00BCD4] focus:border-[#00BCD4] h-10 text-sm">
+                              <SelectValue placeholder="Server *" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-white border-gray-100 shadow-xl">
+                              {product.servers.map((server) => (
+                                <SelectItem key={server.id} value={server.name} className="focus:bg-gray-100 focus:text-brand-charcoal cursor-pointer">
+                                  {server.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+
+                      {product.uid_guide_image && (
+                        <div className="relative group/uid cursor-help flex-shrink-0">
+                          <HelpCircle className="h-5 w-5 text-[#00BCD4] hover:text-[#00BCD4]/80 transition-colors" />
+                          <div className="absolute bottom-full right-0 mb-3 w-[280px] md:w-[400px] max-w-[calc(100vw-40px)] p-2 bg-white rounded-xl shadow-2xl border border-gray-100 opacity-0 group-hover/uid:opacity-100 pointer-events-none transition-all duration-200 transform translate-y-2 group-hover/uid:translate-y-0 z-[100]">
+                            <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
+                              <Image
+                                src={product.uid_guide_image}
+                                alt="ID Guide"
+                                fill
+                                className="object-contain"
+                                unoptimized
+                              />
+                            </div>
+                            <div className="absolute -bottom-2 right-2 w-4 h-4 bg-white border-r border-b border-gray-100 rotate-45" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     <p className="text-xs text-brand-light-gray mt-2">
-                      To find your User ID, click on your avatar, you can find
-                      your User ID under your Nickname.
+                      {product.uid_instructions || "To find your User ID, click on your avatar, you can find your User ID under your Nickname."}
                     </p>
                   </div>
                 </div>
@@ -426,7 +489,7 @@ export default function ProductDetailPage() {
             {/* Step 1 or 2: Select Voucher */}
             <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
               <div className="flex items-center gap-3 mb-4">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${(isTopupProduct && userId) || (!isTopupProduct)
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${(isTopupProduct && userId && (product.servers && product.servers.length > 0 ? selectedServer : true)) || (!isTopupProduct)
                   ? "bg-[#00BCD4] text-white"
                   : "bg-gray-200 text-brand-light-gray"
                   }`}>
@@ -545,7 +608,7 @@ export default function ProductDetailPage() {
                       />
                       {field.type === "password" && (
                         <p className="text-xs text-brand-light-gray mt-2 flex gap-1">
-                          <span>Temporary access is required for delivery. We recommend changing your password after the top-up is complete.</span>
+                          <span>Temporary access is required for delivery. We recommend changing your password after the order is complete.</span>
                         </p>
                       )}
                     </div>
@@ -566,7 +629,7 @@ export default function ProductDetailPage() {
                   {(isTopupProduct || (isDirectLoginProduct && checkoutFields.length > 0)) ? "3" : "2"}
                 </div>
                 <h2 className="text-xl font-semibold text-brand-charcoal">
-                  {isDirectLoginProduct ? "Contact Information" : "Enter Details"}
+                  Contact Information
                 </h2>
               </div>
 
@@ -585,35 +648,12 @@ export default function ProductDetailPage() {
                     autoComplete="off"
                     className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4]"
                   />
-                  
-                  {!isDirectLoginProduct && (
-                    <p className="text-xs mt-1 text-brand-light-gray">
-                      Make sure your email address is correct, we will use it to deliver your voucher code.
-                    </p>
-                  )}
-                  
-                  {isDirectLoginProduct && (
-                    <div className="flex items-center space-x-2 mt-3">
-                      <Checkbox 
-                        id="use-account-email" 
-                        className="rounded border-gray-300 data-[state=checked]:bg-[#00BCD4] data-[state=checked]:border-[#00BCD4]"
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            const emailKey = checkoutFields.find((f: any) => f.type === "email" || f.label.toLowerCase().includes("email"))?.key;
-                            if (emailKey && checkoutFieldValues[emailKey]) {
-                              setEmail(checkoutFieldValues[emailKey]);
-                            }
-                          }
-                        }}
-                      />
-                      <label
-                        htmlFor="use-account-email"
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-brand-charcoal cursor-pointer"
-                      >
-                        Use my {giftCard?.name || "Product"} email for order updates.
-                      </label>
-                    </div>
-                  )}
+
+                  <p className="text-xs mt-1 text-brand-light-gray">
+                    {isTopupProduct
+                      ? "Make sure your email address is correct, we will use it to send your order confirmation and status updates."
+                      : "Make sure your email address is correct, we will use it to send your order confirmation and status updates."}
+                  </p>
                 </div>
               </div>
             </div>
@@ -624,7 +664,7 @@ export default function ProductDetailPage() {
             <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
               <div className="flex items-center gap-3 mb-4">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination && email && (!isTopupProduct || userId) && (!isDirectLoginProduct || !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination && email && (!isTopupProduct || (userId && (product.servers && product.servers.length > 0 ? selectedServer : true))) && (!isDirectLoginProduct || !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))
                     ? "bg-[#00BCD4] text-white"
                     : "bg-gray-200 text-brand-light-gray"
                     }`}
@@ -666,7 +706,7 @@ export default function ProductDetailPage() {
 
               <Button
                 onClick={() => setShowQRDialog(true)}
-                disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !userId) || (isDirectLoginProduct && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
+                disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && (!userId || (product.servers && product.servers.length > 0 && !selectedServer))) || (isDirectLoginProduct && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
                 className="w-full mt-6 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white py-3 text-lg font-semibold"
               >
                 Proceed to Payment

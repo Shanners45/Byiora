@@ -113,23 +113,23 @@ export async function POST(request: Request) {
         </p>
 
         <div style="margin-bottom: 20px; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
-          <table border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
             <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; white-space: nowrap;">Item</td>
-              <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-weight: 600;">${productName} ${denomination}</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Item</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-weight: 600; word-break: break-word;">${productName} ${denomination}</td>
             </tr>
             <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; white-space: nowrap;">Transaction ID</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Transaction ID</td>
               <td style="padding: 10px 16px; font-size: 13px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; word-break: break-all;">${transactionId || 'N/A'}</td>
             </tr>
             <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''} white-space: nowrap;">Order Status</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''} width: 35%; vertical-align: top;">Order Status</td>
               <td style="padding: 10px 16px; font-size: 14px; color: #dc2626; font-weight: 600; text-transform: uppercase;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''}">${statusText}</td>
             </tr>
             ${remarks ? `
             <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; white-space: nowrap;">Reason</td>
-              <td style="padding: 10px 16px; font-size: 14px; color: #dc2626; font-weight: 600;">${remarks}</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; width: 35%; vertical-align: top;">Reason</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #dc2626; font-weight: 600; word-break: break-word;">${remarks}</td>
             </tr>` : ''}
           </table>
         </div>

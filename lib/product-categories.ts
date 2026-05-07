@@ -29,6 +29,9 @@ export interface Product {
     type: "text" | "email" | "password"
     required: boolean
   }>
+  uid_instructions?: string | null
+  uid_guide_image?: string | null
+  servers?: Array<{ id: string; name: string }>
 }
 
 // Note: We used to have fallback arrays here, but they were removed for bundle optimization.
@@ -72,6 +75,9 @@ export async function getAllProducts(): Promise<Product[]> {
       denominations: product.denominations || [],
       faqs: product.faqs || [],
       checkout_fields: product.checkout_fields || [],
+      uid_instructions: product.uid_instructions || null,
+      uid_guide_image: product.uid_guide_image || null,
+      servers: product.servers || [],
     }))
 
     return products

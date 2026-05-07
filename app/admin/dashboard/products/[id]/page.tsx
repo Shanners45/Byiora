@@ -44,11 +44,15 @@ export default function ProductEditPage() {
   const [ribbonText, setRibbonText] = useState("")
   const [denominations, setDenominations] = useState<Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean }>>([])
   const [denomIconUrl, setDenomIconUrl] = useState("")
+  const [uidInstructions, setUidInstructions] = useState("")
+  const [uidGuideImage, setUidGuideImage] = useState("")
+  const [isUploadingGuide, setIsUploadingGuide] = useState(false)
+  const [servers, setServers] = useState<Array<{ id: string; name: string }>>([])
+  const [newServerName, setNewServerName] = useState("")
 
   // New Denomination Form state
   const [newDenomPrice, setNewDenomPrice] = useState("")
   const [newDenomLabel, setNewDenomLabel] = useState("")
-  const [newDenomIconUrl, setNewDenomIconUrl] = useState("")
   const [newDenomBestseller, setNewDenomBestseller] = useState(false)
   const [newDenomInStock, setNewDenomInStock] = useState(true)
   const [editingDenomIndex, setEditingDenomIndex] = useState<number | null>(null)
@@ -111,6 +115,20 @@ export default function ProductEditPage() {
           setCheckoutFields(productData.checkout_fields)
         }
 
+        if (productData.uid_instructions) {
+          setUidInstructions(productData.uid_instructions)
+        } else if (productData.category === "topup") {
+          setUidInstructions("To find your User ID, click on your avatar, you can find your User ID under your Nickname.")
+        }
+        
+        if (productData.uid_guide_image) {
+          setUidGuideImage(productData.uid_guide_image)
+        }
+
+        if (productData.servers && Array.isArray(productData.servers)) {
+          setServers(productData.servers)
+        }
+
         setIsLoading(false)
       } catch (error) {
         console.error("Error loading product:", error)
@@ -126,13 +144,11 @@ export default function ProductEditPage() {
     const file = event.target.files?.[0]
     if (!file) return
 
-    // Validate file type
     if (!file.type.startsWith("image/")) {
       toast.error("Please select an image file")
       return
     }
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error("Image size must be less than 5MB")
       return
@@ -141,12 +157,10 @@ export default function ProductEditPage() {
     setIsUploading(true)
 
     try {
-      // Create unique filename
       const fileExt = file.name.split(".").pop()
       const fileName = `${productId}-${Date.now()}.${fileExt}`
       const filePath = `${fileName}`
 
-      // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("product-images")
         .upload(filePath, file, {
@@ -160,7 +174,6 @@ export default function ProductEditPage() {
         return
       }
 
-      // Get public URL
       const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(filePath)
 
       if (urlData?.publicUrl) {
@@ -212,14 +225,25 @@ export default function ProductEditPage() {
         setDenomIconUrl(urlData.publicUrl)
         toast.success("Icon uploaded successfully")
       }
-    } catch (error) {
-      toast.error("Failed to upload icon")
-    } finally {
-      setIsUploadingIcon(false)
-    }
+    } catch { toast.error("Failed to upload icon") } finally { setIsUploadingIcon(false) }
   }
 
-  // Auto-generate slug from name
+  const handleGuideImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return }
+    if (file.size > 2 * 1024 * 1024) { toast.error("Image size must be less than 2MB"); return }
+    setIsUploadingGuide(true)
+    try {
+      const fileExt = file.name.split(".").pop()
+      const fileName = `uid-guide-${Date.now()}.${fileExt}`
+      const { error: uploadError } = await supabase.storage.from("product-images").upload(fileName, file, { cacheControl: "3600", upsert: false })
+      if (uploadError) { toast.error(`Failed to upload: ${uploadError.message}`); return }
+      const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(fileName)
+      if (urlData?.publicUrl) { setUidGuideImage(urlData.publicUrl); toast.success("Guide image uploaded!") }
+    } catch { toast.error("Failed to upload guide image") } finally { setIsUploadingGuide(false) }
+  }
+
   const generateSlug = (nameValue: string) => {
     return nameValue
       .toLowerCase()
@@ -244,13 +268,11 @@ export default function ProductEditPage() {
     setIsSaving(true)
 
     try {
-      // Inject the shared denom icon into every denomination before saving
       const denominationsWithIcon = denominations.map(d => ({
         ...d,
         icon_url: denomIconUrl || undefined,
       }))
 
-      // Use Server Action to update product
       const result = await updateProductAction(productId, {
         name,
         category,
@@ -263,6 +285,9 @@ export default function ProductEditPage() {
         denom_icon_url: denomIconUrl || null,
         ribbon_text: ribbonText.trim() || null,
         checkout_fields: category === "direct-login" ? checkoutFields : [],
+        uid_instructions: category === "topup" ? uidInstructions : null,
+        uid_guide_image: category === "topup" ? uidGuideImage : null,
+        servers: category === "topup" ? servers : [],
       })
 
       if (result.error) {
@@ -297,7 +322,6 @@ export default function ProductEditPage() {
 
     setNewDenomPrice("")
     setNewDenomLabel("")
-    setNewDenomIconUrl("")
     setNewDenomBestseller(false)
     setNewDenomInStock(true)
   }
@@ -355,7 +379,7 @@ export default function ProductEditPage() {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#F59E0B] border-gray-200 mx-auto mb-4"></div>
           <p className="text-[#4B5563]">Loading product...</p>
         </div>
       </div>
@@ -380,7 +404,7 @@ export default function ProductEditPage() {
             <p className="text-[#4B5563]">Update product details and settings</p>
           </div>
         </div>
-        <Button className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white" onClick={handleSave} disabled={isSaving}>
+        <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={handleSave} disabled={isSaving}>
           <Save className="h-4 w-4 mr-2" />
           {isSaving ? "Saving..." : "Save Changes"}
         </Button>
@@ -389,51 +413,39 @@ export default function ProductEditPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Product Details */}
-          <Card className="border-none shadow-md">
-            <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
+          <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+            <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
               <CardTitle className="text-[#1F2937]">Product Details</CardTitle>
-              <CardDescription className="text-[#4B5563]">Basic information about the product</CardDescription>
+              <CardDescription className="text-[#92400E]">Basic information about the product</CardDescription>
             </CardHeader>
             <CardContent className="p-6 space-y-6">
-              {/* Row 1: Product Name and URL Slug side by side */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name" className="text-[#1F2937]">
-                    Product Name
-                  </Label>
+                  <Label htmlFor="name" className="text-[#1F2937]">Product Name</Label>
                   <Input
                     id="name"
                     value={name}
                     onChange={handleNameChange}
-                    className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]"
+                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]"
                   />
                 </div>
-
                 <div className="space-y-2">
-                  <Label htmlFor="slug" className="text-[#1F2937]">
-                    URL Slug
-                  </Label>
+                  <Label htmlFor="slug" className="text-[#1F2937]">URL Slug</Label>
                   <Input
                     id="slug"
                     value={slug}
                     onChange={handleSlugChange}
-                    className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]"
+                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]"
                     placeholder="auto-generated-from-product-name"
                   />
-                  <p className="text-xs text-[#4B5563]">
-                    URL: byiora.store/{category}/{slug || generateSlug(name) || 'product-slug'}
-                  </p>
+                  <p className="text-xs text-[#4B5563]">URL: byiora.store/{category}/{slug || generateSlug(name)}</p>
                 </div>
               </div>
-
-              {/* Row 2: Category and Product Status side by side */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="category" className="text-[#1F2937]">
-                    Category
-                  </Label>
+                  <Label htmlFor="category" className="text-[#1F2937]">Category</Label>
                   <Select value={category} onValueChange={(value: "topup" | "digital-goods" | "games" | "direct-login") => setCategory(value)}>
-                    <SelectTrigger className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2]">
+                    <SelectTrigger className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]">
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
@@ -444,515 +456,337 @@ export default function ProductEditPage() {
                     </SelectContent>
                   </Select>
                 </div>
-
                 <div className="flex items-center justify-between md:pt-6">
                   <div className="space-y-0.5">
-                    <Label htmlFor="active" className="text-[#1F2937]">
-                      Product Status
-                    </Label>
-                    <p className="text-sm text-[#4B5563]">
-                      {isActive ? "Product is visible on the homepage" : "Product is hidden from the homepage"}
-                    </p>
+                    <Label htmlFor="active" className="text-[#1F2937]">Product Status</Label>
+                    <p className="text-sm text-[#4B5563]">{isActive ? "Product is visible" : "Product is hidden"}</p>
                   </div>
                   <Switch id="active" checked={isActive} onCheckedChange={setIsActive} />
                 </div>
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="description" className="text-[#1F2937]">
-                  Description
-                </Label>
-                <RichTextEditor
-                  id="description"
-                  value={description}
-                  onChange={setDescription}
-                  placeholder="Enter product description"
-                />
+                <Label htmlFor="description" className="text-[#1F2937]">Description</Label>
+                <RichTextEditor id="description" value={description} onChange={setDescription} placeholder="Enter product description" />
               </div>
-
-              {/* Row 3: Ribbon Text and Denomination Icon side by side */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="ribbon" className="text-[#1F2937]">
-                    Ribbon Text <span className="text-[#4B5563] font-normal">(Optional)</span>
-                  </Label>
-                  <Input
-                    id="ribbon"
-                    value={ribbonText}
-                    onChange={(e) => setRibbonText(e.target.value)}
-                    className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-400"
-                    placeholder='e.g. Hot, New, Discount, 10% Off'
-                    maxLength={20}
-                  />
-                  <p className="text-xs text-[#4B5563]">Short label shown as a badge on the product card (max 20 chars).</p>
+                  <Label htmlFor="ribbon" className="text-[#1F2937]">Ribbon Text</Label>
+                  <Input id="ribbon" value={ribbonText} onChange={(e) => setRibbonText(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" placeholder='e.g. Hot, New' maxLength={20} />
                 </div>
-
                 <div className="space-y-2">
-                  <Label className="text-[#1F2937]">
-                    Denomination Icon <span className="text-[#4B5563] font-normal">(Optional)</span>
-                  </Label>
+                  <Label className="text-[#1F2937]">Denomination Icon</Label>
                   <div className="flex items-center gap-3">
                     {denomIconUrl && (
-                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#E5E7EB] flex-shrink-0 bg-white flex items-center justify-center">
+                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#F59E0B]/40 bg-white flex items-center justify-center">
                         <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
                       </div>
                     )}
                     <div className="flex-1 space-y-1.5">
-                      <Input
-                        value={denomIconUrl}
-                        onChange={(e) => setDenomIconUrl(e.target.value)}
-                        className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-400"
-                        placeholder="Paste icon URL or upload"
-                      />
+                      <Input value={denomIconUrl} onChange={(e) => setDenomIconUrl(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" placeholder="Paste icon URL or upload" />
                       <input type="file" accept="image/*" id="denom-icon-upload-edit" onChange={handleDenomIconUpload} className="hidden" />
-                      <Button
-                        type="button" variant="outline" disabled={isUploadingIcon}
-                        onClick={() => document.getElementById('denom-icon-upload-edit')?.click()}
-                        className="w-full border-[#E5E7EB] hover:bg-gray-50 text-sm h-8 text-[#4B5563]"
-                      >
-                        {isUploadingIcon
-                          ? <><div className="animate-spin h-3 w-3 border-2 border-[#7E3AF2] border-t-transparent rounded-full mr-2" />Uploading...</>
-                          : <><Upload className="h-3 w-3 mr-2" />Upload Icon</>}
+                      <Button type="button" variant="outline" disabled={isUploadingIcon} onClick={() => document.getElementById('denom-icon-upload-edit')?.click()} className="w-full border-[#F59E0B]/30 hover:bg-[#F59E0B]/10 text-sm h-8">
+                        {isUploadingIcon ? "Uploading..." : <><Upload className="h-3 w-3 mr-2 text-[#F59E0B]" />Upload Icon</>}
                       </Button>
                     </div>
                   </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Checkout Fields — only for direct-login category */}
+          {category === "direct-login" && (
+            <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+              <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+                <CardTitle className="text-[#1F2937]">Checkout Fields</CardTitle>
+                <CardDescription className="text-[#92400E]">Configure the input fields customers fill out (max 3)</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="space-y-6">
+                  {checkoutFields.length > 0 && (
+                    <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
+                      <Table>
+                        <TableHeader className="bg-[#F9FAFB]">
+                          <TableRow>
+                            <TableHead className="text-[#4B5563]">Label</TableHead>
+                            <TableHead className="text-[#4B5563]">Type</TableHead>
+                            <TableHead className="text-[#4B5563]">Required</TableHead>
+                            <TableHead className="w-[100px] text-right text-[#4B5563]">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {checkoutFields.map((field, index) => (
+                            <TableRow key={index} className="border-t border-[#E5E7EB]">
+                              <TableCell className="text-[#1F2937] font-medium">{field.label}</TableCell>
+                              <TableCell className="text-[#4B5563] capitalize">{field.type}</TableCell>
+                              <TableCell className="text-[#4B5563]">{field.required ? "Yes" : "No"}</TableCell>
+                              <TableCell className="text-right">
+                                <Button variant="ghost" size="sm" onClick={() => { setNewFieldLabel(field.label); setNewFieldType(field.type as any); setNewFieldRequired(field.required); setEditingFieldIndex(index) }} className="h-8 w-8 p-0 text-[#F59E0B] hover:bg-[#FEF7E0] mr-1"><Pencil className="h-4 w-4" /></Button>
+                                <Button variant="ghost" size="sm" onClick={() => setCheckoutFields(checkoutFields.filter((_, i) => i !== index))} className="h-8 w-8 p-0 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></Button>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                  {(checkoutFields.length < 3 || editingFieldIndex !== null) && (
+                    <div className="bg-white p-4 rounded-lg border-2 border-dashed border-[#E5E7EB]">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div className="space-y-2 md:col-span-2">
+                          <Label className="text-xs text-[#6B7280]">Label</Label>
+                          <Input value={newFieldLabel} onChange={(e) => setNewFieldLabel(e.target.value)} placeholder="e.g. Email Address" className="h-9" />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-xs text-[#6B7280]">Type</Label>
+                          <Select value={newFieldType} onValueChange={(v: "text" | "email" | "password") => setNewFieldType(v)}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="text">Text</SelectItem><SelectItem value="email">Email</SelectItem><SelectItem value="password">Password</SelectItem></SelectContent></Select>
+                        </div>
+                        <div className="flex flex-col justify-center space-y-2">
+                          <Label className="text-xs text-[#6B7280]">Required?</Label>
+                          <Switch checked={newFieldRequired} onCheckedChange={setNewFieldRequired} />
+                        </div>
+                      </div>
+                      <div className="mt-4 flex gap-2">
+                        <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={() => { if (!newFieldLabel.trim()) { toast.error("Label is required"); return }; const key = newFieldLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""); const newField = { key, label: newFieldLabel.trim(), type: newFieldType, required: newFieldRequired }; if (editingFieldIndex !== null) { const updated = [...checkoutFields]; updated[editingFieldIndex] = newField; setCheckoutFields(updated); setEditingFieldIndex(null) } else { setCheckoutFields([...checkoutFields, newField]) }; setNewFieldLabel(""); setNewFieldType("text"); setNewFieldRequired(true) }}>{editingFieldIndex !== null ? "Update Field" : "Add Field"}</Button>
+                        {editingFieldIndex !== null && <Button variant="outline" onClick={() => { setEditingFieldIndex(null); setNewFieldLabel(""); setNewFieldType("text"); setNewFieldRequired(true) }}>Cancel</Button>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* User ID Help — only for topup category */}
+          {category === "topup" && (
+            <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+              <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+                <div className="flex items-center gap-2">
+                  <HelpCircle className="h-5 w-5 text-[#F59E0B]" />
+                  <CardTitle className="text-[#1F2937]">User ID Help</CardTitle>
+                </div>
+                <CardDescription className="text-[#92400E]">Instructions for users</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="uid_instructions" className="text-[#1F2937]">Instructions</Label>
+                    <Textarea id="uid_instructions" value={uidInstructions} onChange={(e) => setUidInstructions(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] min-h-[120px]" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[#1F2937]">Guide Image</Label>
+                    <div className="flex flex-col items-center gap-3">
+                      {uidGuideImage ? (
+                        <div className="relative w-full aspect-video rounded-lg overflow-hidden border border-[#F59E0B]/30 bg-white">
+                          <Image src={uidGuideImage} alt="UID Guide" fill className="object-contain" unoptimized />
+                          <button onClick={() => setUidGuideImage("")} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full"><Trash2 className="h-3 w-3" /></button>
+                        </div>
+                      ) : (
+                        <div className="w-full aspect-video rounded-lg border-2 border-dashed border-[#F59E0B]/20 flex flex-col items-center justify-center bg-white/50">
+                          <HelpCircle className="h-8 w-8 text-[#F59E0B]/20 mb-1" />
+                          <p className="text-[10px] text-[#92400E]/60">No image</p>
+                        </div>
+                      )}
+                      <div className="w-full">
+                        <input type="file" accept="image/*" id="guide-image-upload-edit" onChange={handleGuideImageUpload} className="hidden" />
+                        <Button type="button" variant="outline" size="sm" disabled={isUploadingGuide} onClick={() => document.getElementById('guide-image-upload-edit')?.click()} className="w-full border-[#F59E0B]/30 hover:bg-[#F59E0B]/10 h-9">
+                          {isUploadingGuide ? "Uploading..." : <><Upload className="h-3 w-3 mr-2" />Upload Guide Image</>}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Servers — only for topup category */}
+          {category === "topup" && (
+            <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+              <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+                <div className="flex items-center gap-2">
+                  <Plus className="h-5 w-5 text-[#F59E0B]" />
+                  <CardTitle className="text-[#1F2937]">Product Servers</CardTitle>
+                </div>
+                <CardDescription className="text-[#92400E]">Add available servers for this product</CardDescription>
+              </CardHeader>
+              <CardContent className="p-6 space-y-4">
+                <div className="flex gap-2">
+                  <Input 
+                    value={newServerName} 
+                    onChange={(e) => setNewServerName(e.target.value)} 
+                    placeholder="e.g. Asia, Europe, America" 
+                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (newServerName.trim()) {
+                          setServers([...servers, { id: crypto.randomUUID(), name: newServerName.trim() }]);
+                          setNewServerName("");
+                        }
+                      }
+                    }}
+                  />
+                  <Button 
+                    type="button"
+                    onClick={() => {
+                      if (newServerName.trim()) {
+                        setServers([...servers, { id: crypto.randomUUID(), name: newServerName.trim() }]);
+                        setNewServerName("");
+                      }
+                    }}
+                    className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"
+                  >
+                    Add
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {servers.map((server) => (
+                    <Badge key={server.id} variant="secondary" className="bg-white border-[#F59E0B]/30 text-[#1F2937] py-1 pl-3 pr-1 flex items-center gap-1">
+                      {server.name}
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setServers(servers.filter(s => s.id !== server.id))}
+                        className="h-5 w-5 p-0 hover:bg-red-50 text-red-500"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  ))}
+                  {servers.length === 0 && (
+                    <p className="text-xs text-[#92400E]/60 italic">No servers added yet. Product will show only User ID input.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <div className="lg:col-span-1 space-y-6">
+          {/* Product Image */}
+          <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md h-fit">
+            <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+              <CardTitle className="text-[#1F2937]">Product Image</CardTitle>
+              <CardDescription className="text-[#92400E]">Update product logo</CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              <div className="flex flex-col items-center justify-center">
+                <div className="w-32 h-32 relative rounded-lg overflow-hidden border border-[#F59E0B]/30 mb-4 bg-white">
+                  <Image src={logo || "/placeholder.svg?height=128&width=128"} alt={name} fill className="object-contain" />
+                </div>
+                <div className="space-y-2 w-full">
+                  <Label htmlFor="logo" className="text-[#1F2937]">Logo URL</Label>
+                  <Input id="logo" value={logo} onChange={(e) => setLogo(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" />
+                </div>
+                <div className="w-full mt-4">
+                  <Label htmlFor="image-upload" className="text-[#1F2937] mb-2 block text-xs">Or Upload New Image</Label>
+                  <input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                  <Button className="w-full bg-white border-2 border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#FEF7E0]" onClick={() => document.getElementById("image-upload")?.click()} disabled={isUploading}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    {isUploading ? "Uploading..." : "Upload New Image"}
+                  </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
-
-        {/* Product Image */}
-        <Card className="border-none shadow-md h-fit">
-          <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
-            <CardTitle className="text-[#1F2937]">Product Image</CardTitle>
-            <CardDescription className="text-[#4B5563]">Upload or update product logo</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6 space-y-6">
-            <div className="flex flex-col items-center justify-center">
-              <div className="w-32 h-32 relative rounded-lg overflow-hidden border border-[#E5E7EB] mb-4">
-                <Image
-                  src={logo || "/placeholder.svg?height=128&width=128"}
-                  alt={name}
-                  fill
-                  className="object-contain"
-                />
-              </div>
-
-              <div className="space-y-2 w-full">
-                <Label htmlFor="logo" className="text-[#1F2937]">
-                  Logo URL
-                </Label>
-                <Input
-                  id="logo"
-                  value={logo}
-                  onChange={(e) => setLogo(e.target.value)}
-                  className="bg-[#F9FAFB] border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-50"
-                  placeholder="https://example.com/logo.png"
-                />
-              </div>
-
-              <div className="w-full mt-4">
-                <Label htmlFor="image-upload" className="text-[#1F2937] mb-2 block">
-                  Or Upload New Image
-                </Label>
-                <input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                <Button
-                  className="w-full bg-white border border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
-                  onClick={() => document.getElementById("image-upload")?.click()}
-                  disabled={isUploading}
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  {isUploading ? "Uploading..." : "Upload New Image"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Checkout Fields — only for direct-login category */}
-        {category === "direct-login" && (
-          <Card className="border-none shadow-md lg:col-span-3">
-            <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
-              <CardTitle className="text-[#1F2937]">Checkout Fields</CardTitle>
-              <CardDescription className="text-[#4B5563]">
-                Configure the input fields customers fill out when ordering this product (max 3)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-6">
-              <div className="space-y-6">
-                {/* Current fields */}
-                {checkoutFields.length > 0 && (
-                  <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
-                    <Table>
-                      <TableHeader className="bg-[#F9FAFB]">
-                        <TableRow>
-                          <TableHead className="text-[#4B5563]">Label</TableHead>
-                          <TableHead className="text-[#4B5563]">Type</TableHead>
-                          <TableHead className="text-[#4B5563]">Required</TableHead>
-                          <TableHead className="w-[100px] text-right text-[#4B5563]">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {checkoutFields.map((field, index) => (
-                          <TableRow key={index} className="border-t border-[#E5E7EB]">
-                            <TableCell className="text-[#1F2937] font-medium">{field.label}</TableCell>
-                            <TableCell className="text-[#4B5563] capitalize">{field.type}</TableCell>
-                            <TableCell className="text-[#4B5563]">{field.required ? "Yes" : "No"}</TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setNewFieldLabel(field.label)
-                                  setNewFieldType(field.type as any)
-                                  setNewFieldRequired(field.required)
-                                  setEditingFieldIndex(index)
-                                }}
-                                className="h-8 w-8 p-0 text-[#7E3AF2] hover:text-[#6D28D9] hover:bg-[#F3E8FF] mr-1"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setCheckoutFields(checkoutFields.filter((_, i) => i !== index))}
-                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
-
-                {/* Add / Edit field */}
-                {(checkoutFields.length < 3 || editingFieldIndex !== null) && (
-                  <div className="bg-[#F9FAFB] p-4 rounded-lg border border-[#E5E7EB]">
-                    <h3 className="text-[#1F2937] font-medium mb-4">
-                      {editingFieldIndex !== null ? "Edit Checkout Field" : "Add Checkout Field"}
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-[#4B5563]">Label</Label>
-                        <Input
-                          value={newFieldLabel}
-                          onChange={(e) => setNewFieldLabel(e.target.value)}
-                          className="bg-white border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-400 text-gray-900"
-                          placeholder="e.g. Email Address"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-[#4B5563]">Input Type</Label>
-                        <Select value={newFieldType} onValueChange={(v: "text" | "email" | "password") => setNewFieldType(v)}>
-                          <SelectTrigger className="bg-white border-2 border-[#E5E7EB] focus:border-[#7E3AF2]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="email">Email</SelectItem>
-                            <SelectItem value="password">Password</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2 flex flex-col justify-center">
-                        <Label className="text-[#4B5563] mb-2">Required?</Label>
-                        <Switch checked={newFieldRequired} onCheckedChange={setNewFieldRequired} />
-                      </div>
-                    </div>
-                    <div className="mt-4 flex gap-2">
-                      <Button
-                        className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white"
-                        onClick={() => {
-                          if (!newFieldLabel.trim()) { toast.error("Label is required"); return }
-                          const key = newFieldLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "")
-                          const newField = { key, label: newFieldLabel.trim(), type: newFieldType, required: newFieldRequired }
-                          if (editingFieldIndex !== null) {
-                            const updated = [...checkoutFields]
-                            updated[editingFieldIndex] = newField
-                            setCheckoutFields(updated)
-                            setEditingFieldIndex(null)
-                          } else {
-                            setCheckoutFields([...checkoutFields, newField])
-                          }
-                          setNewFieldLabel("")
-                          setNewFieldType("text")
-                          setNewFieldRequired(true)
-                        }}
-                      >
-                        {editingFieldIndex !== null ? (
-                          <>
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Update Field
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add Field
-                          </>
-                        )}
-                      </Button>
-                      
-                      {editingFieldIndex !== null && (
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setEditingFieldIndex(null)
-                            setNewFieldLabel("")
-                            setNewFieldType("text")
-                            setNewFieldRequired(true)
-                          }}
-                        >
-                          Cancel
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {checkoutFields.length >= 3 && editingFieldIndex === null && (
-                  <p className="text-sm text-amber-600 font-medium">Maximum 3 checkout fields reached.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Denominations */}
-        <Card className="border-none shadow-md lg:col-span-3">
-          <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
-            <CardTitle className="text-[#1F2937]">Product Denominations</CardTitle>
-            <CardDescription className="text-[#4B5563]">Manage available denominations and prices</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="space-y-6">
-              {/* Current denominations */}
-              {denominations.length > 0 && (
-                <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-[#F9FAFB]">
-                      <TableRow>
-                        <TableHead className="text-[#4B5563]">Price</TableHead>
-                        <TableHead className="text-[#4B5563]">Label</TableHead>
-                        <TableHead className="text-[#4B5563]">Best Seller</TableHead>
-                        <TableHead className="text-[#4B5563]">Stock</TableHead>
-                        <TableHead className="w-[100px] text-right text-[#4B5563]">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {denominations.map((denom, index) => (
-                        <TableRow key={index} className="border-t border-[#E5E7EB]">
-                          <TableCell className="text-[#1F2937] font-medium">Rs. {denom.price}</TableCell>
-                          <TableCell className="text-[#4B5563]">{denom.label}</TableCell>
-                          <TableCell className="text-[#4B5563]">
-                            {denom.bestseller ? <Badge className="bg-pink-500 hover:bg-pink-600 border-none text-white">Best Seller</Badge> : <span className="text-gray-400">No</span>}
-                          </TableCell>
-                          <TableCell className="text-[#4B5563]">
-                            {denom.in_stock !== false ? <Badge className="bg-green-500 hover:bg-green-600 border-none text-white">In Stock</Badge> : <Badge className="bg-gray-400 hover:bg-gray-500 border-none text-white">Out of Stock</Badge>}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => editDenomination(index)}
-                                className="h-8 w-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => removeDenomination(index)}
-                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-
-              {/* Add / Edit denomination */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-[#1F2937]">
-                    {editingDenomIndex !== null ? "Edit Denomination" : "Add New Denomination"}
-                  </Label>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end bg-[#F9FAFB] p-4 rounded-lg border border-[#E5E7EB]">
-                  <div className="space-y-2 col-span-1">
-                    <Label className="text-[#4B5563]">Price (Rs) *</Label>
-                    <Input
-                      placeholder="e.g. 2,333"
-                      value={newDenomPrice}
-                      onChange={(e) => handlePriceChange(e.target.value, setNewDenomPrice)}
-                      className="border-[#E5E7EB] bg-white text-[#1F2937] placeholder:text-gray-400 focus-visible:ring-[#7E3AF2]"
-                    />
-                  </div>
-                  <div className="space-y-2 col-span-1">
-                    <Label className="text-[#4B5563]">Label *</Label>
-                    <Input
-                      placeholder="e.g. 500 UC"
-                      value={newDenomLabel}
-                      onChange={(e) => setNewDenomLabel(e.target.value)}
-                      className="bg-white border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-500"
-                    />
-                  </div>
-                  <div className="space-y-2 col-span-1 flex flex-col justify-center h-full pb-2">
-                    <Label className="text-[#4B5563] mb-2">Best Seller?</Label>
-                    <div>
-                      <Switch
-                        checked={newDenomBestseller}
-                        onCheckedChange={setNewDenomBestseller}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2 col-span-1 flex flex-col justify-center h-full pb-2">
-                    <Label className="text-[#4B5563] mb-2">In Stock?</Label>
-                    <div>
-                      <Switch
-                        checked={newDenomInStock}
-                        onCheckedChange={setNewDenomInStock}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <Button className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white" onClick={addDenomination}>
-                    {editingDenomIndex !== null ? (
-                      <>
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Update Denomination
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Denomination
-                      </>
-                    )}
-                  </Button>
-                  
-                  {editingDenomIndex !== null && (
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setEditingDenomIndex(null)
-                        setNewDenomPrice("")
-                        setNewDenomLabel("")
-                        setNewDenomBestseller(false)
-                        setNewDenomInStock(true)
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* FAQs */}
-        <Card className="border-none shadow-md lg:col-span-3">
-          <CardHeader className="px-6 py-4 border-b border-[#E5E7EB]">
-            <CardTitle className="text-[#1F2937]">FAQs</CardTitle>
-            <CardDescription className="text-[#4B5563]">Manage frequently asked questions for this product</CardDescription>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="space-y-6">
-              {/* Current FAQs */}
-              <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
-                <Table>
-                  <TableHeader className="bg-[#F9FAFB]">
-                    <TableRow>
-                      <TableHead className="text-[#1F2937] font-medium w-1/3">Question</TableHead>
-                      <TableHead className="text-[#1F2937] font-medium">Answer</TableHead>
-                      <TableHead className="text-[#1F2937] font-medium w-20">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {faqs.map((faq, index) => (
-                      <TableRow key={index} className="hover:bg-[#F9FAFB]">
-                        <TableCell className="font-medium text-[#1F2937] break-words">{faq.question}</TableCell>
-                        <TableCell className="text-[#4B5563] break-words">{faq.answer}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => editFaq(index)}
-                              className="h-8 w-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-8 w-8 p-0 text-[#EF4444] hover:text-[#EF4444]/80 hover:bg-red-50"
-                              onClick={() => removeFaq(index)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {faqs.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center py-4 text-[#4B5563]">
-                          No FAQs added yet
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-
-              {/* Add new FAQ */}
-              <div className="bg-[#F3F4F6] p-4 rounded-md border border-[#E5E7EB]">
-                <h3 className="text-[#1F2937] font-medium mb-4">Add New FAQ</h3>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="question" className="text-[#1F2937]">
-                      Question
-                    </Label>
-                    <Input
-                      id="question"
-                      value={newFaqQuestion}
-                      onChange={(e) => setNewFaqQuestion(e.target.value)}
-                      className="bg-white border-2 border-[#E5E7EB] focus:border-[#7E3AF2] placeholder:text-gray-500"
-                      placeholder="e.g. How to redeem the code?"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="answer" className="text-[#1F2937]">
-                      Answer
-                    </Label>
-                    <RichTextEditor
-                      id="answer"
-                      value={newFaqAnswer}
-                      onChange={setNewFaqAnswer}
-                      placeholder="e.g. You can redeem it on the official website..."
-                    />
-                  </div>
-                </div>
-                <Button className="mt-4 bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white" onClick={addFaq}>
-                  {editingFaqIndex !== null ? "Update FAQ" : "Add FAQ"}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-
       </div>
+
+      {/* Denominations - Moved outside for full width */}
+      <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+        <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+          <CardTitle className="text-[#1F2937]">Product Denominations</CardTitle>
+          <CardDescription className="text-[#92400E]">Add available denominations and prices</CardDescription>
+        </CardHeader>
+        <CardContent className="p-6 space-y-6">
+          {denominations.length > 0 && (
+            <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
+              <Table>
+                <TableHeader className="bg-[#F9FAFB]">
+                  <TableRow>
+                    <TableHead className="text-[#4B5563]">Price</TableHead>
+                    <TableHead className="text-[#4B5563]">Label</TableHead>
+                    <TableHead className="text-[#4B5563]">Best Seller</TableHead>
+                    <TableHead className="text-[#4B5563]">Stock</TableHead>
+                    <TableHead className="w-[100px] text-right text-[#4B5563]">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {denominations.map((denom, index) => (
+                    <TableRow key={index} className="border-t border-[#E5E7EB]">
+                      <TableCell className="text-[#1F2937] font-medium">Rs. {denom.price}</TableCell>
+                      <TableCell className="text-[#4B5563]">{denom.label}</TableCell>
+                      <TableCell className="text-[#4B5563]">{denom.bestseller ? <Badge className="bg-pink-500 border-none text-white">Best Seller</Badge> : "—"}</TableCell>
+                      <TableCell className="text-[#4B5563]">{denom.in_stock !== false ? <Badge className="bg-green-500 border-none text-white">In Stock</Badge> : <Badge className="bg-gray-400 border-none text-white">Out of Stock</Badge>}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => editDenomination(index)} className="h-8 w-8 p-0 text-blue-500 hover:bg-blue-50"><Pencil className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => removeDenomination(index)} className="h-8 w-8 p-0 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          <div className="bg-white p-4 rounded-md border-2 border-[#F59E0B]/20">
+            <h3 className="text-[#1F2937] font-medium mb-4">{editingDenomIndex !== null ? "Edit Denomination" : "Add New Denomination"}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="md:col-span-2 space-y-2"><Label htmlFor="price">Price (Rs.)</Label><Input id="price" value={newDenomPrice} onChange={(e) => handlePriceChange(e.target.value, setNewDenomPrice)} placeholder="e.g. 2,333" /></div>
+              <div className="md:col-span-2 space-y-2"><Label htmlFor="label">Label</Label><Input id="label" value={newDenomLabel} onChange={(e) => setNewDenomLabel(e.target.value)} placeholder="e.g. 100 Diamonds" /></div>
+              <div className="flex flex-col justify-center space-y-2 pt-2"><Label className="text-xs text-[#6B7280]">Options</Label><div className="flex items-center gap-4"><div className="flex flex-col items-center gap-1"><Label htmlFor="bestseller" className="text-[10px]">Best?</Label><Switch id="bestseller" checked={newDenomBestseller} onCheckedChange={setNewDenomBestseller} /></div><div className="flex flex-col items-center gap-1"><Label htmlFor="in-stock" className="text-[10px]">Stock?</Label><Switch id="in-stock" checked={newDenomInStock} onCheckedChange={setNewDenomInStock} /></div></div></div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addDenomination}>{editingDenomIndex !== null ? "Update Denom" : "Add Denom"}</Button>
+              {editingDenomIndex !== null && <Button variant="outline" onClick={() => { setEditingDenomIndex(null); setNewDenomPrice(""); setNewDenomLabel(""); setNewDenomBestseller(false); setNewDenomInStock(true) }}>Cancel</Button>}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* FAQs - Moved outside for full width */}
+      <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+        <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+          <CardTitle className="text-[#1F2937]">Product FAQs</CardTitle>
+          <CardDescription className="text-[#92400E]">Common questions and answers</CardDescription>
+        </CardHeader>
+        <CardContent className="p-6 space-y-6">
+          {faqs.length > 0 && (
+            <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
+              <Table>
+                <TableHeader className="bg-[#F9FAFB]"><TableRow><TableHead>Question</TableHead><TableHead className="w-[100px] text-right">Action</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {faqs.map((faq, index) => (
+                    <TableRow key={index} className="border-t border-[#E5E7EB]">
+                      <TableCell className="font-medium">{faq.question}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => editFaq(index)} className="h-8 w-8 p-0 text-blue-500 hover:bg-blue-50"><Pencil className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => removeFaq(index)} className="h-8 w-8 p-0 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+          <div className="bg-white p-4 rounded-md border-2 border-[#F59E0B]/20">
+            <h3 className="text-[#1F2937] font-medium mb-4">{editingFaqIndex !== null ? "Edit FAQ" : "Add New FAQ"}</h3>
+            <div className="space-y-4">
+              <div className="space-y-2"><Label htmlFor="faq-question">Question</Label><Input id="faq-question" value={newFaqQuestion} onChange={(e) => setNewFaqQuestion(e.target.value)} placeholder="e.g. How long?" /></div>
+              <div className="space-y-2"><Label htmlFor="faq-answer">Answer</Label><Textarea id="faq-answer" value={newFaqAnswer} onChange={(e) => setNewFaqAnswer(e.target.value)} className="min-h-[100px]" placeholder="Enter answer..." /></div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addFaq}>{editingFaqIndex !== null ? "Update FAQ" : "Add FAQ"}</Button>
+              {editingFaqIndex !== null && <Button variant="outline" onClick={() => { setEditingFaqIndex(null); setNewFaqQuestion(""); setNewFaqAnswer("") }}>Cancel</Button>}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
