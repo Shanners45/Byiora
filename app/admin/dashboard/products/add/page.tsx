@@ -407,6 +407,7 @@ export default function AddProductPage() {
                   value={description}
                   onChange={setDescription}
                   placeholder="Enter product description"
+                  className="border-[#F59E0B]/30 focus-within:border-[#F59E0B] focus-within:ring-[#F59E0B]"
                 />
               </div>
 
@@ -528,7 +529,7 @@ export default function AddProductPage() {
                             value={newFieldLabel}
                             onChange={(e) => setNewFieldLabel(e.target.value)}
                             placeholder="e.g. Email Address"
-                            className="h-9 placeholder:text-gray-400 text-gray-900"
+                            className="h-9 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
                           />
                         </div>
                         <div className="w-[120px] space-y-2">
@@ -545,9 +546,9 @@ export default function AddProductPage() {
                           </Select>
                         </div>
                         <div className="flex flex-col justify-center space-y-2 pb-2">
-                          <Label htmlFor="new-field-req" className="text-xs text-[#6B7280]">Required?</Label>
+                          <Label htmlFor="add-field-req" className="text-xs text-[#6B7280]">Required?</Label>
                           <Switch
-                            id="new-field-req"
+                            id="add-field-req"
                             checked={newFieldRequired}
                             onCheckedChange={setNewFieldRequired}
                           />
@@ -697,38 +698,35 @@ export default function AddProductPage() {
           )}
         </div>
 
-        <div className="space-y-6">
-          {/* Product Image */}
-          <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md h-fit">
-            <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
-              <CardTitle className="text-[#1F2937]">Product Image</CardTitle>
-              <CardDescription className="text-[#92400E]">Upload product logo</CardDescription>
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
-              <div className="flex flex-col items-center justify-center">
-                <div className="w-32 h-32 relative rounded-lg overflow-hidden border border-[#F59E0B]/30 mb-4 bg-white flex items-center justify-center">
-                  <Image src={logo || "/placeholder.svg?height=128&width=128"} alt={name || "Product"} fill className="object-contain" />
-                </div>
-                <div className="space-y-2 w-full">
-                  <Label htmlFor="logo" className="text-[#1F2937]">Logo URL</Label>
-                  <Input id="logo" value={logo} onChange={(e) => setLogo(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" placeholder="https://example.com/logo.png" />
-                </div>
-                <div className="w-full mt-4">
-                  <Label htmlFor="image-upload" className="text-[#1F2937] mb-2 block text-xs">Or Upload New Image</Label>
-                  <input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                  <Button className="w-full bg-white border-2 border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#FEF7E0]" onClick={() => document.getElementById("image-upload")?.click()} disabled={isUploading}>
-                    <Upload className="h-4 w-4 mr-2" />
-                    {isUploading ? "Uploading..." : "Upload Image"}
-                  </Button>
-                </div>
+        {/* Product Image */}
+        <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md h-fit">
+          <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+            <CardTitle className="text-[#1F2937]">Product Image</CardTitle>
+            <CardDescription className="text-[#92400E]">Upload product logo</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 space-y-6">
+            <div className="flex flex-col items-center justify-center">
+              <div className="w-32 h-32 relative rounded-lg overflow-hidden border border-[#F59E0B]/30 mb-4">
+                <Image src={logo || "/placeholder.svg?height=128&width=128"} alt={name || "Product"} fill className="object-contain" />
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+              <div className="space-y-2 w-full">
+                <Label htmlFor="logo" className="text-[#1F2937]">Logo URL</Label>
+                <Input id="logo" value={logo} onChange={(e) => setLogo(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="https://example.com/logo.png" />
+              </div>
+              <div className="w-full mt-4">
+                <Label htmlFor="image-upload" className="text-[#1F2937] mb-2 block">Or Upload New Image</Label>
+                <input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                <Button className="w-full bg-white border-2 border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#FEF7E0]" onClick={() => document.getElementById("image-upload")?.click()} disabled={isUploading}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isUploading ? "Uploading..." : "Upload Image"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Denominations - Moved outside the grid for full width */}
-      <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+        {/* Denominations */}
+        <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
         <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
           <CardTitle className="text-[#1F2937]">Product Denominations</CardTitle>
           <CardDescription className="text-[#92400E]">Add available denominations and prices</CardDescription>
@@ -773,31 +771,30 @@ export default function AddProductPage() {
           <div className="bg-white p-4 rounded-md border-2 border-[#F59E0B]/20">
             <h3 className="text-[#1F2937] font-medium mb-4">{editingDenomIndex !== null ? "Edit Denomination" : "Add New Denomination"}</h3>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="md:col-span-2 space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="price" className="text-[#1F2937]">Price (Rs.)</Label>
-                <Input id="price" value={newDenomPrice} onChange={(e) => handlePriceChange(e.target.value, setNewDenomPrice)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" placeholder="e.g. 2,333" />
+                <Input id="price" value={newDenomPrice} onChange={(e) => handlePriceChange(e.target.value, setNewDenomPrice)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="e.g. 2,333" />
               </div>
-              <div className="md:col-span-2 space-y-2">
+              <div className="space-y-2">
                 <Label htmlFor="label" className="text-[#1F2937]">Label</Label>
-                <Input id="label" value={newDenomLabel} onChange={(e) => setNewDenomLabel(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" placeholder="e.g. 100 Diamonds" />
+                <Input id="label" value={newDenomLabel} onChange={(e) => setNewDenomLabel(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="e.g. 100 Diamonds" />
               </div>
-              <div className="flex flex-col justify-center space-y-2 pt-2">
-                <Label className="text-xs text-[#6B7280]">Options</Label>
-                <div className="flex items-center gap-4">
-                  <div className="flex flex-col items-center gap-1">
-                    <Label htmlFor="bestseller" className="text-[10px] text-gray-500">Best?</Label>
-                    <Switch id="bestseller" checked={newDenomBestseller} onCheckedChange={setNewDenomBestseller} />
-                  </div>
-                  <div className="flex flex-col items-center gap-1">
-                    <Label htmlFor="in-stock" className="text-[10px] text-gray-500">Stock?</Label>
-                    <Switch id="in-stock" checked={newDenomInStock} onCheckedChange={setNewDenomInStock} />
-                  </div>
+              <div className="space-y-2 flex flex-col justify-center">
+                <Label htmlFor="bestseller" className="text-[#1F2937] mb-2">Best Seller?</Label>
+                <div>
+                  <Switch id="bestseller" checked={newDenomBestseller} onCheckedChange={setNewDenomBestseller} />
+                </div>
+              </div>
+              <div className="space-y-2 flex flex-col justify-center">
+                <Label htmlFor="in-stock" className="text-[#1F2937] mb-2">In Stock?</Label>
+                <div>
+                  <Switch id="in-stock" checked={newDenomInStock} onCheckedChange={setNewDenomInStock} />
                 </div>
               </div>
             </div>
             <div className="mt-4 flex gap-2">
               <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addDenomination}>
-                {editingDenomIndex !== null ? <><Pencil className="h-4 w-4 mr-2" />Update Denom</> : <><Plus className="h-4 w-4 mr-2" />Add Denom</>}
+                {editingDenomIndex !== null ? <><Pencil className="h-4 w-4 mr-2" />Update Denomination</> : <><Plus className="h-4 w-4 mr-2" />Add Denomination</>}
               </Button>
               {editingDenomIndex !== null && (
                 <Button variant="outline" onClick={() => { setEditingDenomIndex(null); setNewDenomPrice(""); setNewDenomLabel(""); setNewDenomBestseller(false); setNewDenomInStock(true) }}>Cancel</Button>
@@ -807,26 +804,28 @@ export default function AddProductPage() {
         </CardContent>
       </Card>
 
-      {/* FAQs - Moved outside the grid for full width */}
-      <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+      {/* FAQs */}
+      <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
         <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
           <CardTitle className="text-[#1F2937]">Product FAQs</CardTitle>
           <CardDescription className="text-[#92400E]">Common questions and answers</CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           {faqs.length > 0 && (
-            <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
+            <div className="rounded-md border-2 border-[#F59E0B]/20 overflow-hidden">
               <Table>
-                <TableHeader className="bg-[#F9FAFB]">
+                <TableHeader className="bg-white">
                   <TableRow>
-                    <TableHead className="text-[#4B5563]">Question</TableHead>
-                    <TableHead className="w-[100px] text-right text-[#4B5563]">Action</TableHead>
+                    <TableHead className="text-[#1F2937] font-medium w-1/3">Question</TableHead>
+                    <TableHead className="text-[#1F2937] font-medium">Answer</TableHead>
+                    <TableHead className="text-[#1F2937] font-medium w-20 text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {faqs.map((faq, index) => (
-                    <TableRow key={index} className="border-t border-[#E5E7EB]">
-                      <TableCell className="text-[#1F2937] font-medium">{faq.question}</TableCell>
+                    <TableRow key={index} className="border-t border-[#F59E0B]/10 hover:bg-[#FEF7E0]/50">
+                      <TableCell className="font-medium text-[#1F2937] break-words">{faq.question}</TableCell>
+                      <TableCell className="text-[#4B5563] break-words">{faq.answer}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="sm" onClick={() => editFaq(index)} className="h-8 w-8 p-0 text-blue-500 hover:bg-blue-50"><Pencil className="h-4 w-4" /></Button>
@@ -845,16 +844,22 @@ export default function AddProductPage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="faq-question" className="text-[#1F2937]">Question</Label>
-                <Input id="faq-question" value={newFaqQuestion} onChange={(e) => setNewFaqQuestion(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" placeholder="e.g. How long does it take?" />
+                <Input id="faq-question" value={newFaqQuestion} onChange={(e) => setNewFaqQuestion(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="e.g. How long does it take?" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="faq-answer" className="text-[#1F2937]">Answer</Label>
-                <Textarea id="faq-answer" value={newFaqAnswer} onChange={(e) => setNewFaqAnswer(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] min-h-[100px]" placeholder="Enter answer details..." />
+                <RichTextEditor
+                  id="faq-answer"
+                  value={newFaqAnswer}
+                  onChange={setNewFaqAnswer}
+                  placeholder="e.g. You can redeem it on the official website..."
+                  className="border-[#F59E0B]/30 focus-within:border-[#F59E0B] focus-within:ring-[#F59E0B]"
+                />
               </div>
             </div>
             <div className="mt-4 flex gap-2">
               <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addFaq}>
-                {editingFaqIndex !== null ? <><Pencil className="h-4 w-4 mr-2" />Update FAQ</> : <><Plus className="h-4 w-4 mr-2" />Add FAQ</>}
+                {editingFaqIndex !== null ? "Update FAQ" : "Add FAQ"}
               </Button>
               {editingFaqIndex !== null && (
                 <Button variant="outline" onClick={() => { setEditingFaqIndex(null); setNewFaqQuestion(""); setNewFaqAnswer("") }}>Cancel</Button>
@@ -864,5 +869,6 @@ export default function AddProductPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  </div>
+)
 }

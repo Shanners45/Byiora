@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Save, Upload, Trash2, Pencil, Plus } from "lucide-react"
+import { ArrowLeft, Save, Upload, Trash2, Pencil, HelpCircle, Plus } from "lucide-react"
 import { type Product } from "@/lib/product-categories"
 import { createClient } from "@/lib/supabase/client"
 import { getProductByIdAction, updateProductAction } from "@/app/actions/products"
@@ -426,7 +426,8 @@ export default function ProductEditPage() {
                     id="name"
                     value={name}
                     onChange={handleNameChange}
-                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]"
+                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
+                    placeholder="Enter product name"
                   />
                 </div>
                 <div className="space-y-2">
@@ -435,8 +436,8 @@ export default function ProductEditPage() {
                     id="slug"
                     value={slug}
                     onChange={handleSlugChange}
-                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]"
-                    placeholder="auto-generated-from-product-name"
+                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
+                    placeholder="auto-generated-slug"
                   />
                   <p className="text-xs text-[#4B5563]">URL: byiora.store/{category}/{slug || generateSlug(name)}</p>
                 </div>
@@ -466,26 +467,33 @@ export default function ProductEditPage() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description" className="text-[#1F2937]">Description</Label>
-                <RichTextEditor id="description" value={description} onChange={setDescription} placeholder="Enter product description" />
+                <RichTextEditor
+                  id="description"
+                  value={description}
+                  onChange={setDescription}
+                  placeholder="Enter product description"
+                  className="border-[#F59E0B]/30 focus-within:border-[#F59E0B] focus-within:ring-[#F59E0B]"
+                />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="ribbon" className="text-[#1F2937]">Ribbon Text</Label>
-                  <Input id="ribbon" value={ribbonText} onChange={(e) => setRibbonText(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" placeholder='e.g. Hot, New' maxLength={20} />
+                  <Label htmlFor="ribbon" className="text-[#1F2937]">Ribbon Text <span className="text-gray-400 font-normal">(Optional)</span></Label>
+                  <Input id="ribbon" value={ribbonText} onChange={(e) => setRibbonText(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder='e.g. Hot, New, Discount, 10% Off' maxLength={20} />
+                  <p className="text-xs text-[#4B5563]">Displayed as a badge on the product card (max 20 chars).</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-[#1F2937]">Denomination Icon</Label>
+                  <Label className="text-[#1F2937]">Denomination Icon <span className="text-gray-400 font-normal">(Optional)</span></Label>
                   <div className="flex items-center gap-3">
                     {denomIconUrl && (
-                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#F59E0B]/40 bg-white flex items-center justify-center">
+                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#F59E0B]/40 flex-shrink-0 bg-white flex items-center justify-center">
                         <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
                       </div>
                     )}
                     <div className="flex-1 space-y-1.5">
-                      <Input value={denomIconUrl} onChange={(e) => setDenomIconUrl(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" placeholder="Paste icon URL or upload" />
+                      <Input value={denomIconUrl} onChange={(e) => setDenomIconUrl(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="Paste icon URL or upload" />
                       <input type="file" accept="image/*" id="denom-icon-upload-edit" onChange={handleDenomIconUpload} className="hidden" />
                       <Button type="button" variant="outline" disabled={isUploadingIcon} onClick={() => document.getElementById('denom-icon-upload-edit')?.click()} className="w-full border-[#F59E0B]/30 hover:bg-[#F59E0B]/10 text-sm h-8">
-                        {isUploadingIcon ? "Uploading..." : <><Upload className="h-3 w-3 mr-2 text-[#F59E0B]" />Upload Icon</>}
+                        {isUploadingIcon ? <><div className="animate-spin h-3 w-3 border-2 border-[#F59E0B] border-t-transparent rounded-full mr-2" />Uploading...</> : <><Upload className="h-3 w-3 mr-2 text-[#F59E0B]" />Upload Icon</>}
                       </Button>
                     </div>
                   </div>
@@ -531,24 +539,24 @@ export default function ProductEditPage() {
                     </div>
                   )}
                   {(checkoutFields.length < 3 || editingFieldIndex !== null) && (
-                    <div className="bg-white p-4 rounded-lg border-2 border-dashed border-[#E5E7EB]">
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div className="space-y-2 md:col-span-2">
-                          <Label className="text-xs text-[#6B7280]">Label</Label>
-                          <Input value={newFieldLabel} onChange={(e) => setNewFieldLabel(e.target.value)} placeholder="e.g. Email Address" className="h-9" />
+                    <div className="flex flex-col gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-[#E5E7EB]">
+                      <div className="flex items-end gap-3">
+                        <div className="flex-1 space-y-2">
+                          <Label className="text-xs text-[#6B7280]">Field Label</Label>
+                          <Input value={newFieldLabel} onChange={(e) => setNewFieldLabel(e.target.value)} placeholder="e.g. Email Address" className="h-9 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" />
                         </div>
-                        <div className="space-y-2">
+                        <div className="w-[120px] space-y-2">
                           <Label className="text-xs text-[#6B7280]">Type</Label>
                           <Select value={newFieldType} onValueChange={(v: "text" | "email" | "password") => setNewFieldType(v)}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="text">Text</SelectItem><SelectItem value="email">Email</SelectItem><SelectItem value="password">Password</SelectItem></SelectContent></Select>
                         </div>
-                        <div className="flex flex-col justify-center space-y-2">
-                          <Label className="text-xs text-[#6B7280]">Required?</Label>
-                          <Switch checked={newFieldRequired} onCheckedChange={setNewFieldRequired} />
+                        <div className="flex flex-col justify-center space-y-2 pb-2">
+                          <Label htmlFor="edit-field-req" className="text-xs text-[#6B7280]">Required?</Label>
+                          <Switch id="edit-field-req" checked={newFieldRequired} onCheckedChange={setNewFieldRequired} />
                         </div>
                       </div>
-                      <div className="mt-4 flex gap-2">
-                        <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={() => { if (!newFieldLabel.trim()) { toast.error("Label is required"); return }; const key = newFieldLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""); const newField = { key, label: newFieldLabel.trim(), type: newFieldType, required: newFieldRequired }; if (editingFieldIndex !== null) { const updated = [...checkoutFields]; updated[editingFieldIndex] = newField; setCheckoutFields(updated); setEditingFieldIndex(null) } else { setCheckoutFields([...checkoutFields, newField]) }; setNewFieldLabel(""); setNewFieldType("text"); setNewFieldRequired(true) }}>{editingFieldIndex !== null ? "Update Field" : "Add Field"}</Button>
-                        {editingFieldIndex !== null && <Button variant="outline" onClick={() => { setEditingFieldIndex(null); setNewFieldLabel(""); setNewFieldType("text"); setNewFieldRequired(true) }}>Cancel</Button>}
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white h-9 px-4" onClick={() => { if (!newFieldLabel.trim()) { toast.error("Label is required"); return }; const key = newFieldLabel.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""); const newField = { key, label: newFieldLabel.trim(), type: newFieldType, required: newFieldRequired }; if (editingFieldIndex !== null) { const updated = [...checkoutFields]; updated[editingFieldIndex] = newField; setCheckoutFields(updated); setEditingFieldIndex(null) } else { setCheckoutFields([...checkoutFields, newField]) }; setNewFieldLabel(""); setNewFieldType("text"); setNewFieldRequired(true) }}>{editingFieldIndex !== null ? <><Pencil className="h-4 w-4 mr-2" />Update Field</> : <><Plus className="h-4 w-4 mr-2" />Add Field</>}</Button>
+                        {editingFieldIndex !== null && <Button variant="outline" size="sm" className="h-9" onClick={() => { setEditingFieldIndex(null); setNewFieldLabel(""); setNewFieldType("text"); setNewFieldRequired(true) }}>Cancel</Button>}
                       </div>
                     </div>
                   )}
@@ -571,7 +579,7 @@ export default function ProductEditPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="uid_instructions" className="text-[#1F2937]">Instructions</Label>
-                    <Textarea id="uid_instructions" value={uidInstructions} onChange={(e) => setUidInstructions(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] min-h-[120px]" />
+                    <Textarea id="uid_instructions" value={uidInstructions} onChange={(e) => setUidInstructions(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500 min-h-[120px]" placeholder="Enter instructions for users..." />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[#1F2937]">Guide Image</Label>
@@ -616,7 +624,7 @@ export default function ProductEditPage() {
                     value={newServerName} 
                     onChange={(e) => setNewServerName(e.target.value)} 
                     placeholder="e.g. Asia, Europe, America" 
-                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]"
+                    className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -660,42 +668,39 @@ export default function ProductEditPage() {
                   )}
                 </div>
               </CardContent>
-            </Card>
+              </Card>
           )}
         </div>
 
-        <div className="lg:col-span-1 space-y-6">
-          {/* Product Image */}
-          <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md h-fit">
-            <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
-              <CardTitle className="text-[#1F2937]">Product Image</CardTitle>
-              <CardDescription className="text-[#92400E]">Update product logo</CardDescription>
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
-              <div className="flex flex-col items-center justify-center">
-                <div className="w-32 h-32 relative rounded-lg overflow-hidden border border-[#F59E0B]/30 mb-4 bg-white">
-                  <Image src={logo || "/placeholder.svg?height=128&width=128"} alt={name} fill className="object-contain" />
-                </div>
-                <div className="space-y-2 w-full">
-                  <Label htmlFor="logo" className="text-[#1F2937]">Logo URL</Label>
-                  <Input id="logo" value={logo} onChange={(e) => setLogo(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]" />
-                </div>
-                <div className="w-full mt-4">
-                  <Label htmlFor="image-upload" className="text-[#1F2937] mb-2 block text-xs">Or Upload New Image</Label>
-                  <input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                  <Button className="w-full bg-white border-2 border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#FEF7E0]" onClick={() => document.getElementById("image-upload")?.click()} disabled={isUploading}>
-                    <Upload className="h-4 w-4 mr-2" />
-                    {isUploading ? "Uploading..." : "Upload New Image"}
-                  </Button>
-                </div>
+        {/* Product Image */}
+        <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md h-fit">
+          <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+            <CardTitle className="text-[#1F2937]">Product Image</CardTitle>
+            <CardDescription className="text-[#92400E]">Update product logo</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 space-y-6">
+            <div className="flex flex-col items-center justify-center">
+              <div className="w-32 h-32 relative rounded-lg overflow-hidden border border-[#F59E0B]/30 mb-4">
+                <Image src={logo || "/placeholder.svg?height=128&width=128"} alt={name} fill className="object-contain" />
               </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+              <div className="space-y-2 w-full">
+                <Label htmlFor="logo" className="text-[#1F2937]">Logo URL</Label>
+                <Input id="logo" value={logo} onChange={(e) => setLogo(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="https://example.com/logo.png" />
+              </div>
+              <div className="w-full mt-4">
+                <Label htmlFor="image-upload" className="text-[#1F2937] mb-2 block">Or Upload New Image</Label>
+                <input id="image-upload" type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                <Button className="w-full bg-white border-2 border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#FEF7E0]" onClick={() => document.getElementById("image-upload")?.click()} disabled={isUploading}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  {isUploading ? "Uploading..." : "Upload New Image"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Denominations - Moved outside for full width */}
-      <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+        {/* Denominations */}
+        <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
         <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
           <CardTitle className="text-[#1F2937]">Product Denominations</CardTitle>
           <CardDescription className="text-[#92400E]">Add available denominations and prices</CardDescription>
@@ -735,33 +740,59 @@ export default function ProductEditPage() {
           <div className="bg-white p-4 rounded-md border-2 border-[#F59E0B]/20">
             <h3 className="text-[#1F2937] font-medium mb-4">{editingDenomIndex !== null ? "Edit Denomination" : "Add New Denomination"}</h3>
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="md:col-span-2 space-y-2"><Label htmlFor="price">Price (Rs.)</Label><Input id="price" value={newDenomPrice} onChange={(e) => handlePriceChange(e.target.value, setNewDenomPrice)} placeholder="e.g. 2,333" /></div>
-              <div className="md:col-span-2 space-y-2"><Label htmlFor="label">Label</Label><Input id="label" value={newDenomLabel} onChange={(e) => setNewDenomLabel(e.target.value)} placeholder="e.g. 100 Diamonds" /></div>
-              <div className="flex flex-col justify-center space-y-2 pt-2"><Label className="text-xs text-[#6B7280]">Options</Label><div className="flex items-center gap-4"><div className="flex flex-col items-center gap-1"><Label htmlFor="bestseller" className="text-[10px]">Best?</Label><Switch id="bestseller" checked={newDenomBestseller} onCheckedChange={setNewDenomBestseller} /></div><div className="flex flex-col items-center gap-1"><Label htmlFor="in-stock" className="text-[10px]">Stock?</Label><Switch id="in-stock" checked={newDenomInStock} onCheckedChange={setNewDenomInStock} /></div></div></div>
+              <div className="space-y-2">
+                <Label htmlFor="price" className="text-[#1F2937]">Price (Rs.)</Label>
+                <Input id="price" value={newDenomPrice} onChange={(e) => handlePriceChange(e.target.value, setNewDenomPrice)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="e.g. 2,333" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="label" className="text-[#1F2937]">Label</Label>
+                <Input id="label" value={newDenomLabel} onChange={(e) => setNewDenomLabel(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="e.g. 100 Diamonds" />
+              </div>
+              <div className="space-y-2 flex flex-col justify-center">
+                <Label htmlFor="bestseller" className="text-[#1F2937] mb-2">Best Seller?</Label>
+                <div>
+                  <Switch id="bestseller" checked={newDenomBestseller} onCheckedChange={setNewDenomBestseller} />
+                </div>
+              </div>
+              <div className="space-y-2 flex flex-col justify-center">
+                <Label htmlFor="in-stock" className="text-[#1F2937] mb-2">In Stock?</Label>
+                <div>
+                  <Switch id="in-stock" checked={newDenomInStock} onCheckedChange={setNewDenomInStock} />
+                </div>
+              </div>
             </div>
             <div className="mt-4 flex gap-2">
-              <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addDenomination}>{editingDenomIndex !== null ? "Update Denom" : "Add Denom"}</Button>
+              <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addDenomination}>
+                {editingDenomIndex !== null ? <><Pencil className="h-4 w-4 mr-2" />Update Denomination</> : <><Plus className="h-4 w-4 mr-2" />Add Denomination</>}
+              </Button>
               {editingDenomIndex !== null && <Button variant="outline" onClick={() => { setEditingDenomIndex(null); setNewDenomPrice(""); setNewDenomLabel(""); setNewDenomBestseller(false); setNewDenomInStock(true) }}>Cancel</Button>}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* FAQs - Moved outside for full width */}
-      <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+      {/* FAQs */}
+      <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
         <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
           <CardTitle className="text-[#1F2937]">Product FAQs</CardTitle>
           <CardDescription className="text-[#92400E]">Common questions and answers</CardDescription>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           {faqs.length > 0 && (
-            <div className="rounded-md border border-[#E5E7EB] overflow-hidden">
+            <div className="rounded-md border-2 border-[#F59E0B]/20 overflow-hidden">
               <Table>
-                <TableHeader className="bg-[#F9FAFB]"><TableRow><TableHead>Question</TableHead><TableHead className="w-[100px] text-right">Action</TableHead></TableRow></TableHeader>
+                <TableHeader className="bg-white">
+                  <TableRow>
+                    <TableHead className="text-[#1F2937] font-medium w-1/3">Question</TableHead>
+                    <TableHead className="text-[#1F2937] font-medium">Answer</TableHead>
+                    <TableHead className="text-[#1F2937] font-medium w-20 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {faqs.map((faq, index) => (
-                    <TableRow key={index} className="border-t border-[#E5E7EB]">
-                      <TableCell className="font-medium">{faq.question}</TableCell>
+                    <TableRow key={index} className="border-t border-[#F59E0B]/10 hover:bg-[#FEF7E0]/50">
+                      <TableCell className="font-medium text-[#1F2937] break-words">{faq.question}</TableCell>
+                      <TableCell className="text-[#4B5563] break-words">{faq.answer}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="sm" onClick={() => editFaq(index)} className="h-8 w-8 p-0 text-blue-500 hover:bg-blue-50"><Pencil className="h-4 w-4" /></Button>
@@ -777,8 +808,20 @@ export default function ProductEditPage() {
           <div className="bg-white p-4 rounded-md border-2 border-[#F59E0B]/20">
             <h3 className="text-[#1F2937] font-medium mb-4">{editingFaqIndex !== null ? "Edit FAQ" : "Add New FAQ"}</h3>
             <div className="space-y-4">
-              <div className="space-y-2"><Label htmlFor="faq-question">Question</Label><Input id="faq-question" value={newFaqQuestion} onChange={(e) => setNewFaqQuestion(e.target.value)} placeholder="e.g. How long?" /></div>
-              <div className="space-y-2"><Label htmlFor="faq-answer">Answer</Label><Textarea id="faq-answer" value={newFaqAnswer} onChange={(e) => setNewFaqAnswer(e.target.value)} className="min-h-[100px]" placeholder="Enter answer..." /></div>
+              <div className="space-y-2">
+                <Label htmlFor="faq-question" className="text-[#1F2937]">Question</Label>
+                <Input id="faq-question" value={newFaqQuestion} onChange={(e) => setNewFaqQuestion(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="e.g. How long?" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="faq-answer" className="text-[#1F2937]">Answer</Label>
+                <RichTextEditor
+                  id="faq-answer"
+                  value={newFaqAnswer}
+                  onChange={setNewFaqAnswer}
+                  placeholder="e.g. You can redeem it on the official website..."
+                  className="border-[#F59E0B]/30 focus-within:border-[#F59E0B] focus-within:ring-[#F59E0B]"
+                />
+              </div>
             </div>
             <div className="mt-4 flex gap-2">
               <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addFaq}>{editingFaqIndex !== null ? "Update FAQ" : "Add FAQ"}</Button>
@@ -788,5 +831,6 @@ export default function ProductEditPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  </div>
+)
 }
