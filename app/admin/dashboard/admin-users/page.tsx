@@ -250,15 +250,26 @@ export default function AdminUsersPage() {
     }
   }
 
+  if (isLoading || !currentUser) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-20">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4"></div>
+          <p className="text-[#4B5563]">Loading admin portal...</p>
+        </div>
+      </div>
+    )
+  }
+
   // Check if current user is the main admin
   const isMainAdmin = currentUser?.role === "admin"
 
   if (!isMainAdmin) {
     return (
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">Access Denied</h1>
-          <p className="text-[#4B5563]">You do not have permission to access this page.</p>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h1 className="text-2xl font-bold tracking-tight text-red-700">Access Denied</h1>
+          <p className="text-red-600 mt-2">You do not have permission to access this page. This area is restricted to full administrators only.</p>
         </div>
       </div>
     )
@@ -288,17 +299,6 @@ export default function AdminUsersPage() {
       default:
         return "bg-gray-100 text-gray-800"
     }
-  }
-
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4"></div>
-          <p className="text-[#4B5563]">Loading admin users...</p>
-        </div>
-      </div>
-    )
   }
 
   return (

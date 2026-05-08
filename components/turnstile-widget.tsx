@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
+import Script from "next/script"
 
 declare global {
   interface Window {
@@ -26,47 +27,42 @@ interface TurnstileWidgetProps {
 
 export function TurnstileWidget({ onToken }: TurnstileWidgetProps) {
   const ref = useRef<HTMLDivElement | null>(null)
-  const [widgetId, setWidgetId] = useState<string | null>(null)
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
-  useEffect(() => {
-    if (!siteKey || !ref.current) return
-
-    const scriptId = "cf-turnstile-script"
-    const onReady = () => {
-      if (!window.turnstile || !ref.current) return
-      const id = window.turnstile.render(ref.current, {
+  const renderWidget = () => {
+    if (typeof window !== "undefined" && window.turnstile && ref.current && siteKey) {
+      // Clear container before rendering to avoid duplicate widgets on re-mount
+      ref.current.innerHTML = ""
+      window.turnstile.render(ref.current, {
         sitekey: siteKey,
         callback: (token: string) => onToken(token),
         "expired-callback": () => onToken(""),
         "error-callback": () => onToken(""),
         theme: "auto",
       })
-      setWidgetId(id)
     }
+  }
 
-    if (!document.getElementById(scriptId)) {
-      const script = document.createElement("script")
-      script.id = scriptId
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-      script.async = true
-      script.defer = true
-      script.onload = onReady
-      document.head.appendChild(script)
-    } else {
-      onReady()
+  // Handle re-mounts if the script is already loaded
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.turnstile) {
+      renderWidget()
     }
-  }, [onToken, siteKey])
+  }, [siteKey])
 
   if (!siteKey) return null
 
   return (
     <div className="w-full min-h-[65px] flex justify-center items-center overflow-hidden">
-      <div 
-        ref={ref} 
+      <Script
+        src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+        strategy="lazyOnload"
+        onLoad={renderWidget}
+      />
+      <div
+        ref={ref}
         className="transform scale-[0.85] origin-center sm:scale-100 transition-transform duration-200"
       />
     </div>
   )
 }
-

@@ -291,65 +291,113 @@ export default function NotificationsPage() {
       <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
         <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
           <CardTitle className="text-[#1F2937]">Notification History</CardTitle>
-          <CardDescription className="text-[#92400E]">Recent notifications sent to users</CardDescription>
+          <CardDescription className="text-[#92400E]">Click on a recipient to view their notification history</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
+          {notifications.length === 0 ? (
+            <div className="h-24 flex items-center justify-center text-[#4B5563]">
+              No notifications sent yet.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Process Broadcasts first */}
+              {(() => {
+                const broadcasts = notifications.filter(n => !n.user_id)
+                if (broadcasts.length === 0) return null
+                return <CollapsibleGroup title="Broadcast Messages" subtitle="All users" count={broadcasts.length} icon={<Users className="h-4 w-4" />} color="blue" items={broadcasts} deleteFn={deleteNotification} getTypeColor={getTypeColor} />
+              })()}
+
+              {/* Grouped User Notifications */}
+              {Array.from(new Set(notifications.filter(n => n.user_id).map(n => n.user_id))).map(userId => {
+                const userNotifications = notifications.filter(n => n.user_id === userId)
+                const user = userNotifications[0].users
+                return (
+                  <CollapsibleGroup 
+                    key={userId}
+                    title={user?.name || "Unknown User"} 
+                    subtitle={user?.email || "No email"} 
+                    count={userNotifications.length} 
+                    icon={<Users className="h-4 w-4" />} 
+                    color="purple" 
+                    items={userNotifications} 
+                    deleteFn={deleteNotification} 
+                    getTypeColor={getTypeColor} 
+                  />
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function CollapsibleGroup({ title, subtitle, count, icon, color, items, deleteFn, getTypeColor }: any) {
+  const [isOpen, setIsOpen] = useState(false)
+  const colorClasses: any = {
+    blue: "bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100",
+    purple: "bg-purple-50 border-purple-200 text-purple-600 hover:bg-purple-100"
+  }
+
+  return (
+    <div className={`border rounded-xl overflow-hidden transition-all duration-200 ${isOpen ? 'ring-1 ring-[#F59E0B]' : ''}`}>
+      <button 
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center gap-4 p-4 text-left bg-white hover:bg-gray-50 transition-colors"
+      >
+        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
+          {icon}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-[#1F2937] truncate">{title}</h3>
+          <p className="text-xs text-[#4B5563] truncate">{subtitle}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge className={`${color === 'blue' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'} border-none`}>
+            {count}
+          </Badge>
+          <div className={`transform transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </button>
+      
+      {isOpen && (
+        <div className="bg-[#FDFDFD] border-t border-gray-100 animate-in slide-in-from-top-2 duration-200">
           <Table>
-            <TableHeader className="bg-white">
-              <TableRow>
-                <TableHead className="text-[#1F2937] font-medium">Title</TableHead>
-                <TableHead className="text-[#1F2937] font-medium">Type</TableHead>
-                <TableHead className="text-[#1F2937] font-medium">Recipient</TableHead>
-                <TableHead className="text-[#1F2937] font-medium">Date</TableHead>
-                <TableHead className="text-right text-[#1F2937] font-medium">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
             <TableBody>
-              {notifications.map((notification) => (
-                <TableRow key={notification.id} className="hover:bg-[#FEF7E0]/50">
-                  <TableCell className="font-medium text-[#1F2937]">{notification.title}</TableCell>
-                  <TableCell>
-                    <Badge className={getTypeColor(notification.type)}>{notification.type}</Badge>
+              {items.map((n: any) => (
+                <TableRow key={n.id} className="hover:bg-gray-50 border-gray-100">
+                  <TableCell className="w-[180px] font-medium text-[#1F2937] pl-6">{n.title}</TableCell>
+                  <TableCell className="w-[100px]">
+                    <Badge className={`${getTypeColor(n.type)} border-none text-[10px]`}>{n.type}</Badge>
                   </TableCell>
-                  <TableCell className="text-[#4B5563]">
-                    {notification.user_id ? (
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        {notification.users?.name || "Unknown User"}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        All Users
-                      </div>
-                    )}
+                  <TableCell className="text-[#4B5563] text-sm py-3">{n.message}</TableCell>
+                  <TableCell className="w-[120px] text-[#4B5563] text-xs">
+                    {new Date(n.created_at).toLocaleDateString()}
                   </TableCell>
-                  <TableCell className="text-[#4B5563]">
-                    {new Date(notification.created_at).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right w-[60px] pr-6">
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteNotification(notification.id)}
-                      className="text-[#EF4444] border-[#EF4444]/20 hover:bg-[#EF4444]/10"
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteFn(n.id)
+                      }}
+                      className="text-red-400 hover:text-red-600 hover:bg-red-50"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
               ))}
-              {notifications.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-[#4B5563]">
-                    No notifications sent yet.
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
   )
 }
