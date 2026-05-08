@@ -18,12 +18,12 @@ export async function GET(request: Request) {
         .eq("id", session.user.id)
         .single()
 
-      if (!existingUser) {
+      if (!existingUser && session.user.email) {
         // Create user in the public.users table
         await supabase.from("users").insert({
           id: session.user.id,
           email: session.user.email,
-          name: session.user.user_metadata.full_name || session.user.email?.split("@")[0] || "User",
+          name: session.user.user_metadata.full_name || session.user.email.split("@")[0] || "User",
         })
       }
     }
