@@ -172,7 +172,7 @@ export default function SignUpPage() {
                     className="h-12 bg-white/10 border-[#4a2a5f] text-white placeholder:text-white/30 focus:ring-[#FFD700] focus:border-[#FFD700] rounded-xl"
                   />
                 </div>
-                <div className={authMode === "signup" ? "grid grid-cols-2 gap-3" : "space-y-2"}>
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="password" className="text-white/80 ml-1">Password</Label>
                     <Input
@@ -187,13 +187,13 @@ export default function SignUpPage() {
                   </div>
                   {authMode === "signup" && (
                     <div className="space-y-2">
-                      <Label htmlFor="confirm" className="text-white/80 ml-1">Confirm</Label>
+                      <Label htmlFor="confirm" className="text-white/80 ml-1">Confirm Password</Label>
                       <Input
                         id="confirm"
                         type="password"
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        placeholder="Confirm"
+                        placeholder="Confirm Password"
                         required
                         className="h-12 bg-white/10 border-[#4a2a5f] text-white placeholder:text-white/30 focus:ring-[#FFD700] focus:border-[#FFD700] rounded-xl"
                       />

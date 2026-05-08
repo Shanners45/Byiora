@@ -13,7 +13,7 @@ function getLimiter() {
   const redis = new Redis({ url, token })
   limiter = new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(20, "1 m"),
+    limiter: Ratelimit.slidingWindow(100, "1 m"),
     analytics: true,
     prefix: "byiora:admin",
   })

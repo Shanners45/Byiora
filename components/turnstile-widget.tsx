@@ -61,8 +61,11 @@ export function TurnstileWidget({ onToken }: TurnstileWidgetProps) {
   if (!siteKey) return null
 
   return (
-    <div className="w-full min-h-[65px]">
-      <div ref={ref} />
+    <div className="w-full min-h-[65px] flex justify-center items-center overflow-hidden">
+      <div 
+        ref={ref} 
+        className="transform scale-[0.85] origin-center sm:scale-100 transition-transform duration-200"
+      />
     </div>
   )
 }

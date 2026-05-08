@@ -60,7 +60,12 @@ export async function updateSession(request: NextRequest) {
 
   const url = request.nextUrl.clone()
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
-  const isApiRequest = request.headers.get("accept")?.includes("application/json") || url.pathname.includes("/api/")
+  const isNextAction = request.headers.has("next-action")
+  const isNextDataRequest = url.pathname.includes("/_next/data/")
+  const isApiRequest = request.headers.get("accept")?.includes("application/json") || 
+                     url.pathname.includes("/api/") || 
+                     isNextAction || 
+                     isNextDataRequest
 
   // 1. Shield: Strict IP-based limit for admin login
   if (url.pathname === "/admin/login") {

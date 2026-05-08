@@ -115,12 +115,7 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="text-brand-charcoal hover:bg-brand-sky-blue/10">
-              <Bell className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" className="hidden md:flex text-brand-charcoal hover:bg-brand-sky-blue/10">
-              <User className="h-5 w-5" />
-            </Button>
+            <div className="bg-brand-sky-blue/20 animate-pulse w-24 h-8 rounded-full"></div>
           </div>
         </div>
       </header>
