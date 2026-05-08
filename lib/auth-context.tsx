@@ -32,17 +32,18 @@ interface AuthContextType {
   user: User | null
   transactions: Transaction[]
   isLoggedIn: boolean
-  login: (email: string, password: string) => Promise<boolean>
-  signup: (email: string, password: string, name: string) => Promise<boolean>
+  login: (email: string, password: string, captchaToken: string) => Promise<boolean>
+  signup: (email: string, password: string, name: string, captchaToken: string) => Promise<boolean>
+  loginWithGoogle: () => Promise<boolean>
   logout: () => void
   updateProfile: (name: string) => Promise<boolean>
   addTransaction: (
     transaction: Omit<Transaction, "id" | "date" | "transactionId"> & {
       productId?: string
+      productCategory?: string
       guestData?: any
     },
   ) => Promise<string>
-  updateTransactionStatus: (transactionId: string, status: Transaction["status"]) => Promise<void>
   isLoading: boolean
 }
 
@@ -126,9 +127,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string, captchaToken: string): Promise<boolean> => {
     try {
-      const result = await loginWithPassword(email, password, "/")
+      const result = await loginWithPassword(email, password, "/", captchaToken)
       if (result.error || !result.data?.user) {
         toast.error(result.error || "Invalid credentials")
         return false
@@ -162,9 +163,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signup = async (email: string, password: string, name: string): Promise<boolean> => {
+  const signup = async (email: string, password: string, name: string, captchaToken: string): Promise<boolean> => {
     try {
-      const result = await signupWithPassword(email, password, name)
+      const result = await signupWithPassword(email, password, name, captchaToken)
 
       if (result.error) {
         toast.error(result.error || "Failed to create account. Please try again.");
@@ -172,13 +173,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // After signup, we do login
-      return await login(email, password)
+      return await login(email, password, captchaToken)
     } catch (error) {
       console.error("Signup error:", error);
       toast.error("Failed to create account. Please try again.");
       return false;
     }
   };
+
+  const loginWithGoogle = async (): Promise<boolean> => {
+    try {
+      const supabase = createClient()
+      const origin =
+        typeof window !== "undefined" ? window.location.origin : process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${origin}/auth/callback?next=/`,
+        },
+      })
+      if (error) {
+        toast.error(error.message)
+        return false
+      }
+      return true
+    } catch (error) {
+      console.error("Google login error:", error)
+      toast.error("Google login failed.")
+      return false
+    }
+  }
 
   const updateProfile = async (name: string): Promise<boolean> => {
     if (!user || !name || name.trim().length === 0) return false
@@ -254,27 +278,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const updateTransactionStatus = async (transactionId: string, status: Transaction["status"]): Promise<void> => {
-    try {
-      const supabase = createClient()
-      const { error } = await supabase.from("transactions").update({ status }).eq("transaction_id", transactionId)
-
-      if (error) {
-        console.error("Error updating transaction status:", error)
-        throw new Error("Failed to update transaction status")
-      }
-
-      setTransactions((prev) =>
-        prev.map((transaction) =>
-          transaction.transactionId === transactionId ? { ...transaction, status } : transaction,
-        ),
-      )
-    } catch (error) {
-      console.error("Update transaction status error:", error)
-      throw error
-    }
-  }
-
   return (
     <AuthContext.Provider
       value={{
@@ -283,10 +286,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoggedIn: !!user,
         login,
         signup,
+        loginWithGoogle,
         logout,
         updateProfile,
         addTransaction,
-        updateTransactionStatus,
         isLoading,
       }}
     >

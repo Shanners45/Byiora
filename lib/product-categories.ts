@@ -9,9 +9,9 @@ export interface Product {
   isNew?: boolean
   hasUpdate?: boolean
   isActive?: boolean
-  description?: string
-  denom_icon_url?: string
-  ribbon_text?: string
+  description?: string | null
+  denom_icon_url?: string | null
+  ribbon_text?: string | null
   denominations?: Array<{
     price: string
     label: string

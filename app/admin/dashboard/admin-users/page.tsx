@@ -32,6 +32,7 @@ import { Trash2, UserPlus, UserX, UserCheck, KeyRound } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { deleteAdminUserAction } from "@/app/actions/admin"
 import { promoteUserAction, addAdminUserAction, toggleAdminStatusAction, getAdminUsersAction, resetAdminPasswordAction } from "@/app/actions/admin-users"
+import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
 
 interface AdminUser {
   id: string
@@ -54,7 +55,7 @@ export default function AdminUsersPage() {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
   const [regularUsers, setRegularUsers] = useState<RegularUser[]>([])
   const [eligibleUsers, setEligibleUsers] = useState<RegularUser[]>([])
-  const [currentUser, setCurrentUser] = useState<{ name: string; email: string; role: string } | null>(null)
+  const [currentUser, setCurrentUser] = useState<Pick<AdminSession, "name" | "email" | "role"> | null>(null)
   const [newAdminName, setNewAdminName] = useState("")
   const [newAdminEmail, setNewAdminEmail] = useState("")
   const [newAdminPassword, setNewAdminPassword] = useState("")
@@ -67,23 +68,14 @@ export default function AdminUsersPage() {
   const [promoteUserRole, setPromoteUserRole] = useState<"sub_admin" | "order_management">("sub_admin")
 
   useEffect(() => {
-    // Get current user from both possible storage locations
-    const adminUserJson = localStorage.getItem("admin_user")
-    const sessionJson = localStorage.getItem("byiora_admin_session")
-
-    if (adminUserJson) {
+    ;(async () => {
       try {
-        setCurrentUser(JSON.parse(adminUserJson))
+        const session = await getAdminSessionAction()
+        if (session.success) setCurrentUser({ name: session.data.name, email: session.data.email, role: session.data.role })
       } catch (e) {
-        console.error("Failed to parse admin_user", e)
+        console.error("Failed to load admin session", e)
       }
-    } else if (sessionJson) {
-      try {
-        setCurrentUser(JSON.parse(sessionJson))
-      } catch (e) {
-        console.error("Failed to parse admin session", e)
-      }
-    }
+    })()
 
     // Load admin users and regular users from Supabase
     loadAdminUsers()

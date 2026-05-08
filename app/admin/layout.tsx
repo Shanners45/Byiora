@@ -1,5 +1,4 @@
 import type React from "react"
-import { Toaster } from "sonner"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
@@ -18,7 +17,6 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen bg-gray-100">
       {children}
-      <Toaster position="top-right" richColors />
     </div>
   )
 }

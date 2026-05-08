@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
+import { checkAdminRateLimit } from "@/lib/upstash-rate-limit"
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -58,6 +59,23 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const url = request.nextUrl.clone()
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+
+  if (url.pathname.startsWith("/admin")) {
+    const limit = await checkAdminRateLimit(`admin-path:${ip}`)
+    if (!limit.success) {
+      url.pathname = "/admin/login"
+      url.searchParams.set("error", "rate_limited")
+      return NextResponse.redirect(url)
+    }
+  }
+
+  const segments = url.pathname.split("/").filter(Boolean)
+  const productCategories = new Set(["digital-goods", "topup", "games", "direct-login"])
+  if (segments.length === 2 && productCategories.has(segments[0])) {
+    url.pathname = `/en-np/${segments[1]}`
+    return NextResponse.redirect(url, 308)
+  }
   
   // Edge Protection for Admin Dashboard Routes
   if (url.pathname.startsWith("/admin/dashboard")) {

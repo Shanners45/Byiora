@@ -281,7 +281,10 @@ export default function RevenuePage() {
                         />
                         <Tooltip
                           contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
-                          formatter={(value: number) => [`Rs. ${value.toLocaleString()}`, 'Revenue']}
+                          formatter={(value) => {
+                            const n = typeof value === "number" ? value : Number(value ?? 0)
+                            return [`Rs. ${n.toLocaleString()}`, 'Revenue']
+                          }}
                           labelStyle={{ fontWeight: 'bold', color: '#1F2937', marginBottom: '4px' }}
                         />
                         <Area
@@ -332,7 +335,10 @@ export default function RevenuePage() {
                             ))}
                           </Pie>
                           <Tooltip
-                            formatter={(value: number) => [`Rs. ${value.toLocaleString()}`, 'Revenue']}
+                            formatter={(value) => {
+                              const n = typeof value === "number" ? value : Number(value ?? 0)
+                              return [`Rs. ${n.toLocaleString()}`, 'Revenue']
+                            }}
                             contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                           />
                           <Legend verticalAlign="bottom" height={36} iconType="circle" />

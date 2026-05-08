@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Users, ShoppingBag, DollarSign, Package, UserCheck, Bell, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { getDashboardStatsAction } from "@/app/actions/dashboard"
+import { getAdminSessionAction } from "@/app/actions/admin-utils"
 
 interface DashboardStats {
   totalUsers: number
@@ -32,16 +33,14 @@ export default function AdminDashboardPage() {
   const [adminUser, setAdminUser] = useState<{ name: string; role: string } | null>(null)
 
   useEffect(() => {
-    // Get current admin user
-    const storedSession = localStorage.getItem("byiora_admin_session")
-    if (storedSession) {
+    ;(async () => {
       try {
-        const parsedUser = JSON.parse(storedSession)
-        setAdminUser(parsedUser)
+        const session = await getAdminSessionAction()
+        if (session.success) setAdminUser({ name: session.data.name, role: session.data.role })
       } catch (error) {
-        console.error("Error parsing admin session:", error)
+        console.error("Error loading admin session:", error)
       }
-    }
+    })()
 
     loadDashboardStats()
   }, [])

@@ -15,9 +15,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 interface Banner {
   id: string
-  title: string
-  image_url: string
-  link_url: string
+  title: string | null
+  image_url: string | null
+  link_url: string | null
   is_active: boolean
   sort_order: number
 }
@@ -27,7 +27,7 @@ interface Category {
   title: string
   is_active: boolean
   sort_order: number
-  product_ids: string[]
+  product_ids: string[] | null
 }
 
 interface ProductInfo {

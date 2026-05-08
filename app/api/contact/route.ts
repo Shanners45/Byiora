@@ -1,16 +1,32 @@
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { sanitizeHtml } from '@/lib/sanitize'
+import { rateLimit } from '@/lib/rate-limit'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: Request) {
   try {
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+    const rl = rateLimit(`contact:${ip}`, { windowMs: 60_000, max: 5 })
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+      )
+    }
+
     const body = await request.json()
     const { name, email, subject, message } = body
 
     if (!name || !email || !message) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    const emailStr = String(email).trim()
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailStr)) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 })
     }
 
     const sanitizedName = sanitizeHtml(name)

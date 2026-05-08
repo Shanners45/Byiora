@@ -71,7 +71,7 @@ export function Header() {
     setSearchQuery("")
     setShowSearchResults(false)
     setIsMobileSearchOpen(false)
-    router.push(`/${category}/${slug}`)
+    router.push(`/en-np/${slug}`)
   }
 
   if (isLoading) {
@@ -430,7 +430,10 @@ export function Header() {
 
       {/* Sign In dialog for mobile (triggered from sidebar) */}
       <Dialog open={isSignInOpen} onOpenChange={setIsSignInOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] sm:w-full rounded-xl sm:rounded-lg sm:max-w-md bg-brand-white border-gray-200" aria-describedby={undefined}>
+        <DialogContent
+          className="w-[calc(100%-2rem)] sm:w-full rounded-xl sm:rounded-lg sm:max-w-md max-h-[90vh] overflow-y-auto bg-brand-white border-gray-200"
+          aria-describedby={undefined}
+        >
           <DialogTitle className="sr-only">Sign In</DialogTitle>
           <SignInForm onSuccess={() => setIsSignInOpen(false)} />
         </DialogContent>

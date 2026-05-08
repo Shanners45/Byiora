@@ -3,9 +3,22 @@
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
+import { sendWelcomeEmail } from "@/lib/email/resend"
 import { headers } from "next/headers"
+import { verifyTurnstileToken } from "@/lib/captcha"
 
-export async function loginWithPassword(email: string, password: string, redirectPath: string = "/") {
+export async function loginWithPassword(
+  email: string,
+  password: string,
+  redirectPath: string = "/",
+  captchaToken?: string,
+) {
+  if (!captchaToken) return { error: "Captcha verification required." }
+  const h = await headers()
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim()
+  const captchaOk = await verifyTurnstileToken(captchaToken, ip)
+  if (!captchaOk) return { error: "Captcha validation failed. Please try again." }
+
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -22,10 +35,15 @@ export async function loginWithPassword(email: string, password: string, redirec
   return { success: true, data: { user: data.user } }
 }
 
-export async function signupWithPassword(email: string, password: string, name: string) {
+export async function signupWithPassword(email: string, password: string, name: string, captchaToken?: string) {
   if (!name || name.trim().length === 0) {
     return { error: "Full name is required" }
   }
+  if (!captchaToken) return { error: "Captcha verification required." }
+  const h = await headers()
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim()
+  const captchaOk = await verifyTurnstileToken(captchaToken, ip)
+  if (!captchaOk) return { error: "Captcha validation failed. Please try again." }
 
   const supabase = await createClient()
 
@@ -48,21 +66,11 @@ export async function signupWithPassword(email: string, password: string, name: 
       return { error: "Failed to create user profile" }
     }
 
-    // Trigger welcome email in background via API route
+    // Trigger welcome email in background (server-side only)
     try {
-      const headerList = await headers()
-      const host = headerList.get('host')
-      const protocol = host?.includes('localhost') ? 'http' : 'https'
-      const appUrl = `${protocol}://${host}`
-      
-      fetch(`${appUrl}/api/send-welcome`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.toLowerCase().trim(),
-          userName: name.trim(),
-        }),
-      }).catch(e => console.error("Welcome email background error:", e))
+      sendWelcomeEmail({ email: email.toLowerCase().trim(), userName: name.trim() }).catch((e) =>
+        console.error("Welcome email background error:", e),
+      )
     } catch (e) {
       console.error("Welcome email trigger failed:", e)
     }

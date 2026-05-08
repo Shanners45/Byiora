@@ -149,7 +149,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             type: data.type,
             isRead: data.is_read,
             createdAt: data.created_at,
-            userId: data.user_id,
+            userId: data.user_id ?? undefined,
           }
           setNotifications((prev) => [newNotification, ...prev])
 

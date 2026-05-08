@@ -22,7 +22,7 @@ export function RichTextEditor({ id, value, onChange, placeholder, className = "
     // If it already contains HTML tags like <p>, <ul>, <h3>, etc., fix legacy <br> inside <p> blocks
     if (val.includes('<p>') || val.includes('<ul>') || val.includes('<h3>')) {
       // Split <br> tags inside <p> blocks into separate <p> blocks for proper block handling
-      return val.replace(/<p>(.*?)<\/p>/gs, (match, inner) => {
+      return val.replace(/<p>([\s\S]*?)<\/p>/g, (match, inner) => {
         if (inner.includes('<br>') || inner.includes('<br/>') || inner.includes('<br />')) {
           return inner
             .split(/<br\s*\/?>/gi)
@@ -143,11 +143,11 @@ export function RichTextEditor({ id, value, onChange, placeholder, className = "
     
     // Check if the selected content or entire content has <br> tags inside <p> tags
     // that need splitting before list conversion
-    const hasBrInParagraphs = /<p>.*<br>.*<\/p>/s.test(html)
+    const hasBrInParagraphs = /<p>[\s\S]*<br>[\s\S]*<\/p>/.test(html)
     
     if (hasBrInParagraphs) {
       // Split all <br> inside <p> tags into separate <p> blocks first
-      const fixedHtml = html.replace(/<p>(.*?)<\/p>/gs, (match, inner) => {
+      const fixedHtml = html.replace(/<p>([\s\S]*?)<\/p>/g, (match, inner) => {
         if (inner.includes('<br>')) {
           return inner
             .split(/<br\s*\/?>/gi)

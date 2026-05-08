@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
+import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
 
 export default function AdminDashboardLayout({
   children,
@@ -16,7 +17,7 @@ export default function AdminDashboardLayout({
   children: React.ReactNode
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [adminUser, setAdminUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null)
+  const [adminUser, setAdminUser] = useState<AdminSession | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
@@ -26,32 +27,17 @@ export default function AdminDashboardLayout({
     // Auth check with proper loading state using SSR client
     const checkAuth = async () => {
       try {
-        const supabase = createClient()
-        const { data: { user } } = await supabase.auth.getUser()
-
-        if (!user) {
-          router.replace("/admin/login")
-          return
-        }
-
-        const { data: adminData } = await supabase
-          .from("admin_users")
-          .select("id, name, email, role, status")
-          .eq("id", user.id)
-          .single()
-
-        if (!adminData || adminData.status === "blocked") {
+        const session = await getAdminSessionAction()
+        if (!session.success) {
+          const supabase = createClient()
           await supabase.auth.signOut()
           localStorage.clear()
           router.replace("/admin/login")
-          toast.error(adminData?.status === "blocked" ? "Your account has been blocked" : "Session expired")
+          toast.error(session.error === "Blocked" ? "Your account has been blocked" : "Session expired")
           return
         }
 
-        setAdminUser(adminData)
-        // Sync to localStorage for usage in child pages
-        localStorage.setItem("admin_user", JSON.stringify(adminData))
-        localStorage.setItem("byiora_admin_session", JSON.stringify(adminData))
+        setAdminUser(session.data)
       } catch (error) {
         console.error("Session validation error:", error)
         router.replace("/admin/login")

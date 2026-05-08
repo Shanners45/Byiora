@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,43 +9,29 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
 import Image from "next/image"
-import { createClient } from "@/lib/supabase/client"
+import { TurnstileWidget } from "@/components/turnstile-widget"
+import { loginAdminWithPassword } from "@/app/actions/admin-auth"
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const [captchaToken, setCaptchaToken] = useState("")
   const router = useRouter()
 
 
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!captchaToken) {
+      toast.error("Complete captcha verification first.")
+      return
+    }
     setIsLoading(true)
     try {
-      // 1. Use Server Action for login to enforce HTTP-only secure cookies
-      const { loginWithPassword } = await import("@/app/actions/auth")
-      const result = await loginWithPassword(email, password, "/admin/dashboard")
-
-      if (result.error || !result.data?.user) {
+      const result = await loginAdminWithPassword(email, password, captchaToken)
+      if (result.error) {
         toast.error(result.error || "Invalid credentials")
-        setIsLoading(false)
-        return
-      }
-
-      // 2. Check admin_users table for UID and role using SSR browser client
-      const supabase = createClient()
-      const { data: adminUser, error: adminError } = await supabase
-        .from("admin_users")
-        .select("*")
-        .eq("id", result.data.user.id)
-        .eq("status", "active")
-        .single()
-
-      if (adminError || !adminUser) {
-        toast.error("Not an admin user or inactive")
-        await supabase.auth.signOut()
         setIsLoading(false)
         return
       }
@@ -121,6 +107,7 @@ export default function AdminLogin() {
                   disabled={isLoading}
                 />
               </div>
+              <TurnstileWidget onToken={setCaptchaToken} />
             </CardContent>
             <CardFooter>
               <Button

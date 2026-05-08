@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { createClient } from "@/lib/supabase/server"
 import { sanitizeHtml } from '@/lib/sanitize'
+import { getAdminSessionAction } from "@/app/actions/admin-utils"
+import { rateLimit } from "@/lib/rate-limit"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -12,6 +14,15 @@ export async function POST(request: Request) {
 
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+    const rl = rateLimit(`send-code:${ip}:${user.id}`, { windowMs: 60_000, max: 20 })
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429, headers: { "Retry-After": String(rl.retryAfterSeconds) } },
+      )
     }
 
     const body = await request.json()
@@ -30,10 +41,16 @@ export async function POST(request: Request) {
     }
 
     if (user.email !== email) {
-      const { data: adminUser } = await supabase.from('admin_users').select('id').eq('id', user.id).single()
-      if (!adminUser) {
+      const session = await getAdminSessionAction()
+      if (!session.success) {
         return NextResponse.json({ error: "Forbidden: You cannot send emails to other users." }, { status: 403 })
       }
+    }
+
+    const emailStr = String(email).trim().toLowerCase()
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(emailStr)) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 })
     }
 
     const emailSubject = subject || `Your ${productName} from Byiora`
@@ -90,7 +107,7 @@ export async function POST(request: Request) {
     const data = await resend.emails.send({
       from: 'Byiora <order-status@byiora.store>',
       replyTo: 'support@byiora.store',
-      to: [email],
+      to: [emailStr],
       subject: emailSubject,
       html: htmlContent,
     })

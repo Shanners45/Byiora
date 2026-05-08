@@ -37,7 +37,7 @@ export function HomeContent({ categories, banners }: HomeContentProps) {
 
   const handleGiftCardClick = (card: any) => {
     if (card.category && card.slug) {
-      router.push(`/${card.category}/${card.slug}`)
+      router.push(`/en-np/${card.slug}`)
     } else {
       router.push(`/gift-card/${card.id}`)
     }

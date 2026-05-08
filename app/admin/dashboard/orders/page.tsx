@@ -16,6 +16,7 @@ import { toast } from "sonner"
 import { updateTransactionStatusAction, sendGiftcardCodeAction, insertNotificationAction } from "@/app/actions/orders"
 import { getAllTransactionsAction } from "@/app/actions/dashboard"
 import { decryptCheckoutData, clearCheckoutData } from "@/app/actions/checkout-encryption"
+import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
 
 interface Transaction {
   id: string
@@ -110,7 +111,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [adminUser, setAdminUser] = useState<{ role: string } | null>(null)
+  const [adminUser, setAdminUser] = useState<Pick<AdminSession, "role"> | null>(null)
   const [giftcardCodes, setGiftcardCodes] = useState<Record<string, string>>({})
   const [sendingCodeIds, setSendingCodeIds] = useState<Record<string, boolean>>({})
   // Remarks dialog state
@@ -121,15 +122,14 @@ export default function OrdersPage() {
   const itemsPerPage = 10
 
   useEffect(() => {
-    const storedSession = localStorage.getItem("byiora_admin_session")
-    if (storedSession) {
+    ;(async () => {
       try {
-        const parsedUser = JSON.parse(storedSession)
-        setAdminUser(parsedUser)
+        const session = await getAdminSessionAction()
+        if (session.success) setAdminUser({ role: session.data.role })
       } catch (error) {
-        console.error("Error parsing admin session:", error)
+        console.error("Error loading admin session:", error)
       }
-    }
+    })()
   }, [])
 
   const loadTransactions = async () => {

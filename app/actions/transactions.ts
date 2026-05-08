@@ -1,6 +1,7 @@
 "use server"
 
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
+import { sendOrderPlacedEmail } from "@/lib/email/resend"
 
 interface TransactionData {
   product: string
@@ -32,7 +33,9 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       .eq("id", productId)
       .single()
       
-    if (productError || !productData) {
+    let denominations = productData?.denominations
+
+    if (productError || !denominations) {
       // Fallback to slug search if id lookup fails
       const { data: slugProduct, error: slugError } = await serviceSupabase
         .from("products")
@@ -43,11 +46,11 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       if (slugError || !slugProduct) {
         return { success: false, error: "Product not found or unavailable." }
       }
-      productData.denominations = slugProduct.denominations
+      denominations = slugProduct.denominations
     }
     
     // Find matching denomination and set verified price
-    const matchedDenom = productData.denominations?.find(
+    const matchedDenom = denominations?.find(
       (d: any) => d.label === transactionData.amount
     )
     
@@ -108,6 +111,20 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     if (error) {
       console.error("Error adding transaction:", error)
       return { success: false, error: error.message || error.code || "Failed to add transaction" }
+    }
+
+    // Send order-placed email (non-blocking)
+    try {
+      sendOrderPlacedEmail({
+        email: transactionData.email,
+        productName: transactionData.product,
+        denomination: transactionData.amount,
+        transactionId,
+        price: verifiedPrice,
+        paymentMethod: transactionData.paymentMethod,
+      }).catch((e) => console.error("Order placed email error (non-blocking):", e))
+    } catch (e) {
+      console.error("Order placed email trigger failed (non-blocking):", e)
     }
 
     // Send Discord Webhook Notification

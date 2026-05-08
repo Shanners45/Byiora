@@ -14,20 +14,22 @@ import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { Save, User, Lock, QrCode, CreditCard, Upload, Plus, Pencil, Trash2, X, Check } from "lucide-react"
 import Image from "next/image"
+import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
+import { createPaymentMethodAction, deletePaymentMethodAction, getPaymentMethodsAction, updatePaymentMethodAction, type PaymentMethodRow } from "@/app/actions/payment-methods"
 
 interface PaymentMethod {
   id: string
   name: string
-  logo_url: string
-  qr_url: string
-  instructions: string
+  logo_url: string | null
+  qr_url: string | null
+  instructions: string | null
   is_enabled: boolean
   sort_order: number
 }
 
 export default function AdminSettingsPage() {
   const supabase = createClient()
-  const [adminUser, setAdminUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null)
+  const [adminUser, setAdminUser] = useState<AdminSession | null>(null)
   const [name, setName] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -53,44 +55,10 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     const fetchAdminUser = async () => {
-      // 1. Initial load from localStorage for immediate UI display
-      const adminUserJson = localStorage.getItem("admin_user")
-      const sessionJson = localStorage.getItem("byiora_admin_session")
-
-      if (adminUserJson) {
-        try {
-          const parsedUser = JSON.parse(adminUserJson)
-          setAdminUser(parsedUser)
-          setName(parsedUser.name)
-        } catch (e) {
-          console.error("Failed to parse admin_user", e)
-        }
-      } else if (sessionJson) {
-        try {
-          const parsedUser = JSON.parse(sessionJson)
-          setAdminUser(parsedUser)
-          setName(parsedUser.name)
-        } catch (e) {
-          console.error("Failed to parse admin session", e)
-        }
-      }
-
-      // 2. Always fetch fresh data from Supabase to ensure roles/names are up-to-date
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: adminData, error } = await supabase
-          .from("admin_users")
-          .select("id, name, email, role")
-          .eq("id", user.id)
-          .single()
-
-        if (adminData && !error) {
-          setAdminUser(adminData)
-          setName(adminData.name)
-          // Sync to localStorage so other components stay updated
-          localStorage.setItem("admin_user", JSON.stringify(adminData))
-          localStorage.setItem("byiora_admin_session", JSON.stringify(adminData))
-        }
+      const session = await getAdminSessionAction()
+      if (session.success) {
+        setAdminUser(session.data)
+        setName(session.data.name)
       }
       
       loadPaymentMethods()
@@ -102,16 +70,11 @@ export default function AdminSettingsPage() {
   const loadPaymentMethods = async () => {
     setIsLoadingPayments(true)
     try {
-      const { data, error } = await supabase
-        .from("payment_methods")
-        .select("*")
-        .order("sort_order", { ascending: true })
-
-      if (error) {
-        console.error("Error loading payment methods:", error)
-        toast.error("Failed to load payment methods")
+      const result = await getPaymentMethodsAction()
+      if (result.error) {
+        toast.error(result.error)
       } else {
-        setPaymentMethods(data || [])
+        setPaymentMethods((result.data || []) as PaymentMethod[])
       }
     } catch (error) {
       console.error("Error loading payment methods:", error)
@@ -188,15 +151,8 @@ export default function AdminSettingsPage() {
   }
 
   const handleToggleEnabled = async (method: PaymentMethod) => {
-    const { error } = await supabase
-      .from("payment_methods")
-      .update({ is_enabled: !method.is_enabled })
-      .eq("id", method.id)
-
-    if (error) {
-      toast.error("Failed to update payment method")
-      return
-    }
+    const result = await updatePaymentMethodAction(method.id, { is_enabled: !method.is_enabled })
+    if (result.error) return toast.error("Failed to update payment method")
 
     setPaymentMethods((prev) =>
       prev.map((m) => (m.id === method.id ? { ...m, is_enabled: !m.is_enabled } : m))
@@ -217,20 +173,13 @@ export default function AdminSettingsPage() {
   const handleSaveEdit = async () => {
     if (!editingId) return
 
-    const { error } = await supabase
-      .from("payment_methods")
-      .update({
-        name: editForm.name,
-        logo_url: editForm.logo_url,
-        qr_url: editForm.qr_url,
-        instructions: editForm.instructions,
-      })
-      .eq("id", editingId)
-
-    if (error) {
-      toast.error("Failed to save changes")
-      return
-    }
+    const result = await updatePaymentMethodAction(editingId, {
+      name: editForm.name,
+      logo_url: editForm.logo_url ?? null,
+      qr_url: editForm.qr_url ?? null,
+      instructions: editForm.instructions ?? null,
+    })
+    if (result.error) return toast.error("Failed to save changes")
 
     setPaymentMethods((prev) =>
       prev.map((m) => (m.id === editingId ? { ...m, ...editForm } : m))
@@ -242,13 +191,8 @@ export default function AdminSettingsPage() {
 
   const handleDelete = async (method: PaymentMethod) => {
     if (!confirm(`Delete "${method.name}"? This cannot be undone.`)) return
-
-    const { error } = await supabase.from("payment_methods").delete().eq("id", method.id)
-
-    if (error) {
-      toast.error("Failed to delete payment method")
-      return
-    }
+    const result = await deletePaymentMethodAction(method.id)
+    if (result.error) return toast.error("Failed to delete payment method")
 
     setPaymentMethods((prev) => prev.filter((m) => m.id !== method.id))
     toast.success(`${method.name} deleted`)
@@ -259,28 +203,17 @@ export default function AdminSettingsPage() {
       toast.error("Please enter a payment method name")
       return
     }
+    const result = await createPaymentMethodAction({
+      name: newMethod.name.trim(),
+      logo_url: newMethod.logo_url || null,
+      qr_url: newMethod.qr_url || null,
+      instructions: newMethod.instructions || null,
+      is_enabled: true,
+      sort_order: paymentMethods.length + 1,
+    })
+    if (result.error) return toast.error("Failed to add payment method")
 
-    const { data, error } = await supabase
-      .from("payment_methods")
-      .insert([
-        {
-          name: newMethod.name.trim(),
-          logo_url: newMethod.logo_url,
-          qr_url: newMethod.qr_url,
-          instructions: newMethod.instructions,
-          is_enabled: true,
-          sort_order: paymentMethods.length + 1,
-        },
-      ])
-      .select()
-      .single()
-
-    if (error) {
-      toast.error("Failed to add payment method")
-      return
-    }
-
-    setPaymentMethods((prev) => [...prev, data])
+    setPaymentMethods((prev) => [...prev, result.data as unknown as PaymentMethod])
     setNewMethod({
       name: "",
       logo_url: "",

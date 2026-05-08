@@ -129,7 +129,7 @@ export default function CategoryPage() {
             {products.map((product) => (
               <Link
                 key={product.id}
-                href={`/${product.category}/${product.slug}`}
+                href={`/en-np/${product.slug}`}
                 className="group"
               >
                 <div className="relative bg-gray-800 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-xl overflow-hidden h-full">

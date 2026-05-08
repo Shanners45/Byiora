@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
+import type { Product } from "@/lib/product-categories"
 
 const BASE_URL = "https://www.byiora.store"
 
@@ -15,37 +16,41 @@ function stripHtml(html: string): string {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { category, slug } = await params
+  const { slug } = await params
   const supabase = await createClient()
 
   try {
-    const { data: product, error } = await supabase
+    // NOTE: Supabase TS inference can degrade to `never` if generated DB types
+    // are missing/partial. We type the result explicitly for correctness.
+    const { data: product, error } = await (supabase as any)
       .from("products")
-      .select("name, description, logo, category, slug, denominations")
+      .select("*")
       .eq("slug", slug)
       .eq("is_active", true)
       .single()
 
-    if (error || !product) {
+    const typedProduct = product as Product | null
+
+    if (error || !typedProduct) {
       return {
         title: "Product Not Found",
         description: "The product you are looking for does not exist.",
       }
     }
 
-    const categoryLabel = product.category === "topup" ? "Top-Up" : "Gift Card"
-    const title = `Buy ${product.name} in Nepal | Byiora`
+    const categoryLabel = typedProduct.category === "topup" ? "Top-Up" : "Gift Card"
+    const title = `Buy ${typedProduct.name} in Nepal | Byiora`
 
     // Build a rich meta description with pricing info
-    const cleanDesc = product.description ? stripHtml(product.description).slice(0, 120) : ''
-    const priceInfo = product.denominations && product.denominations.length > 0
-      ? ` Starting from Rs. ${product.denominations[0].price}.`
+    const cleanDesc = typedProduct.description ? stripHtml(typedProduct.description).slice(0, 120) : ''
+    const priceInfo = typedProduct.denominations && typedProduct.denominations.length > 0
+      ? ` Starting from Rs. ${typedProduct.denominations[0].price}.`
       : ''
     const description = cleanDesc
       ? `${cleanDesc}${priceInfo} Pay via eSewa, Khalti or Fonepay. Instant delivery in Nepal.`
-      : `Buy ${product.name} ${categoryLabel} instantly in Nepal.${priceInfo} Secure payment with eSewa, Khalti, Fonepay. Fast digital delivery by Byiora.`
+      : `Buy ${typedProduct.name} ${categoryLabel} instantly in Nepal.${priceInfo} Secure payment with eSewa, Khalti, Fonepay. Fast digital delivery by Byiora.`
 
-    const productUrl = `${BASE_URL}/${category}/${slug}`
+    const productUrl = `${BASE_URL}/en-np/${slug}`
 
     return {
       title,
@@ -58,13 +63,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         description: description.slice(0, 160),
         url: productUrl,
         siteName: "Byiora",
-        images: product.logo
+        images: typedProduct.logo
           ? [
             {
-              url: product.logo,
+              url: typedProduct.logo,
               width: 600,
               height: 600,
-              alt: `Buy ${product.name} in Nepal – Byiora`,
+              alt: `Buy ${typedProduct.name} in Nepal – Byiora`,
             },
           ]
           : [],
@@ -82,35 +87,36 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 // Separate async component for JSON-LD — wrapped in Suspense so it doesn't
 // block the layout from rendering {children} immediately.
-async function ProductJsonLd({ category, slug }: { category: string; slug: string }) {
+async function ProductJsonLd({ slug }: { slug: string }) {
   const supabase = await createClient()
 
   try {
-    const { data: product } = await supabase
+    const { data: product } = await (supabase as any)
       .from("products")
-      .select("name, description, logo, category, slug, denominations, faqs")
+      .select("*")
       .eq("slug", slug)
       .eq("is_active", true)
       .single()
 
-    if (!product) return null
+    const typedProduct = product as Product | null
+    if (!typedProduct) return null
 
-    const productUrl = `${BASE_URL}/${category}/${slug}`
-    const cleanDesc = product.description ? stripHtml(product.description).slice(0, 300) : `Buy ${product.name} in Nepal with instant delivery.`
+    const productUrl = `${BASE_URL}/en-np/${slug}`
+    const cleanDesc = typedProduct.description ? stripHtml(typedProduct.description).slice(0, 300) : `Buy ${typedProduct.name} in Nepal with instant delivery.`
 
     const productSchema: any = {
       "@context": "https://schema.org",
       "@type": "Product",
-      name: product.name,
+      name: typedProduct.name,
       description: cleanDesc,
-      image: product.logo || `${BASE_URL}/icon.png`,
+      image: typedProduct.logo || `${BASE_URL}/icon.png`,
       url: productUrl,
       brand: {
         "@type": "Brand",
         name: "Byiora",
       },
-      offers: product.denominations && product.denominations.length > 0
-        ? product.denominations.map((d: any) => ({
+      offers: typedProduct.denominations && typedProduct.denominations.length > 0
+        ? typedProduct.denominations.map((d: any) => ({
           "@type": "Offer",
           price: d.price,
           priceCurrency: "NPR",
@@ -123,11 +129,11 @@ async function ProductJsonLd({ category, slug }: { category: string; slug: strin
         : undefined,
     }
 
-    const faqSchema = product.faqs && product.faqs.length > 0
+    const faqSchema = typedProduct.faqs && typedProduct.faqs.length > 0
       ? {
         "@context": "https://schema.org",
         "@type": "FAQPage",
-        mainEntity: product.faqs.map((faq: any) => ({
+        mainEntity: typedProduct.faqs.map((faq: any) => ({
           "@type": "Question",
           name: faq.question,
           acceptedAnswer: {
@@ -158,7 +164,7 @@ async function ProductJsonLd({ category, slug }: { category: string; slug: strin
 }
 
 export default async function ProductLayout({ params, children }: Props) {
-  const { category, slug } = await params
+  const { slug } = await params
 
   return (
     <>
@@ -166,7 +172,7 @@ export default async function ProductLayout({ params, children }: Props) {
           rendering, so the route transition is instant and loading.tsx
           shows immediately instead of the old page staying visible. */}
       <Suspense fallback={null}>
-        <ProductJsonLd category={category} slug={slug} />
+        <ProductJsonLd slug={slug} />
       </Suspense>
       {children}
     </>

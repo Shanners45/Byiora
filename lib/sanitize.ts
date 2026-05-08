@@ -14,6 +14,31 @@ export function sanitizeHtml(input: string): string {
     allowedAttributes: {
       "*": ["class"],
       "a": ["href", "name", "target", "rel"]
-    }
+    },
+    allowedSchemes: ["http", "https", "mailto"],
+    allowProtocolRelative: false,
+    transformTags: {
+      a: (tagName, attribs) => {
+        const href = attribs.href ? String(attribs.href).trim() : ""
+        const target = attribs.target ? String(attribs.target) : undefined
+
+        const safe: Record<string, string> = { ...attribs }
+        if (href) safe.href = href
+
+        if (target === "_blank") {
+          const rel = new Set(
+            (safe.rel || "")
+              .split(/\s+/)
+              .map((s) => s.trim())
+              .filter(Boolean),
+          )
+          rel.add("noopener")
+          rel.add("noreferrer")
+          safe.rel = Array.from(rel).join(" ")
+        }
+
+        return { tagName, attribs: safe }
+      },
+    },
   })
 }

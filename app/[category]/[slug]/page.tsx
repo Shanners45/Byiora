@@ -32,9 +32,9 @@ import { encryptCheckoutData } from "@/app/actions/checkout-encryption"
 interface PaymentMethod {
   id: string
   name: string
-  logo_url: string
-  qr_url: string
-  instructions: string
+  logo_url: string | null
+  qr_url: string | null
+  instructions: string | null
   is_enabled: boolean
 }
 
@@ -72,7 +72,7 @@ export default function ProductDetailPage() {
   const DESC_LIMIT = 600
   const FAQ_LIMIT = 3
 
-  const categorySlug = params.category as string
+  const categorySlug = (params.category as string | undefined) ?? ""
   const productSlug = params.slug as string
 
   const giftCard = {
@@ -93,7 +93,7 @@ export default function ProductDetailPage() {
         const productData = await getProductBySlug(productSlug)
 
         // Validate that the product's category matches the URL category
-        if (productData && productData.category !== categorySlug) {
+        if (productData && categorySlug && productData.category !== categorySlug) {
           setNotFound(true)
           setProduct(null)
         } else {
@@ -214,26 +214,7 @@ export default function ProductDetailPage() {
         }
       }
 
-      // Send email confirmation using Resend API
-      try {
-        await fetch('/api/send-order-placed', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: email,
-            userName: user?.name || email.split("@")[0],
-            productName: giftCard.name,
-            denomination: selectedDenom?.label || selectedDenomination,
-            transactionId: transactionId,
-            price: selectedDenom?.price || "",
-            paymentMethod: paymentMethodName,
-            orderDate: new Date().toISOString(),
-          })
-        })
-      } catch (emailError) {
-        console.error("Failed to send email:", emailError)
-        // Don't fail the order if email fails
-      }
+      // Order placed email is sent server-side (non-blocking) during transaction creation.
 
       // Simulate payment processing time, then close dialog and show notifications
       setTimeout(async () => {
@@ -291,7 +272,7 @@ export default function ProductDetailPage() {
     offers: giftCard.denominations.map((denom: any) => ({
       "@type": "Offer",
       name: `${product.name} - ${denom.label}`,
-      url: `https://www.byiora.store/${categorySlug}/${productSlug}`,
+      url: `https://www.byiora.store/en-np/${productSlug}`,
       priceCurrency: "NPR",
       price: parseFloat(String(denom.price).replace(/,/g, "")) || 0,
       availability: "https://schema.org/InStock",
@@ -445,10 +426,10 @@ export default function ProductDetailPage() {
                         <div className="w-28 md:w-48 flex-shrink-0">
                           <Select value={selectedServer} onValueChange={setSelectedServer}>
                             <SelectTrigger className="bg-white border-gray-200 text-brand-charcoal focus:ring-[#00BCD4] focus:border-[#00BCD4] h-10 text-sm">
-                              <SelectValue placeholder="Server *" />
+                              <SelectValue placeholder="Server" />
                             </SelectTrigger>
                             <SelectContent className="bg-white border-gray-100 shadow-xl">
-                              {product.servers.map((server) => (
+                              {product.servers.map((server: { id: string; name: string }) => (
                                 <SelectItem key={server.id} value={server.name} className="focus:bg-gray-100 focus:text-brand-charcoal cursor-pointer">
                                   {server.name}
                                 </SelectItem>
