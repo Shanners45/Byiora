@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Upload, Trash2, ImageIcon, Plus, ChevronUp, ChevronDown, Check, X, Layers, Package } from "lucide-react"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { revalidateHomepageAction } from "@/app/actions/customisation"
 
 interface Banner {
   id: string
@@ -120,6 +121,7 @@ export default function CustomisationPage() {
       setBanners(prev => [...prev, data as Banner])
       setNewBanner({ title: "", image_url: "", link_url: "" })
       setShowAddBannerForm(false)
+      revalidateHomepageAction()
       toast.success("Banner added")
     } catch (err: any) {
       toast.error(err.message || "Failed to add banner")
@@ -141,6 +143,7 @@ export default function CustomisationPage() {
       if (error) throw error
       setBanners(prev => prev.map(b => b.id === editingBannerId ? { ...b, ...editBannerForm } : b))
       setEditingBannerId(null)
+      revalidateHomepageAction()
       toast.success("Banner updated")
     } catch (err: any) {
       toast.error(err.message || "Failed to update banner")
@@ -153,6 +156,7 @@ export default function CustomisationPage() {
       const { error } = await supabase.from("banners").delete().eq("id", id)
       if (error) throw error
       setBanners(prev => prev.filter(b => b.id !== id))
+      revalidateHomepageAction()
     } catch (err: any) {
       toast.error(err.message || "Failed to delete banner")
     }
@@ -166,6 +170,7 @@ export default function CustomisationPage() {
         .eq("id", banner.id)
       if (error) throw error
       setBanners(prev => prev.map(b => b.id === banner.id ? { ...b, is_active: !banner.is_active } : b))
+      revalidateHomepageAction()
     } catch (err: any) {
       toast.error(err.message || "Failed to update banner")
     }
@@ -193,6 +198,7 @@ export default function CustomisationPage() {
         supabase.from("banners").update({ sort_order: newBanners[index].sort_order }).eq("id", newBanners[index].id),
         supabase.from("banners").update({ sort_order: newBanners[swapIndex].sort_order }).eq("id", newBanners[swapIndex].id)
       ])
+      revalidateHomepageAction()
       toast.success("Order updated")
     } catch (err: any) {
       toast.error("Failed to reorder banners")
@@ -231,6 +237,7 @@ export default function CustomisationPage() {
       setCategories(prev => [...prev, data as Category])
       setNewCategoryTitle("")
       setShowAddCategoryForm(false)
+      revalidateHomepageAction()
       toast.success("Category added")
     } catch (err: any) {
       toast.error(err.message || "Failed to add category")
@@ -243,6 +250,7 @@ export default function CustomisationPage() {
       const { error } = await supabase.from("homepage_categories").delete().eq("id", id)
       if (error) throw error
       setCategories(prev => prev.filter(c => c.id !== id))
+      revalidateHomepageAction()
     } catch (err: any) {
       toast.error(err.message || "Failed to delete category")
     }
@@ -258,6 +266,7 @@ export default function CustomisationPage() {
       if (error) throw error
       setCategories(prev => prev.map(c => c.id === editingCategoryId ? { ...c, title: editCategoryTitle } : c))
       setEditingCategoryId(null)
+      revalidateHomepageAction()
       toast.success("Category renamed")
     } catch (err: any) {
       toast.error(err.message || "Failed to rename category")
@@ -272,6 +281,7 @@ export default function CustomisationPage() {
         .eq("id", cat.id)
       if (error) throw error
       setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, is_active: !cat.is_active } : c))
+      revalidateHomepageAction()
     } catch (err: any) {
       toast.error(err.message || "Failed to update category")
     }
@@ -291,6 +301,7 @@ export default function CustomisationPage() {
         .eq("id", cat.id)
       if (error) throw error
       setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, product_ids: newProductIds } : c))
+      revalidateHomepageAction()
     } catch (err: any) {
       toast.error(err.message || "Failed to update category")
     }
@@ -318,6 +329,7 @@ export default function CustomisationPage() {
         supabase.from("homepage_categories").update({ sort_order: newCats[index].sort_order }).eq("id", newCats[index].id),
         supabase.from("homepage_categories").update({ sort_order: newCats[swapIndex].sort_order }).eq("id", newCats[swapIndex].id)
       ])
+      revalidateHomepageAction()
       toast.success("Category order updated")
     } catch (err: any) {
       toast.error("Failed to reorder categories")

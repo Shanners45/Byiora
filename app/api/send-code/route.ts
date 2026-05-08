@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     }
 
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
-    const rl = rateLimit(`send-code:${ip}:${user.id}`, { windowMs: 60_000, max: 20 })
+    const rl = await rateLimit(`send-code:${ip}:${user.id}`, { windowMs: 60_000, max: 20 })
     if (!rl.ok) {
       return NextResponse.json(
         { error: "Too many requests. Please try again later." },

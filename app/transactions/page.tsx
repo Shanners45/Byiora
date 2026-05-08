@@ -237,14 +237,14 @@ export default function TransactionsPage() {
         <Header />
         <div className="container mx-auto px-4 py-8">
           <div className="text-center py-12">
-            <Lock className="h-16 w-16 text-brand-light-gray mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-brand-charcoal mb-2">Sign In Required</h3>
-            <p className="text-brand-light-gray mb-6">
+            <Lock className="h-16 w-16 text-white/50 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-white mb-2">Sign In Required</h3>
+            <p className="text-white/70 mb-6">
               Please sign in to view your transaction history.
             </p>
             <Button
               onClick={() => router.push("/")}
-              className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white"
+              className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white rounded-full px-8"
             >
               Go to Home
             </Button>
@@ -256,7 +256,7 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-brand-purple">
       <Header />
 
       <div className="container mx-auto px-4 py-8">
@@ -265,12 +265,12 @@ export default function TransactionsPage() {
             <Button
               variant="ghost"
               onClick={() => router.push("/")}
-              className="text-brand-charcoal hover:bg-brand-sky-blue/10"
+              className="text-white hover:bg-white/10"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back to Home
             </Button>
-            <h1 className="text-3xl font-bold text-brand-charcoal">Transaction History</h1>
+            <h1 className="text-3xl font-bold text-white">Transaction History</h1>
           </div>
 
           <div className="flex items-center gap-4">
@@ -384,15 +384,15 @@ export default function TransactionsPage() {
         {filteredTransactions.length === 0 && (
           <div className="text-center py-12">
             <div className="text-6xl mb-4">📋</div>
-            <h3 className="text-xl font-semibold text-brand-charcoal mb-2">No transactions found</h3>
-            <p className="text-brand-light-gray mb-6">
+            <h3 className="text-xl font-semibold text-white mb-2">No transactions found</h3>
+            <p className="text-white/70 mb-6">
               {filterStatus === "all"
                 ? "You haven't made any purchases yet."
                 : `No ${filterStatus} transactions found.`}
             </p>
             <Button
               onClick={() => router.push("/")}
-              className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white"
+              className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white rounded-full px-8"
             >
               Start Shopping
             </Button>

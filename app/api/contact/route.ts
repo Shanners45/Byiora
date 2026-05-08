@@ -8,7 +8,7 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 export async function POST(request: Request) {
   try {
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
-    const rl = rateLimit(`contact:${ip}`, { windowMs: 60_000, max: 5 })
+    const rl = await rateLimit(`contact:${ip}`, { windowMs: 60_000, max: 5 })
     if (!rl.ok) {
       return NextResponse.json(
         { error: "Too many requests. Please try again later." },

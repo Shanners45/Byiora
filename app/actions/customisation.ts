@@ -183,3 +183,9 @@ export async function reorderCategoriesAction(cat1Id: string, cat1Order: number,
   revalidatePath("/")
   return { success: true }
 }
+export async function revalidateHomepageAction() {
+  if (!(await verifyAdmin())) return { error: "Unauthorized" }
+  revalidatePath("/")
+  revalidatePath("/en-np")
+  return { success: true }
+}
