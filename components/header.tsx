@@ -29,6 +29,19 @@ export function Header() {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false)
   const mobileSearchRef = useRef<HTMLInputElement>(null)
 
+  // Check for ?login=open in URL
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("login") === "open") {
+        setIsSignInOpen(true)
+        // Clean up URL without triggering refresh
+        const newUrl = window.location.pathname
+        window.history.replaceState({}, "", newUrl)
+      }
+    }
+  }, [])
+
   // Auto-focus mobile search input when overlay opens
   useEffect(() => {
     if (isMobileSearchOpen) {
@@ -294,7 +307,7 @@ export function Header() {
                           className="w-full border-brand-sky-blue text-brand-sky-blue hover:bg-brand-sky-blue/10"
                           onClick={() => {
                             setIsMobileSidebarOpen(false)
-                            setIsSignInOpen(true)
+                            router.push("/en-np/sign-up")
                           }}
                         >
                           Create Account
@@ -417,7 +430,7 @@ export function Header() {
               <Button
                 size="sm"
                 className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white font-semibold px-4 py-1.5 h-8 rounded-full text-sm"
-                onClick={() => setIsSignInOpen(true)}
+                onClick={() => router.push("/en-np/sign-up")}
               >
                 Sign Up
               </Button>

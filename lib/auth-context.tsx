@@ -92,6 +92,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initializeAuth()
   }, [])
 
+  // Show welcome toast on successful Google login redirection
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("login") === "success") {
+        toast.success("Welcome back! Sign in successful.")
+        // Clean up URL
+        const newUrl = window.location.pathname
+        window.history.replaceState({}, "", newUrl)
+      }
+    }
+  }, [])
+
   const loadTransactions = async (userId: string) => {
     try {
       const supabase = createClient()

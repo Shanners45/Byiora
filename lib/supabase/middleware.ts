@@ -60,10 +60,36 @@ export async function updateSession(request: NextRequest) {
 
   const url = request.nextUrl.clone()
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+  const isApiRequest = request.headers.get("accept")?.includes("application/json") || url.pathname.includes("/api/")
 
-  if (url.pathname.startsWith("/admin")) {
-    const limit = await checkAdminRateLimit(`admin-path:${ip}`)
+  // 1. Shield: Strict IP-based limit for admin login
+  if (url.pathname === "/admin/login") {
+    const limit = await checkAdminRateLimit(`admin-login:${ip}`)
     if (!limit.success) {
+      if (isApiRequest) {
+        return new NextResponse(JSON.stringify({ error: "Too many login attempts. Please try again later." }), { 
+          status: 429, 
+          headers: { "Content-Type": "application/json" } 
+        })
+      }
+      url.searchParams.set("error", "rate_limited")
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // 2. Throttle: Identity-based limit for authenticated dashboard routes
+  if (url.pathname.startsWith("/admin/dashboard")) {
+    // We already have 'user' from supabase.auth.getUser() above at line 59
+    const identifier = user ? `admin-id:${user.id}` : `admin-guest:${ip}`
+    const limit = await checkAdminRateLimit(identifier)
+    
+    if (!limit.success) {
+      if (isApiRequest) {
+        return new NextResponse(JSON.stringify({ error: "Rate limit exceeded. Please wait a moment." }), { 
+          status: 429, 
+          headers: { "Content-Type": "application/json" } 
+        })
+      }
       url.pathname = "/admin/login"
       url.searchParams.set("error", "rate_limited")
       return NextResponse.redirect(url)

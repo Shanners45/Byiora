@@ -147,13 +147,17 @@ export function SignInForm({ onSuccess }: SignInFormProps) {
           <TabsTrigger
             value="signup"
             className="text-brand-charcoal data-[state=active]:bg-brand-sky-blue data-[state=active]:text-white"
+            onClick={(e) => {
+              e.preventDefault()
+              window.location.href = "/en-np/sign-up"
+            }}
           >
             Sign Up
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="signin" className="space-y-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <TabsContent value="signin" className="space-y-3">
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
               <Label htmlFor="email" className="text-brand-charcoal font-semibold text-base">
                 Email
@@ -186,7 +190,7 @@ export function SignInForm({ onSuccess }: SignInFormProps) {
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white"
+              className="w-full bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white mt-1"
             >
               {isLoading ? "Signing In..." : "Sign In"}
             </Button>
@@ -195,69 +199,73 @@ export function SignInForm({ onSuccess }: SignInFormProps) {
           </form>
         </TabsContent>
 
-        <TabsContent value="signup" className="space-y-4">
-          <form onSubmit={handleSignUp} className="space-y-4">
-            <div>
-              <Label htmlFor="signup-name" className="text-brand-charcoal font-semibold text-base">
-                Full Name
-              </Label>
-              <Input
-                id="signup-name"
-                type="text"
-                value={signUpName}
-                onChange={(e) => setSignUpName(e.target.value)}
-                placeholder="Enter your full name"
-                required
-                className="bg-brand-white border-gray-200 text-brand-charcoal placeholder:text-gray-500 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
-              />
+        <TabsContent value="signup" className="space-y-3">
+          <form onSubmit={handleSignUp} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="signup-name" className="text-brand-charcoal font-semibold text-base">
+                  Full Name
+                </Label>
+                <Input
+                  id="signup-name"
+                  type="text"
+                  value={signUpName}
+                  onChange={(e) => setSignUpName(e.target.value)}
+                  placeholder="Full Name"
+                  required
+                  className="bg-brand-white border-gray-200 text-brand-charcoal placeholder:text-gray-500 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
+                />
+              </div>
+              <div>
+                <Label htmlFor="signup-email" className="text-brand-charcoal font-semibold text-base">
+                  Email
+                </Label>
+                <Input
+                  id="signup-email"
+                  type="email"
+                  value={signUpEmail}
+                  onChange={(e) => setSignUpEmail(e.target.value)}
+                  placeholder="Email"
+                  required
+                  className="bg-brand-white border-gray-200 text-brand-charcoal placeholder:text-gray-500 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
+                />
+              </div>
             </div>
-            <div>
-              <Label htmlFor="signup-email" className="text-brand-charcoal font-semibold text-base">
-                Email
-              </Label>
-              <Input
-                id="signup-email"
-                type="email"
-                value={signUpEmail}
-                onChange={(e) => setSignUpEmail(e.target.value)}
-                placeholder="Enter your email"
-                required
-                className="bg-brand-white border-gray-200 text-brand-charcoal placeholder:text-gray-500 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
-              />
-            </div>
-            <div>
-              <Label htmlFor="signup-password" className="text-brand-charcoal">
-                Password
-              </Label>
-              <Input
-                id="signup-password"
-                type="password"
-                value={signUpPassword}
-                onChange={(e) => setSignUpPassword(e.target.value)}
-                placeholder="Create a password"
-                required
-                className="bg-brand-white border-gray-200 text-brand-charcoal placeholder:text-gray-500 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
-              />
-            </div>
-            <div>
-              <Label htmlFor="confirm-password" className="text-brand-charcoal">
-                Confirm Password
-              </Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm your password"
-                required
-                className="bg-brand-white border-gray-200 text-brand-charcoal placeholder:text-gray-500 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="signup-password" className="text-brand-charcoal">
+                  Password
+                </Label>
+                <Input
+                  id="signup-password"
+                  type="password"
+                  value={signUpPassword}
+                  onChange={(e) => setSignUpPassword(e.target.value)}
+                  placeholder="Password"
+                  required
+                  className="bg-brand-white border-gray-200 text-brand-charcoal placeholder:text-gray-500 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
+                />
+              </div>
+              <div>
+                <Label htmlFor="confirm-password" className="text-brand-charcoal">
+                  Confirm
+                </Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm"
+                  required
+                  className="bg-brand-white border-gray-200 text-brand-charcoal placeholder:text-gray-500 focus:ring-brand-sky-blue focus:border-brand-sky-blue"
+                />
+              </div>
             </div>
             <TurnstileWidget onToken={setSignUpCaptchaToken} />
             <Button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white"
+              className="w-full bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white mt-1"
             >
               {isLoading ? "Creating Account..." : "Sign Up"}
             </Button>
