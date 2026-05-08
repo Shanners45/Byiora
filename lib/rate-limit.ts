@@ -30,7 +30,7 @@ function getOrCreateLimiter(prefix: string, maxRequests: number, windowMs: numbe
 
   const limiter = new Ratelimit({
     redis: r,
-    limiter: Ratelimit.slidingWindow(maxRequests, window),
+    limiter: Ratelimit.slidingWindow(maxRequests, window as any),
     analytics: false,
     prefix: `byiora:api:${prefix}`,
   })
