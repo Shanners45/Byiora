@@ -33,16 +33,30 @@ export async function updateSession(request: NextRequest) {
   const isServerAction = request.headers.has("next-action")
   const isMutation = method !== "GET" || isServerAction
 
+  // ── Admin subdomain detection ───────────────────────────────────────────
+  const host = request.headers.get("host") || ""
+  const isAdminHost = host === "admin.byiora.store" || host === "www.admin.byiora.store"
+
   // ┌──────────────────────────────────────────────────────────────────────────
   // │ QUOTA SAVER: Let all public GET browsing pass WITHOUT touching Upstash.
-  // │ This covers homepage loads, product pages, prefetches, etc.
   // └──────────────────────────────────────────────────────────────────────────
-  const isAdminRoute = pathname.startsWith("/admin")
+  const isAdminRoute = pathname.startsWith("/admin") || isAdminHost
   const isApiRoute = pathname.startsWith("/api")
 
   if (!isMutation && !isAdminRoute && !isApiRoute) {
-    // Pure public GET — skip rate limiting entirely, just refresh Supabase session
     return await refreshSupabaseSession(request)
+  }
+
+  // ── Admin subdomain rewrite ───────────────────────────────────────────
+  if (isAdminHost) {
+    if (pathname === "/") {
+      url.pathname = "/admin/login"
+      return NextResponse.rewrite(url)
+    }
+    if (!pathname.startsWith("/admin")) {
+      url.pathname = `/admin${pathname}`
+      return NextResponse.rewrite(url)
+    }
   }
 
   // ┌──────────────────────────────────────────────────────────────────────────
@@ -83,38 +97,31 @@ export async function updateSession(request: NextRequest) {
 
     // ── Admin Auth Guard — require Supabase user for /admin/dashboard/* ────
     const supabaseResponse = await refreshSupabaseSession(request)
-    if (pathname.startsWith("/admin/dashboard")) {
-      const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          cookies: {
-            get(name: string) {
-              return request.cookies.get(name)?.value
-            },
-            set() {},
-            remove() {},
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return request.cookies.get(name)?.value
           },
-        }
-      )
-      const { data: { user } } = await supabase.auth.getUser()
+          set() {},
+          remove() {},
+        },
+      }
+    )
+    const { data: { user } } = await supabase.auth.getUser()
+
+    // If on admin subdomain root and logged in -> go to dashboard
+    if (isAdminHost && pathname === "/" && user) {
+      url.pathname = "/admin/dashboard"
+      return NextResponse.redirect(url)
+    }
+
+    if (pathname.startsWith("/admin/dashboard") || (isAdminHost && pathname !== "/admin/login")) {
       if (!user) {
         url.pathname = "/admin/login"
         return NextResponse.redirect(url)
-      }
-    }
-
-    // ── Admin subdomain rewrite ───────────────────────────────────────────
-    const host = request.headers.get("host") || ""
-    const isAdminHost = host === "admin.byiora.store" || host === "www.admin.byiora.store"
-    if (isAdminHost) {
-      if (pathname === "/") {
-        url.pathname = "/admin/login"
-        return NextResponse.rewrite(url)
-      }
-      if (!pathname.startsWith("/admin")) {
-        url.pathname = `/admin${pathname}`
-        return NextResponse.rewrite(url)
       }
     }
 
