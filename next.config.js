@@ -24,13 +24,9 @@ const nextConfig = {
   allowedDevOrigins: ["192.168.1.70", "localhost"],
   images: {
     remotePatterns,
-    // Serve AVIF (30% smaller than WebP) where supported, with WebP fallback
-    formats: ['image/avif', 'image/webp'],
-    // Cache optimized images for 30 days (trace showed max-age=0 on banner LCP)
-    minimumCacheTTL: 2592000,
-    // Explicit breakpoints for responsive images — prevents oversized images on mobile
-    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
-    imageSizes: [16, 32, 48, 64, 96, 128, 256],
+    // Bypass Vercel's image optimizer — free tier has only 5K transformations/month.
+    // Images are served directly from Supabase storage (already optimized formats).
+    unoptimized: true,
   },
   async headers() {
     return [
