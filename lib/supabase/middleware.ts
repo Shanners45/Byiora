@@ -53,7 +53,8 @@ export async function updateSession(request: NextRequest) {
       url.pathname = "/admin/login"
       return NextResponse.rewrite(url)
     }
-    if (!pathname.startsWith("/admin")) {
+    // DO NOT rewrite API routes or we break the dashboard backend calls
+    if (!pathname.startsWith("/admin") && !pathname.startsWith("/api")) {
       url.pathname = `/admin${pathname}`
       return NextResponse.rewrite(url)
     }

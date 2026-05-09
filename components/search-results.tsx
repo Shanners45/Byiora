@@ -125,6 +125,7 @@ export function SearchResults({ query, onItemClick }: SearchResultsProps) {
                   alt={product.name}
                   fill
                   className="object-contain"
+                  sizes="40px"
                 />
               </div>
               <div className="flex-1 min-w-0">

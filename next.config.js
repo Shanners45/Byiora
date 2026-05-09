@@ -24,9 +24,13 @@ const nextConfig = {
   allowedDevOrigins: ["192.168.1.70", "localhost"],
   images: {
     remotePatterns,
-    // Mitigation for Next.js image cache exhaustion advisories
-    // (keeps cache bounded on disk)
-    maximumDiskCacheSize: 512 * 1024 * 1024, // 512MB
+    // Serve AVIF (30% smaller than WebP) where supported, with WebP fallback
+    formats: ['image/avif', 'image/webp'],
+    // Cache optimized images for 30 days (trace showed max-age=0 on banner LCP)
+    minimumCacheTTL: 2592000,
+    // Explicit breakpoints for responsive images — prevents oversized images on mobile
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256],
   },
   async headers() {
     return [

@@ -155,7 +155,7 @@ export default function CategoryPage() {
                         alt={product.name}
                         fill
                         className="object-cover"
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                        sizes="(max-width: 640px) 45vw, (max-width: 768px) 30vw, (max-width: 1200px) 22vw, 18vw"
                       />
                     </div>
                   </div>

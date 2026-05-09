@@ -54,6 +54,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 1200px"
                   priority={index === 0}
+                  fetchPriority={index === 0 ? "high" : "auto"}
                 />
               </a>
             ) : (
@@ -65,6 +66,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
                   className="object-cover"
                   sizes="(max-width: 768px) 100vw, 1200px"
                   priority={index === 0}
+                  fetchPriority={index === 0 ? "high" : "auto"}
                 />
               </div>
             )}

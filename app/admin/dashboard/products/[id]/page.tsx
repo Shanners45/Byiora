@@ -313,11 +313,11 @@ export default function ProductEditPage() {
 
     if (editingDenomIndex !== null) {
       const updated = [...denominations]
-      updated[editingDenomIndex] = { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomBestseller, in_stock: newDenomInStock }
+      updated[editingDenomIndex] = { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock }
       setDenominations(updated)
       setEditingDenomIndex(null)
     } else {
-      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomBestseller, in_stock: newDenomInStock }])
+      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock }])
     }
 
     setNewDenomPrice("")
@@ -751,13 +751,25 @@ export default function ProductEditPage() {
               <div className="space-y-2 flex flex-col justify-center">
                 <Label htmlFor="bestseller" className="text-[#1F2937] mb-2">Best Seller?</Label>
                 <div>
-                  <Switch id="bestseller" checked={newDenomBestseller} onCheckedChange={setNewDenomBestseller} />
+                  <Switch
+                    id="bestseller"
+                    checked={newDenomBestseller}
+                    disabled={!newDenomInStock}
+                    onCheckedChange={setNewDenomBestseller}
+                  />
+                  {!newDenomInStock && (
+                    <p className="text-[10px] text-red-400 mt-1">Must be in stock</p>
+                  )}
                 </div>
               </div>
               <div className="space-y-2 flex flex-col justify-center">
                 <Label htmlFor="in-stock" className="text-[#1F2937] mb-2">In Stock?</Label>
                 <div>
-                  <Switch id="in-stock" checked={newDenomInStock} onCheckedChange={setNewDenomInStock} />
+                  <Switch id="in-stock" checked={newDenomInStock} onCheckedChange={(checked) => {
+                    setNewDenomInStock(checked)
+                    // Auto-clear bestseller when marking out of stock
+                    if (!checked) setNewDenomBestseller(false)
+                  }} />
                 </div>
               </div>
             </div>

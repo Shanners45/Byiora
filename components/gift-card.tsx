@@ -47,8 +47,7 @@ export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, o
               alt={name}
               fill
               className="object-cover"
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-              priority
+              sizes="(max-width: 640px) 33vw, (max-width: 1024px) 25vw, 16vw"
             />
           </div>
         ) : (

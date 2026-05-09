@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import { Mail, MessageCircle, Facebook, Instagram, Youtube, Clock, Send, ChevronRight, ArrowLeft } from "lucide-react"
+import { TurnstileWidget } from "@/components/turnstile-widget"
 
 const CONTACT_DETAILS = {
   email: "support@byiora.store",
@@ -20,6 +21,7 @@ const CONTACT_DETAILS = {
 export function ContactForm() {
   const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" })
   const [sending, setSending] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState("")
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
@@ -31,12 +33,16 @@ export function ContactForm() {
       toast.error("Please fill in all required fields.")
       return
     }
+    if (!captchaToken) {
+      toast.error("Please complete the captcha verification.")
+      return
+    }
     setSending(true)
     try {
       const response = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify({ ...form, captchaToken })
       })
 
       const result = await response.json()
@@ -224,6 +230,8 @@ export function ContactForm() {
                 required
               />
             </div>
+
+            <TurnstileWidget onToken={setCaptchaToken} />
 
             <Button
               type="submit"
