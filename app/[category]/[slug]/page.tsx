@@ -484,7 +484,9 @@ export default function ProductDetailPage() {
                 const renderDenominationCard = (denom: any) => {
                   const isSelected = selectedDenomination === denom.label;
                   const cat = product?.denomination_categories?.find((c: any) => c.id === denom.categoryId);
-                  const iconUrl = cat?.icon_url || product?.denom_icon_url;
+                  // If category exists, only use category icon (no fallback to product icon)
+                  // If no category, use product icon
+                  const iconUrl = denom.categoryId ? cat?.icon_url : product?.denom_icon_url;
                   const hasIcon = !!iconUrl;
                   const isOutOfStock = denom.in_stock === false;
 
@@ -569,7 +571,7 @@ export default function ProductDetailPage() {
                           {product.denomination_categories.map((cat: any) => {
                             const hasDenoms = giftCard.denominations.some((d: any) => d.categoryId === cat.id);
                             if (!hasDenoms) return null;
-                            const icon = cat.icon_url || product.denom_icon_url;
+                            const icon = cat.icon_url;
                             return (
                               <button
                                 key={`tab-${cat.id}`}
@@ -616,7 +618,7 @@ export default function ProductDetailPage() {
                             const catDenoms = giftCard.denominations.filter((d: any) => d.categoryId === cat.id)
                             if (catDenoms.length === 0) return null
 
-                            const icon = cat.icon_url || product.denom_icon_url;
+                            const icon = cat.icon_url;
 
                             return (
                               <div key={cat.id} id={`cat-${cat.id}`} className="space-y-4 scroll-mt-[140px]">

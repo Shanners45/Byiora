@@ -27,6 +27,9 @@ export default function AddProductPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isUploadingIcon, setIsUploadingIcon] = useState(false)
+  const [showServers, setShowServers] = useState(false)
+  const [showCategories, setShowCategories] = useState(false)
+  const [showCheckoutFields, setShowCheckoutFields] = useState(false)
 
   // Form state
   const [name, setName] = useState("")
@@ -220,10 +223,10 @@ export default function AddProductPage() {
         }
       }
 
-      // Inject the shared denom icon into every denomination before saving
+      // Inject the shared denom icon into every denomination before saving (only if categories are not used)
       const denominationsWithIcon = denominations.map(d => ({
         ...d,
-        icon_url: denomIconUrl || undefined,
+        icon_url: (!showCategories && denomIconUrl) ? denomIconUrl : d.icon_url,
       }))
 
       // Use Server Action with Service Role to bypass RLS
@@ -236,14 +239,14 @@ export default function AddProductPage() {
         description: description.trim(),
         is_active: isActive,
         denominations: denominationsWithIcon,
-        denomination_categories: (category === "topup" || category === "digital-goods") ? denominationCategories : [],
-        denom_icon_url: denomIconUrl || null,
+        denomination_categories: showCategories ? denominationCategories : [],
+        denom_icon_url: showCategories ? null : (denomIconUrl || null),
         ribbon_text: ribbonText.trim() || null,
         faqs,
-        checkout_fields: (category === "direct-login" || category === "topup") ? checkoutFields : [],
+        checkout_fields: ((category === "direct-login" || category === "topup") && showCheckoutFields) ? checkoutFields : [],
         uid_instructions: category === "topup" ? uidInstructions : null,
         uid_guide_image: category === "topup" ? uidGuideImage : null,
-        servers: category === "topup" ? servers : [],
+        servers: (category === "topup" && showServers) ? servers : [],
       })
 
       if (result.error) {
@@ -523,42 +526,74 @@ export default function AddProductPage() {
                   <p className="text-xs text-[#4B5563]">Displayed as a badge on the product card (max 20 chars).</p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-[#1F2937]">
-                    Denomination Icon <span className="text-gray-400 font-normal">(Optional)</span>
-                  </Label>
-                  <div className="flex items-center gap-3">
-                    {denomIconUrl && (
-                      <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#F59E0B]/40 flex-shrink-0 bg-white flex items-center justify-center">
-                        <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
+                {category === "topup" && (
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="show-servers" className="text-[#1F2937]">Product Servers</Label>
+                      <p className="text-xs text-[#4B5563]">Enable to add servers for this product</p>
+                    </div>
+                    <Switch id="show-servers" checked={showServers} onCheckedChange={setShowServers} />
+                  </div>
+                )}
+
+                {(category === "topup" || category === "digital-goods") && (
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="show-categories" className="text-[#1F2937]">Denomination Categories</Label>
+                      <p className="text-xs text-[#4B5563]">Enable to group denominations</p>
+                    </div>
+                    <Switch id="show-categories" checked={showCategories} onCheckedChange={setShowCategories} />
+                  </div>
+                )}
+
+                {(category === "direct-login" || category === "topup") && (
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="show-checkout" className="text-[#1F2937]">Checkout Fields</Label>
+                      <p className="text-xs text-[#4B5563]">Enable to add custom checkout fields</p>
+                    </div>
+                    <Switch id="show-checkout" checked={showCheckoutFields} onCheckedChange={setShowCheckoutFields} />
+                  </div>
+                )}
+
+                {!showCategories && (
+                  <div className="space-y-2">
+                    <Label className="text-[#1F2937]">
+                      Denomination Icon <span className="text-gray-400 font-normal">(Optional)</span>
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      {denomIconUrl && (
+                        <div className="relative w-14 h-14 rounded-lg overflow-hidden border border-[#F59E0B]/40 flex-shrink-0 bg-white flex items-center justify-center">
+                          <Image src={denomIconUrl} alt="Denom icon" fill sizes="56px" style={{ objectFit: 'contain' }} />
+                        </div>
+                      )}
+                      <div className="flex-1 space-y-1.5">
+                        <Input
+                          value={denomIconUrl}
+                          onChange={(e) => setDenomIconUrl(e.target.value)}
+                          className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
+                          placeholder="Paste icon URL or upload"
+                        />
+                        <input type="file" accept="image/*" id="denom-icon-upload" onChange={handleDenomIconUpload} className="hidden" />
+                        <Button
+                          type="button" variant="outline" disabled={isUploadingIcon}
+                          onClick={() => document.getElementById('denom-icon-upload')?.click()}
+                          className="w-full border-[#F59E0B]/30 hover:bg-[#F59E0B]/10 text-sm h-8"
+                        >
+                          {isUploadingIcon
+                            ? <><div className="animate-spin h-3 w-3 border-2 border-[#F59E0B] border-t-transparent rounded-full mr-2" />Uploading...</>
+                            : <><Upload className="h-3 w-3 mr-2 text-[#F59E0B]" />Upload Icon</>}
+                        </Button>
                       </div>
-                    )}
-                    <div className="flex-1 space-y-1.5">
-                      <Input
-                        value={denomIconUrl}
-                        onChange={(e) => setDenomIconUrl(e.target.value)}
-                        className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
-                        placeholder="Paste icon URL or upload"
-                      />
-                      <input type="file" accept="image/*" id="denom-icon-upload" onChange={handleDenomIconUpload} className="hidden" />
-                      <Button
-                        type="button" variant="outline" disabled={isUploadingIcon}
-                        onClick={() => document.getElementById('denom-icon-upload')?.click()}
-                        className="w-full border-[#F59E0B]/30 hover:bg-[#F59E0B]/10 text-sm h-8"
-                      >
-                        {isUploadingIcon
-                          ? <><div className="animate-spin h-3 w-3 border-2 border-[#F59E0B] border-t-transparent rounded-full mr-2" />Uploading...</>
-                          : <><Upload className="h-3 w-3 mr-2 text-[#F59E0B]" />Upload Icon</>}
-                      </Button>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>
 
           {/* Checkout Fields — for direct-login and topup categories */}
-          {(category === "direct-login" || category === "topup") && (
+          {((category === "direct-login" || category === "topup") && showCheckoutFields) && (
             <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
               <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
                 <CardTitle className="text-[#1F2937]">Checkout Fields</CardTitle>
@@ -730,7 +765,7 @@ export default function AddProductPage() {
           )}
 
           {/* Servers — only for topup category */}
-          {category === "topup" && (
+          {category === "topup" && showServers && (
             <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
               <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
                 <div className="flex items-center gap-2">
@@ -821,7 +856,7 @@ export default function AddProductPage() {
         </Card>
 
         {/* Denomination Categories */}
-        {(category === "topup" || category === "digital-goods") && (
+        {(category === "topup" || category === "digital-goods") && showCategories && (
         <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
           <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
             <CardTitle className="text-[#1F2937]">Denomination Categories</CardTitle>
@@ -928,7 +963,7 @@ export default function AddProductPage() {
                   <TableRow>
                     <TableHead className="text-[#4B5563]">Price</TableHead>
                     <TableHead className="text-[#4B5563]">Label</TableHead>
-                    <TableHead className="text-[#4B5563]">Category</TableHead>
+                    {showCategories && <TableHead className="text-[#4B5563]">Category</TableHead>}
                     <TableHead className="text-[#4B5563]">Best Seller</TableHead>
                     <TableHead className="text-[#4B5563]">Stock</TableHead>
                     <TableHead className="w-[100px] text-right text-[#4B5563]">Action</TableHead>
@@ -939,9 +974,11 @@ export default function AddProductPage() {
                     <TableRow key={index} className="border-t border-[#E5E7EB]">
                       <TableCell className="text-[#1F2937] font-medium">Rs. {denom.price}</TableCell>
                       <TableCell className="text-[#4B5563]">{denom.label}</TableCell>
-                      <TableCell className="text-[#4B5563] text-sm">
-                        {denom.categoryId ? denominationCategories.find(c => c.id === denom.categoryId)?.name || "Unknown" : "—"}
-                      </TableCell>
+                      {showCategories && (
+                        <TableCell className="text-[#4B5563] text-sm">
+                          {denom.categoryId ? denominationCategories.find(c => c.id === denom.categoryId)?.name || "Unknown" : "—"}
+                        </TableCell>
+                      )}
                       <TableCell className="text-[#4B5563]">
                         {denom.bestseller ? <Badge className="bg-pink-500 border-none text-white">Best Seller</Badge> : <span className="text-gray-400">—</span>}
                       </TableCell>
@@ -972,20 +1009,22 @@ export default function AddProductPage() {
                 <Label htmlFor="label" className="text-[#1F2937]">Label</Label>
                 <Input id="label" value={newDenomLabel} onChange={(e) => setNewDenomLabel(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="e.g. 100 Diamonds" />
               </div>
-              <div className="space-y-2">
-                <Label className="text-[#1F2937]">Category</Label>
-                <Select value={newDenomCategoryId} onValueChange={setNewDenomCategoryId} disabled={category !== "topup" && category !== "digital-goods"}>
-                  <SelectTrigger className="bg-white border-2 border-[#F59E0B]/30 focus:ring-[#F59E0B]">
-                    <SelectValue placeholder="None" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {denominationCategories.map(cat => (
-                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {showCategories && (
+                <div className="space-y-2">
+                  <Label className="text-[#1F2937]">Category</Label>
+                  <Select value={newDenomCategoryId} onValueChange={setNewDenomCategoryId}>
+                    <SelectTrigger className="bg-white border-2 border-[#F59E0B]/30 focus:ring-[#F59E0B]">
+                      <SelectValue placeholder="None" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {denominationCategories.map(cat => (
+                        <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2 flex flex-col justify-center">
                 <Label htmlFor="bestseller" className="text-[#1F2937] mb-2">Best Seller?</Label>
                 <div>
