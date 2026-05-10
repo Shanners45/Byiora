@@ -18,6 +18,13 @@ export interface Product {
     icon_url?: string
     bestseller?: boolean
     in_stock?: boolean
+    categoryId?: string
+  }>
+  denomination_categories?: Array<{
+    id: string
+    name: string
+    icon_url?: string
+    description?: string
   }>
   faqs?: Array<{
     question: string
@@ -73,6 +80,7 @@ export async function getAllProducts(): Promise<Product[]> {
       denom_icon_url: product.denom_icon_url || undefined,
       ribbon_text: product.ribbon_text || undefined,
       denominations: product.denominations || [],
+      denomination_categories: product.denomination_categories || [],
       faqs: product.faqs || [],
       checkout_fields: product.checkout_fields || [],
       uid_instructions: product.uid_instructions || null,

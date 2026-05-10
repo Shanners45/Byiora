@@ -160,8 +160,8 @@ export default function ProductDetailPage() {
   }
 
   const handlePurchase = async () => {
-    // Validate checkout fields for direct-login
-    const missingCheckoutField = isDirectLoginProduct && checkoutFields.some(
+    // Validate checkout fields for direct-login and topup
+    const missingCheckoutField = (isDirectLoginProduct || isTopupProduct) && checkoutFields.some(
       (f: any) => f.required && !checkoutFieldValues[f.key]?.trim()
     )
 
@@ -202,8 +202,8 @@ export default function ProductDetailPage() {
         guestData: isTopupProduct ? { userId, server: selectedServer } : null,
       })
 
-      // Encrypt checkout field values for direct-login products
-      if (isDirectLoginProduct && Object.keys(checkoutFieldValues).length > 0) {
+      // Encrypt checkout field values
+      if ((isDirectLoginProduct || isTopupProduct) && Object.keys(checkoutFieldValues).length > 0) {
         try {
           await encryptCheckoutData(transactionId, checkoutFieldValues)
         } catch (encryptError) {
@@ -247,6 +247,7 @@ export default function ProductDetailPage() {
         setUserId("")
         setSelectedServer("")
         if (!user) setEmail("") // Only reset email if not logged in
+        setCheckoutFieldValues({})
         setMarketingConsent(false)
         setSmsConsent(false)
       }, 2000)
@@ -479,92 +480,194 @@ export default function ProductDetailPage() {
                 <h2 className="text-xl font-semibold text-brand-charcoal">Select voucher</h2>
               </div>
 
-              <RadioGroup value={selectedDenomination} onValueChange={setSelectedDenomination}>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  {giftCard.denominations.map((denom: any) => {
-                    const isSelected = selectedDenomination === denom.label;
-                    const hasIcon = !!(product.denom_icon_url);
-                    const isOutOfStock = denom.in_stock === false;
+              {(() => {
+                const renderDenominationCard = (denom: any) => {
+                  const isSelected = selectedDenomination === denom.label;
+                  const cat = product?.denomination_categories?.find((c: any) => c.id === denom.categoryId);
+                  const iconUrl = cat?.icon_url || product?.denom_icon_url;
+                  const hasIcon = !!iconUrl;
+                  const isOutOfStock = denom.in_stock === false;
 
-                    return (
-                      <div key={denom.label} className={`relative ${isSelected && hasIcon ? "z-10" : ""}`}>
-                        {denom.bestseller && (
-                          <div className="absolute -top-3 -left-2 z-20 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
-                            <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current">
-                              <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
-                            </svg>
-                            Best Seller
-                          </div>
+                  return (
+                    <div key={denom.label} className={`relative ${isSelected && hasIcon ? "z-10" : ""}`}>
+                      {denom.bestseller && (
+                        <div className="absolute -top-3 -left-2 z-20 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
+                          <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current">
+                            <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+                          </svg>
+                          Best Seller
+                        </div>
+                      )}
+                      <RadioGroupItem value={denom.label} id={denom.label} className="peer sr-only" disabled={isOutOfStock} />
+                      <Label
+                        htmlFor={denom.label}
+                        className={`group flex flex-col overflow-hidden rounded-2xl transition-all h-full ${isOutOfStock
+                          ? "cursor-not-allowed opacity-40 border border-gray-300 bg-gray-100 grayscale hover:border-gray-400 hover:shadow-[0_0_10px_rgba(156,163,175,0.4)]"
+                          : isSelected
+                            ? "cursor-pointer border-2 border-[#00BCD4] shadow-[0_0_15px_rgba(0,188,212,0.4)]"
+                            : "cursor-pointer border border-gray-200 hover:border-[#00BCD4] hover:shadow-[0_0_10px_rgba(0,188,212,0.2)]"
+                          }`}
+                      >
+                        {hasIcon ? (
+                          <>
+                            <div className={`px-3 py-4 flex-1 flex flex-col items-center justify-center ${isOutOfStock ? 'bg-gray-50/50' : ''}`}>
+                              <div className="text-gray-900 font-bold text-base md:text-lg text-center mb-2">
+                                {denom.label}
+                              </div>
+                              <div className="w-16 h-16 relative bg-transparent flex items-center justify-center">
+                                {/* Using plain <img> instead of Next.js <Image> to guarantee
+                                    loading on real phones (2x/3x DPR). Next.js image
+                                    optimization can silently fail for Supabase URLs on
+                                    actual mobile devices. */}
+                                <img
+                                  src={iconUrl}
+                                  alt={denom.label}
+                                  width={64}
+                                  height={64}
+                                  className="object-contain w-full h-full"
+                                />
+                              </div>
+                            </div>
+                            <div className={`p-3 text-right transition-colors ${isOutOfStock ? "bg-gray-200/50" : isSelected ? "bg-[#e5e7eb]" : "bg-[#f3f4f6] group-hover:bg-[#e5e7eb]"}`}>
+                              <div className="text-[10px] text-[#FFA6C9] font-medium uppercase mb-0.5 tracking-wide">
+                                From
+                              </div>
+                              <div className="text-[#FF6B93] font-bold text-base md:text-xl leading-none">
+                                Rs. {denom.price}
+                              </div>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className={`px-3 py-3 flex-1 flex items-center justify-center text-center ${isOutOfStock ? 'bg-gray-50/50' : ''}`}>
+                              <div className="text-black font-extrabold text-base md:text-xl leading-tight w-full max-w-[120px]">
+                                {denom.label}
+                              </div>
+                            </div>
+                            <div className={`px-3 pt-4 pb-3 text-right flex flex-col justify-end min-h-[56px] transition-colors ${isOutOfStock ? "bg-gray-200/50" : isSelected ? "bg-[#e5e7eb]" : "bg-[#f3f4f6] group-hover:bg-[#e5e7eb]"}`}>
+                              <div className="text-[10px] text-[#FFA6C9] font-medium uppercase mb-0.5 tracking-wide">From</div>
+                              <div className="text-[#FF6B93] font-extrabold text-base md:text-xl leading-none">
+                                Rs. {denom.price}
+                              </div>
+                            </div>
+                          </>
                         )}
-                        <RadioGroupItem value={denom.label} id={denom.label} className="peer sr-only" disabled={isOutOfStock} />
-                        <Label
-                          htmlFor={denom.label}
-                          className={`group flex flex-col overflow-hidden rounded-2xl transition-all h-full ${isOutOfStock
-                            ? "cursor-not-allowed opacity-40 border border-gray-300 bg-gray-100 grayscale hover:border-gray-400 hover:shadow-[0_0_10px_rgba(156,163,175,0.4)]"
-                            : isSelected
-                              ? "cursor-pointer border-2 border-[#00BCD4] shadow-[0_0_15px_rgba(0,188,212,0.4)]"
-                              : "cursor-pointer border border-gray-200 hover:border-[#00BCD4] hover:shadow-[0_0_10px_rgba(0,188,212,0.2)]"
-                            }`}
-                        >
-                          {hasIcon ? (
-                            <>
-                              <div className={`px-3 py-4 flex-1 flex flex-col items-center justify-center ${isOutOfStock ? 'bg-gray-50/50' : ''}`}>
-                                <div className="text-gray-900 font-bold text-base md:text-lg text-center mb-2">
-                                  {denom.label}
+                      </Label>
+                    </div>
+                  );
+                };
+
+                return (
+                  <RadioGroup value={selectedDenomination} onValueChange={setSelectedDenomination}>
+                    {product?.denomination_categories && product.denomination_categories.length > 0 ? (
+                      <div className="relative">
+                        {/* Sticky Category Tabs */}
+                        <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-md py-3 -mx-2 px-2 sm:-mx-0 sm:px-0 mb-6 border-b border-gray-100 flex overflow-x-auto gap-2 shadow-sm rounded-t-lg hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                          <style dangerouslySetInnerHTML={{__html: `
+                            .hide-scrollbar::-webkit-scrollbar { display: none; }
+                          `}} />
+                          {product.denomination_categories.map((cat: any) => {
+                            const hasDenoms = giftCard.denominations.some((d: any) => d.categoryId === cat.id);
+                            if (!hasDenoms) return null;
+                            const icon = cat.icon_url || product.denom_icon_url;
+                            return (
+                              <button
+                                key={`tab-${cat.id}`}
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  const el = document.getElementById(`cat-${cat.id}`);
+                                  if (el) {
+                                    const y = el.getBoundingClientRect().top + window.scrollY - 140;
+                                    window.scrollTo({ top: y, behavior: 'smooth' });
+                                  }
+                                }}
+                                className="flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
+                              >
+                                {icon && <img src={icon} alt={cat.name} className="w-5 h-5 object-contain" />}
+                                {cat.name}
+                              </button>
+                            );
+                          })}
+                          {(() => {
+                            const hasUncategorized = giftCard.denominations.some((d: any) => !d.categoryId);
+                            if (!hasUncategorized) return null;
+                            return (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  const el = document.getElementById(`cat-uncategorized`);
+                                  if (el) {
+                                    const y = el.getBoundingClientRect().top + window.scrollY - 140;
+                                    window.scrollTo({ top: y, behavior: 'smooth' });
+                                  }
+                                }}
+                                className="flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
+                              >
+                                Other Options
+                              </button>
+                            );
+                          })()}
+                        </div>
+
+                        <div className="space-y-8">
+                          {product.denomination_categories.map((cat: any) => {
+                            const catDenoms = giftCard.denominations.filter((d: any) => d.categoryId === cat.id)
+                            if (catDenoms.length === 0) return null
+
+                            const icon = cat.icon_url || product.denom_icon_url;
+
+                            return (
+                              <div key={cat.id} id={`cat-${cat.id}`} className="space-y-4 scroll-mt-[140px]">
+                                <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-3">
+                                  {icon && (
+                                    <img src={icon} alt={cat.name} className="w-8 h-8 object-contain" />
+                                  )}
+                                  <div>
+                                    <h3 className="font-semibold text-brand-charcoal text-lg">{cat.name}</h3>
+                                    {cat.description && <p className="text-sm text-gray-500">{cat.description}</p>}
+                                  </div>
                                 </div>
-                                <div className="w-16 h-16 relative bg-transparent flex items-center justify-center">
-                                  {/* Using plain <img> instead of Next.js <Image> to guarantee
-                                      loading on real phones (2x/3x DPR). Next.js image
-                                      optimization can silently fail for Supabase URLs on
-                                      actual mobile devices. */}
-                                  <img
-                                    src={product.denom_icon_url}
-                                    alt={denom.label}
-                                    width={64}
-                                    height={64}
-                                    className="object-contain w-full h-full"
-                                  />
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                  {catDenoms.map((denom: any) => renderDenominationCard(denom))}
                                 </div>
                               </div>
-                              <div className={`p-3 text-right transition-colors ${isOutOfStock ? "bg-gray-200/50" : isSelected ? "bg-[#e5e7eb]" : "bg-[#f3f4f6] group-hover:bg-[#e5e7eb]"}`}>
-                                <div className="text-[10px] text-[#FFA6C9] font-medium uppercase mb-0.5 tracking-wide">
-                                  From
+                            )
+                          })}
+                          {(() => {
+                            const uncategorized = giftCard.denominations.filter((d: any) => !d.categoryId)
+                            if (uncategorized.length === 0) return null
+                            return (
+                              <div id="cat-uncategorized" className="space-y-4 scroll-mt-[140px]">
+                                <div className="flex items-center gap-2 mb-4 border-b border-gray-100 pb-2">
+                                  <h3 className="font-semibold text-brand-charcoal text-lg">Other Options</h3>
                                 </div>
-                                <div className="text-[#FF6B93] font-bold text-base md:text-xl leading-none">
-                                  Rs. {denom.price}
-                                </div>
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div className={`px-3 py-3 flex-1 flex items-center justify-center text-center ${isOutOfStock ? 'bg-gray-50/50' : ''}`}>
-                                <div className="text-black font-extrabold text-base md:text-xl leading-tight w-full max-w-[120px]">
-                                  {denom.label}
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                                  {uncategorized.map((denom: any) => renderDenominationCard(denom))}
                                 </div>
                               </div>
-                              <div className={`px-3 pt-4 pb-3 text-right flex flex-col justify-end min-h-[56px] transition-colors ${isOutOfStock ? "bg-gray-200/50" : isSelected ? "bg-[#e5e7eb]" : "bg-[#f3f4f6] group-hover:bg-[#e5e7eb]"}`}>
-                                <div className="text-[10px] text-[#FFA6C9] font-medium uppercase mb-0.5 tracking-wide">From</div>
-                                <div className="text-[#FF6B93] font-extrabold text-base md:text-xl leading-none">
-                                  Rs. {denom.price}
-                                </div>
-                              </div>
-                            </>
-                          )}
-                        </Label>
+                            )
+                          })()}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
-              </RadioGroup>
+                    ) : (
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        {giftCard.denominations.map((denom: any) => renderDenominationCard(denom))}
+                      </div>
+                    )}
+                  </RadioGroup>
+                );
+              })()}
             </div>
 
-            {/* Step 2 Alternative: Direct Login checkout fields */}
-            {isDirectLoginProduct && checkoutFields.length > 0 && (
+            {/* Step 2 or 3 Alternative: Checkout fields */}
+            {(isDirectLoginProduct || isTopupProduct) && checkoutFields.length > 0 && (
               <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray"
                     }`}>
-                    2
+                    {isTopupProduct ? "3" : "2"}
                   </div>
                   <h2 className="text-xl font-semibold text-brand-charcoal">
                     Account Details
@@ -598,16 +701,16 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Step 3: Enter Details / Contact Information */}
+            {/* Step 3 or 4: Enter Details / Contact Information */}
             <div className="glassmorphism p-6 rounded-lg shadow-md border bg-white border-gray-200">
               <div className="flex items-center gap-3 mb-4">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${(isDirectLoginProduct && checkoutFields.length > 0)
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${((isDirectLoginProduct || isTopupProduct) && checkoutFields.length > 0)
                     ? (selectedDenomination && !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()) ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray")
                     : (selectedDenomination ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray")
                     }`}
                 >
-                  {(isTopupProduct || (isDirectLoginProduct && checkoutFields.length > 0)) ? "3" : "2"}
+                  {isTopupProduct ? (checkoutFields.length > 0 ? "4" : "3") : (isDirectLoginProduct && checkoutFields.length > 0 ? "3" : "2")}
                 </div>
                 <h2 className="text-xl font-semibold text-brand-charcoal">
                   Contact Information
@@ -641,16 +744,16 @@ export default function ProductDetailPage() {
 
 
 
-            {/* Step 4: Select Payment */}
+            {/* Step 4 or 5: Select Payment */}
             <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
               <div className="flex items-center gap-3 mb-4">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination && email && (!isTopupProduct || (userId && (product.servers && product.servers.length > 0 ? selectedServer : true))) && (!isDirectLoginProduct || !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination && email && (!isTopupProduct || (userId && (product.servers && product.servers.length > 0 ? selectedServer : true))) && (!(isDirectLoginProduct || isTopupProduct) || !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))
                     ? "bg-[#00BCD4] text-white"
                     : "bg-gray-200 text-brand-light-gray"
                     }`}
                 >
-                  {(isTopupProduct || (isDirectLoginProduct && checkoutFields.length > 0)) ? "4" : "3"}
+                  {isTopupProduct ? (checkoutFields.length > 0 ? "5" : "4") : (isDirectLoginProduct && checkoutFields.length > 0 ? "4" : "3")}
                 </div>
                 <h2 className="text-xl font-semibold text-brand-charcoal">Select payment</h2>
               </div>
@@ -687,7 +790,7 @@ export default function ProductDetailPage() {
 
               <Button
                 onClick={() => setShowQRDialog(true)}
-                disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && (!userId || (product.servers && product.servers.length > 0 && !selectedServer))) || (isDirectLoginProduct && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
+                disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && (!userId || (product.servers && product.servers.length > 0 && !selectedServer))) || ((isDirectLoginProduct || isTopupProduct) && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
                 className="w-full mt-6 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white py-3 text-lg font-semibold"
               >
                 Proceed to Payment

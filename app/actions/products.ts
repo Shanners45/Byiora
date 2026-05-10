@@ -18,7 +18,8 @@ export async function createProductAction(productData: {
   logo: string
   description: string
   is_active: boolean
-  denominations: Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean }>
+  denominations: Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean; categoryId?: string }>
+  denomination_categories?: Array<{ id: string; name: string; icon_url?: string; description?: string }>
   denom_icon_url: string | null
   ribbon_text: string | null
   faqs: Array<{ question: string; answer: string }>
@@ -67,7 +68,8 @@ export async function updateProductAction(
     logo?: string
     description?: string
     is_active?: boolean
-    denominations?: Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean }>
+    denominations?: Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean; categoryId?: string }>
+    denomination_categories?: Array<{ id: string; name: string; icon_url?: string; description?: string }>
     denom_icon_url?: string | null
     ribbon_text?: string | null
     faqs?: Array<{ question: string; answer: string }>

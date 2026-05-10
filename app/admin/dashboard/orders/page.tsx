@@ -240,11 +240,6 @@ export default function OrdersPage() {
   }
 
   const updateTransactionStatus = async (transactionId: string, newStatus: Transaction["status"], remarks?: string) => {
-    // Check permissions
-    if (adminUser?.role === "order_management") {
-      toast.error("You don't have permission to update order status")
-      return
-    }
 
     // If marking as failed, prompt for remarks (optional)
     if (newStatus === "Failed" && !remarks && !remarksDialog) {
@@ -579,25 +574,21 @@ export default function OrdersPage() {
                     </TableCell>
                     <TableCell className="text-[#4B5563]">{transaction.payment_method}</TableCell>
                     <TableCell>
-                      {adminUser?.role === "order_management" ? (
-                        <Badge className={getStatusColor(transaction.status)}>{transaction.status}</Badge>
-                      ) : (
-                        <Select
-                          value={transaction.status}
-                          onValueChange={(value) =>
-                            updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
-                          }
-                        >
-                          <SelectTrigger className="w-32 h-8">
-                            <Badge className={getStatusColor(transaction.status)}>{transaction.status}</Badge>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Processing">Processing</SelectItem>
-                            <SelectItem value="Completed">Completed</SelectItem>
-                            <SelectItem value="Failed">Failed</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
+                      <Select
+                        value={transaction.status}
+                        onValueChange={(value) =>
+                          updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
+                        }
+                      >
+                        <SelectTrigger className="w-32 h-8">
+                          <Badge className={getStatusColor(transaction.status)}>{transaction.status}</Badge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Processing">Processing</SelectItem>
+                          <SelectItem value="Completed">Completed</SelectItem>
+                          <SelectItem value="Failed">Failed</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell className="text-[#4B5563]">
                       {new Date(transaction.created_at).toLocaleDateString()}
@@ -605,6 +596,11 @@ export default function OrdersPage() {
                     <TableCell className="text-[#4B5563] text-sm">
                       {transaction.product_category === "direct-login" ? (
                         <DirectLoginCell transaction={transaction} />
+                      ) : transaction.product_category === "topup" ? (
+                        <div className="flex flex-col gap-2 items-start">
+                          <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono whitespace-pre-wrap">{getUIDForDisplay(transaction)}</span>
+                          {transaction.encrypted_checkout_data && <DirectLoginCell transaction={transaction} />}
+                        </div>
                       ) : (transaction.product_category === "digital-goods" || transaction.product_category === "games" || (!transaction.product_category && transaction.product_name)) ? (
                         <div className="flex items-center gap-1.5">
                           <Input

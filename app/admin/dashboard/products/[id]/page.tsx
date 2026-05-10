@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Save, Upload, Trash2, Pencil, HelpCircle, Plus } from "lucide-react"
+import { ArrowLeft, Save, Upload, Trash2, Pencil, HelpCircle, Plus, ArrowUp, ArrowDown, ArrowUpToLine, ArrowDownToLine } from "lucide-react"
 import { type Product } from "@/lib/product-categories"
 import { createClient } from "@/lib/supabase/client"
 import { getProductByIdAction, updateProductAction } from "@/app/actions/products"
@@ -55,7 +55,16 @@ export default function ProductEditPage() {
   const [newDenomLabel, setNewDenomLabel] = useState("")
   const [newDenomBestseller, setNewDenomBestseller] = useState(false)
   const [newDenomInStock, setNewDenomInStock] = useState(true)
+  const [newDenomCategoryId, setNewDenomCategoryId] = useState<string>("")
   const [editingDenomIndex, setEditingDenomIndex] = useState<number | null>(null)
+
+  // Denomination Categories state
+  const [denominationCategories, setDenominationCategories] = useState<Array<{ id: string; name: string; icon_url?: string; description?: string }>>([])
+  const [newDenomCatName, setNewDenomCatName] = useState("")
+  const [newDenomCatIconUrl, setNewDenomCatIconUrl] = useState("")
+  const [newDenomCatDesc, setNewDenomCatDesc] = useState("")
+  const [editingDenomCatIndex, setEditingDenomCatIndex] = useState<number | null>(null)
+  const [isUploadingCatIcon, setIsUploadingCatIcon] = useState(false)
 
   // Checkout Fields state (for direct-login category)
   const [checkoutFields, setCheckoutFields] = useState<Array<{ key: string; label: string; type: "text" | "email" | "password"; required: boolean }>>([])
@@ -105,6 +114,10 @@ export default function ProductEditPage() {
 
         if (productData.denominations && Array.isArray(productData.denominations)) {
           setDenominations(productData.denominations)
+        }
+
+        if (productData.denomination_categories && Array.isArray(productData.denomination_categories)) {
+          setDenominationCategories(productData.denomination_categories)
         }
 
         if (productData.faqs && Array.isArray(productData.faqs)) {
@@ -228,6 +241,44 @@ export default function ProductEditPage() {
     } catch { toast.error("Failed to upload icon") } finally { setIsUploadingIcon(false) }
   }
 
+  const handleCatIconUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file")
+      return
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image size must be less than 2MB")
+      return
+    }
+
+    setIsUploadingCatIcon(true)
+
+    try {
+      const fileExt = file.name.split(".").pop()
+      const fileName = `cat-icon-${Date.now()}.${fileExt}`
+      const filePath = `${fileName}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("product-images")
+        .upload(filePath, file, { cacheControl: "3600", upsert: false })
+
+      if (uploadError) {
+        toast.error(`Failed to upload: ${uploadError.message}`)
+        return
+      }
+
+      const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(filePath)
+      if (urlData?.publicUrl) {
+        setNewDenomCatIconUrl(urlData.publicUrl)
+        toast.success("Category Icon uploaded successfully")
+      }
+    } catch { toast.error("Failed to upload category icon") } finally { setIsUploadingCatIcon(false) }
+  }
+
   const handleGuideImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
@@ -268,6 +319,15 @@ export default function ProductEditPage() {
     setIsSaving(true)
 
     try {
+      if (denominationCategories.length > 1) {
+        const hasUncategorized = denominations.some(d => !d.categoryId || d.categoryId === "none");
+        if (hasUncategorized) {
+          toast.error("All denominations must have a Category when multiple categories exist");
+          setIsSaving(false);
+          return;
+        }
+      }
+
       const denominationsWithIcon = denominations.map(d => ({
         ...d,
         icon_url: denomIconUrl || undefined,
@@ -280,11 +340,12 @@ export default function ProductEditPage() {
         description,
         is_active: isActive,
         denominations: denominationsWithIcon,
+        denomination_categories: (category === "topup" || category === "digital-goods") ? denominationCategories : [],
         faqs,
         slug: slug.trim() || generateSlug(name.trim()),
         denom_icon_url: denomIconUrl || null,
         ribbon_text: ribbonText.trim() || null,
-        checkout_fields: category === "direct-login" ? checkoutFields : [],
+        checkout_fields: (category === "direct-login" || category === "topup") ? checkoutFields : [],
         uid_instructions: category === "topup" ? uidInstructions : null,
         uid_guide_image: category === "topup" ? uidGuideImage : null,
         servers: category === "topup" ? servers : [],
@@ -311,19 +372,25 @@ export default function ProductEditPage() {
       return
     }
 
+    if (denominationCategories.length > 1 && (!newDenomCategoryId || newDenomCategoryId === "none")) {
+      toast.error("Please select a Category Name for the denomination")
+      return
+    }
+
     if (editingDenomIndex !== null) {
       const updated = [...denominations]
-      updated[editingDenomIndex] = { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock }
+      updated[editingDenomIndex] = { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }
       setDenominations(updated)
       setEditingDenomIndex(null)
     } else {
-      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock }])
+      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }])
     }
 
     setNewDenomPrice("")
     setNewDenomLabel("")
     setNewDenomBestseller(false)
     setNewDenomInStock(true)
+    setNewDenomCategoryId("")
   }
 
   const removeDenomination = (index: number) => {
@@ -336,7 +403,60 @@ export default function ProductEditPage() {
     setNewDenomLabel(denom.label)
     setNewDenomBestseller(denom.bestseller || false)
     setNewDenomInStock(denom.in_stock !== false)
+    setNewDenomCategoryId(denom.categoryId || "")
     setEditingDenomIndex(index)
+  }
+
+  const addDenomCategory = () => {
+    if (!newDenomCatName) {
+      toast.error("Please provide a category name")
+      return
+    }
+
+    if (editingDenomCatIndex !== null) {
+      const updated = [...denominationCategories]
+      updated[editingDenomCatIndex] = { ...updated[editingDenomCatIndex], name: newDenomCatName, icon_url: newDenomCatIconUrl, description: newDenomCatDesc }
+      setDenominationCategories(updated)
+      setEditingDenomCatIndex(null)
+    } else {
+      setDenominationCategories([...denominationCategories, { id: crypto.randomUUID(), name: newDenomCatName, icon_url: newDenomCatIconUrl, description: newDenomCatDesc }])
+    }
+
+    setNewDenomCatName("")
+    setNewDenomCatIconUrl("")
+    setNewDenomCatDesc("")
+  }
+
+  const editDenomCategory = (index: number) => {
+    const cat = denominationCategories[index]
+    setNewDenomCatName(cat.name)
+    setNewDenomCatIconUrl(cat.icon_url || "")
+    setNewDenomCatDesc(cat.description || "")
+    setEditingDenomCatIndex(index)
+  }
+
+  const removeDenomCategory = (index: number) => {
+    setDenominationCategories(denominationCategories.filter((_, i) => i !== index))
+  }
+
+  const moveDenomCategory = (index: number, direction: "up" | "down" | "top" | "bottom") => {
+    const updated = [...denominationCategories]
+    if (direction === "up" && index > 0) {
+      const temp = updated[index]
+      updated[index] = updated[index - 1]
+      updated[index - 1] = temp
+    } else if (direction === "down" && index < updated.length - 1) {
+      const temp = updated[index]
+      updated[index] = updated[index + 1]
+      updated[index + 1] = temp
+    } else if (direction === "top" && index > 0) {
+      const [moved] = updated.splice(index, 1)
+      updated.unshift(moved)
+    } else if (direction === "bottom" && index < updated.length - 1) {
+      const [moved] = updated.splice(index, 1)
+      updated.push(moved)
+    }
+    setDenominationCategories(updated)
   }
 
   const addFaq = () => {
@@ -502,8 +622,8 @@ export default function ProductEditPage() {
             </CardContent>
           </Card>
 
-          {/* Checkout Fields — only for direct-login category */}
-          {category === "direct-login" && (
+          {/* Checkout Fields — for direct-login and topup categories */}
+          {(category === "direct-login" || category === "topup") && (
             <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
               <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
                 <CardTitle className="text-[#1F2937]">Checkout Fields</CardTitle>
@@ -699,6 +819,100 @@ export default function ProductEditPage() {
           </CardContent>
         </Card>
 
+        {/* Denomination Categories */}
+        {(category === "topup" || category === "digital-goods") && (
+        <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
+          <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+            <CardTitle className="text-[#1F2937]">Denomination Categories</CardTitle>
+            <CardDescription className="text-[#92400E]">Group denominations into specific categories</CardDescription>
+          </CardHeader>
+          <CardContent className="p-6 space-y-6">
+            {denominationCategories.length > 0 && (
+              <div className="rounded-md border-2 border-[#F59E0B]/20 overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-white">
+                    <TableRow>
+                      <TableHead className="text-[#1F2937] font-medium w-16">Icon</TableHead>
+                      <TableHead className="text-[#1F2937] font-medium">Name</TableHead>
+                      <TableHead className="text-[#1F2937] font-medium">Description</TableHead>
+                      <TableHead className="text-[#1F2937] font-medium w-20 text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {denominationCategories.map((cat, index) => (
+                      <TableRow key={index} className="border-t border-[#F59E0B]/10 hover:bg-[#FEF7E0]/50">
+                        <TableCell>
+                          {cat.icon_url ? (
+                            <div className="w-8 h-8 relative rounded overflow-hidden">
+                              <Image src={cat.icon_url} alt={cat.name} fill className="object-cover" />
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium text-[#1F2937]">{cat.name}</TableCell>
+                        <TableCell className="text-[#4B5563] text-sm">{cat.description || "—"}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => moveDenomCategory(index, "top")} disabled={index === 0} className="h-8 w-8 p-0 text-gray-500 hover:bg-gray-100 disabled:opacity-30" title="Move to Top"><ArrowUpToLine className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => moveDenomCategory(index, "up")} disabled={index === 0} className="h-8 w-8 p-0 text-gray-500 hover:bg-gray-100 disabled:opacity-30" title="Move Up"><ArrowUp className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => moveDenomCategory(index, "down")} disabled={index === denominationCategories.length - 1} className="h-8 w-8 p-0 text-gray-500 hover:bg-gray-100 disabled:opacity-30" title="Move Down"><ArrowDown className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => moveDenomCategory(index, "bottom")} disabled={index === denominationCategories.length - 1} className="h-8 w-8 p-0 text-gray-500 hover:bg-gray-100 disabled:opacity-30" title="Move to Bottom"><ArrowDownToLine className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => editDenomCategory(index)} className="h-8 w-8 p-0 text-blue-500 hover:bg-blue-50"><Pencil className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => removeDenomCategory(index)} className="h-8 w-8 p-0 text-red-500 hover:bg-red-50"><Trash2 className="h-4 w-4" /></Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            <div className="bg-white p-4 rounded-md border-2 border-[#F59E0B]/20">
+              <h3 className="text-[#1F2937] font-medium mb-4">{editingDenomCatIndex !== null ? "Edit Category" : "Add New Category"}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="cat-name" className="text-[#1F2937]">Category Name</Label>
+                    <Input id="cat-name" value={newDenomCatName} onChange={(e) => setNewDenomCatName(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="e.g. Weekly Pass" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cat-desc" className="text-[#1F2937]">Description (Optional)</Label>
+                    <Input id="cat-desc" value={newDenomCatDesc} onChange={(e) => setNewDenomCatDesc(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="Brief description" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[#1F2937]">Category Icon (Optional)</Label>
+                  <div className="flex gap-4 items-start">
+                    <div className="w-16 h-16 relative rounded overflow-hidden border-2 border-[#F59E0B]/30 bg-gray-50 flex-shrink-0 flex items-center justify-center">
+                      {newDenomCatIconUrl ? (
+                        <Image src={newDenomCatIconUrl} alt="Icon preview" fill className="object-cover" />
+                      ) : (
+                        <span className="text-xs text-gray-400">No icon</span>
+                      )}
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <Input value={newDenomCatIconUrl} onChange={(e) => setNewDenomCatIconUrl(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500 h-8" placeholder="URL or upload ->" />
+                      <input id="cat-icon-upload" type="file" accept="image/*" onChange={handleCatIconUpload} className="hidden" />
+                      <Button type="button" size="sm" className="w-full bg-white border border-[#F59E0B]/30 text-[#F59E0B] hover:bg-[#FEF7E0] h-8" onClick={() => document.getElementById("cat-icon-upload")?.click()} disabled={isUploadingCatIcon}>
+                        <Upload className="h-3 w-3 mr-2" />
+                        {isUploadingCatIcon ? "Uploading..." : "Upload Icon"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addDenomCategory}>
+                  {editingDenomCatIndex !== null ? <><Pencil className="h-4 w-4 mr-2" />Update Category</> : <><Plus className="h-4 w-4 mr-2" />Add Category</>}
+                </Button>
+                {editingDenomCatIndex !== null && <Button variant="outline" onClick={() => { setEditingDenomCatIndex(null); setNewDenomCatName(""); setNewDenomCatIconUrl(""); setNewDenomCatDesc("") }}>Cancel</Button>}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        )}
+
         {/* Denominations */}
         <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
         <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
@@ -713,6 +927,7 @@ export default function ProductEditPage() {
                   <TableRow>
                     <TableHead className="text-[#4B5563]">Price</TableHead>
                     <TableHead className="text-[#4B5563]">Label</TableHead>
+                    <TableHead className="text-[#4B5563]">Category</TableHead>
                     <TableHead className="text-[#4B5563]">Best Seller</TableHead>
                     <TableHead className="text-[#4B5563]">Stock</TableHead>
                     <TableHead className="w-[100px] text-right text-[#4B5563]">Action</TableHead>
@@ -723,6 +938,9 @@ export default function ProductEditPage() {
                     <TableRow key={index} className="border-t border-[#E5E7EB]">
                       <TableCell className="text-[#1F2937] font-medium">Rs. {denom.price}</TableCell>
                       <TableCell className="text-[#4B5563]">{denom.label}</TableCell>
+                      <TableCell className="text-[#4B5563] text-sm">
+                        {denom.categoryId ? denominationCategories.find(c => c.id === denom.categoryId)?.name || "Unknown" : "—"}
+                      </TableCell>
                       <TableCell className="text-[#4B5563]">{denom.bestseller ? <Badge className="bg-pink-500 border-none text-white">Best Seller</Badge> : "—"}</TableCell>
                       <TableCell className="text-[#4B5563]">{denom.in_stock !== false ? <Badge className="bg-green-500 border-none text-white">In Stock</Badge> : <Badge className="bg-gray-400 border-none text-white">Out of Stock</Badge>}</TableCell>
                       <TableCell className="text-right">
@@ -747,6 +965,20 @@ export default function ProductEditPage() {
               <div className="space-y-2">
                 <Label htmlFor="label" className="text-[#1F2937]">Label</Label>
                 <Input id="label" value={newDenomLabel} onChange={(e) => setNewDenomLabel(e.target.value)} className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500" placeholder="e.g. 100 Diamonds" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[#1F2937]">Category</Label>
+                <Select value={newDenomCategoryId} onValueChange={setNewDenomCategoryId} disabled={category !== "topup" && category !== "digital-goods"}>
+                  <SelectTrigger className="bg-white border-2 border-[#F59E0B]/30 focus:ring-[#F59E0B]">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {denominationCategories.map(cat => (
+                      <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2 flex flex-col justify-center">
                 <Label htmlFor="bestseller" className="text-[#1F2937] mb-2">Best Seller?</Label>
@@ -777,7 +1009,7 @@ export default function ProductEditPage() {
               <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={addDenomination}>
                 {editingDenomIndex !== null ? <><Pencil className="h-4 w-4 mr-2" />Update Denomination</> : <><Plus className="h-4 w-4 mr-2" />Add Denomination</>}
               </Button>
-              {editingDenomIndex !== null && <Button variant="outline" onClick={() => { setEditingDenomIndex(null); setNewDenomPrice(""); setNewDenomLabel(""); setNewDenomBestseller(false); setNewDenomInStock(true) }}>Cancel</Button>}
+              {editingDenomIndex !== null && <Button variant="outline" onClick={() => { setEditingDenomIndex(null); setNewDenomPrice(""); setNewDenomLabel(""); setNewDenomBestseller(false); setNewDenomInStock(true); setNewDenomCategoryId("") }}>Cancel</Button>}
             </div>
           </div>
         </CardContent>
