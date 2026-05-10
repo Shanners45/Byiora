@@ -3,8 +3,49 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { sanitizeHtml } from "@/lib/sanitize"
 
 import { verifyAdmin } from "./admin-utils"
+
+function sanitizeProductData<T extends Record<string, any>>(data: T): T {
+  const result: any = { ...data }
+  if (result.name) result.name = sanitizeHtml(result.name)
+  if (result.description) result.description = sanitizeHtml(result.description)
+  if (result.ribbon_text) result.ribbon_text = sanitizeHtml(result.ribbon_text)
+  if (result.uid_instructions) result.uid_instructions = sanitizeHtml(result.uid_instructions)
+  
+  if (result.denominations) {
+    result.denominations = result.denominations.map((d: any) => ({
+      ...d,
+      label: d.label ? sanitizeHtml(d.label) : ""
+    }))
+  }
+  
+  if (result.denomination_categories) {
+    result.denomination_categories = result.denomination_categories.map((c: any) => ({
+      ...c,
+      name: c.name ? sanitizeHtml(c.name) : "",
+      description: c.description ? sanitizeHtml(c.description) : undefined
+    }))
+  }
+
+  if (result.faqs) {
+    result.faqs = result.faqs.map((f: any) => ({
+      ...f,
+      question: f.question ? sanitizeHtml(f.question) : "",
+      answer: f.answer ? sanitizeHtml(f.answer) : ""
+    }))
+  }
+  
+  if (result.checkout_fields) {
+    result.checkout_fields = result.checkout_fields.map((f: any) => ({
+      ...f,
+      label: f.label ? sanitizeHtml(f.label) : ""
+    }))
+  }
+
+  return result as T
+}
 
 /**
  * Creates a new product (admin only)
@@ -34,10 +75,11 @@ export async function createProductAction(productData: {
 
   try {
     const serviceSupabase = createServiceRoleClient()
+    const sanitizedData = sanitizeProductData(productData)
 
     const { data, error } = await serviceSupabase
       .from("products")
-      .insert([productData as any])
+      .insert([sanitizedData as any])
       .select()
       .single()
 
@@ -85,9 +127,10 @@ export async function updateProductAction(
 
   try {
     const serviceSupabase = createServiceRoleClient()
+    const sanitizedData = sanitizeProductData(productData)
 
     const updateData = {
-      ...productData,
+      ...sanitizedData,
       updated_at: new Date().toISOString(),
     }
 

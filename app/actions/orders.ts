@@ -64,7 +64,7 @@ export async function sendGiftcardCodeAction(
         giftcard_code: code,
         status: "Completed",
       })
-      .eq("id", transactionId)
+      .eq("transaction_id", transactionId)
 
     if (error) {
       console.error("Error sending giftcard code:", error)

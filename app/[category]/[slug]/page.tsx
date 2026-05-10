@@ -130,6 +130,7 @@ export default function ProductDetailPage() {
   const isTopupProduct = product?.category === "topup"
   const isDirectLoginProduct = product?.category === "direct-login"
   const checkoutFields = product?.checkout_fields || []
+  const topupHasCheckout = isTopupProduct && checkoutFields.length > 0
 
 
 
@@ -166,9 +167,9 @@ export default function ProductDetailPage() {
     )
 
     const hasServers = product.servers && product.servers.length > 0
-    const missingServer = isTopupProduct && hasServers && !selectedServer
+    const missingServer = isTopupProduct && !topupHasCheckout && hasServers && !selectedServer
 
-    if (!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !userId) || missingServer || missingCheckoutField) {
+    if (!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !topupHasCheckout && !userId) || missingServer || missingCheckoutField) {
       if (missingServer) {
         toast.error("Please select a server")
       } else {
@@ -199,7 +200,7 @@ export default function ProductDetailPage() {
         email: email,
         productId: product?.id || productSlug,
         productCategory: product?.category || (isTopupProduct ? "topup" : isDirectLoginProduct ? "direct-login" : "digital-goods"),
-        guestData: isTopupProduct ? { userId, server: selectedServer } : null,
+        guestData: isTopupProduct && !topupHasCheckout ? { userId, server: selectedServer } : null,
       })
 
       // Encrypt checkout field values
@@ -392,7 +393,7 @@ export default function ProductDetailPage() {
 
           {/* Purchase Form */}
           <div className="lg:col-span-2 space-y-6 order-2">
-            {/* Step 1: User ID (for topup products only) */}
+            {/* Step 1: User ID OR Checkout Fields (for topup products) */}
             {isTopupProduct && (
               <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
                 <div className="flex items-center gap-3 mb-4">
@@ -400,78 +401,109 @@ export default function ProductDetailPage() {
                     1
                   </div>
                   <h2 className="text-xl font-semibold text-brand-charcoal">
-                    {product.servers && product.servers.length > 0 ? "Enter User ID and Server" : "Enter User ID"}
+                    {topupHasCheckout
+                      ? "Account Details"
+                      : (product.servers && product.servers.length > 0 ? "Enter User ID and Server" : "Enter User ID")}
                   </h2>
                 </div>
 
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="userId" className="text-brand-charcoal font-semibold text-base">
-                      Enter User ID *
-                    </Label>
-                    <div className="flex flex-row items-center gap-2 mt-2">
-                      <div className="relative flex-1 min-w-0">
+                {topupHasCheckout ? (
+                  /* Checkout fields replace User ID when enabled */
+                  <div className="space-y-4">
+                    {checkoutFields.map((field: any) => (
+                      <div key={field.key}>
+                        <Label htmlFor={field.key} className="font-semibold text-base text-brand-charcoal flex items-center gap-2 mb-2">
+                          {field.label} {field.required && "*"}
+                        </Label>
                         <Input
-                          id="userId"
-                          type="text"
-                          value={userId}
-                          onChange={(e) => setUserId(e.target.value)}
-                          placeholder="User ID"
-                          required
-                          autoComplete="off"
-                          className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4] w-full h-10 text-sm"
+                          id={field.key}
+                          type={field.type}
+                          value={checkoutFieldValues[field.key] || ""}
+                          onChange={(e) => setCheckoutFieldValues(prev => ({ ...prev, [field.key]: e.target.value }))}
+                          placeholder={`Enter ${field.label.toLowerCase()}`}
+                          required={field.required}
+                          autoComplete={field.type === "password" ? "new-password" : "off"}
+                          className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4]"
                         />
+                        {field.type === "password" && (
+                          <p className="text-xs text-brand-light-gray mt-2 flex gap-1">
+                            <span>Temporary access is required for delivery. We recommend changing your password after the order is complete.</span>
+                          </p>
+                        )}
                       </div>
-
-                      {product.servers && product.servers.length > 0 && (
-                        <div className="w-28 md:w-48 flex-shrink-0">
-                          <Select value={selectedServer} onValueChange={setSelectedServer}>
-                            <SelectTrigger className="bg-white border-gray-200 text-brand-charcoal focus:ring-[#00BCD4] focus:border-[#00BCD4] h-10 text-sm">
-                              <SelectValue placeholder="Server" />
-                            </SelectTrigger>
-                            <SelectContent className="bg-white border-gray-100 shadow-xl">
-                              {product.servers.map((server: { id: string; name: string }) => (
-                                <SelectItem key={server.id} value={server.name} className="focus:bg-gray-100 focus:text-brand-charcoal cursor-pointer">
-                                  {server.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
-
-                      {product.uid_guide_image && (
-                        <div className="relative group/uid cursor-help flex-shrink-0">
-                          <HelpCircle className="h-5 w-5 text-[#00BCD4] hover:text-[#00BCD4]/80 transition-colors" />
-                          <div className="absolute bottom-full right-0 mb-3 w-[280px] md:w-[400px] max-w-[calc(100vw-40px)] p-2 bg-white rounded-xl shadow-2xl border border-gray-100 opacity-0 group-hover/uid:opacity-100 pointer-events-none transition-all duration-200 transform translate-y-2 group-hover/uid:translate-y-0 z-[100]">
-                            <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
-                              <Image
-                                src={product.uid_guide_image}
-                                alt="ID Guide"
-                                fill
-                                className="object-contain"
-                                unoptimized
-                              />
-                            </div>
-                            <div className="absolute -bottom-2 right-2 w-4 h-4 bg-white border-r border-b border-gray-100 rotate-45" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-brand-light-gray mt-2">
-                      {product.uid_instructions || "To find your User ID, click on your avatar, you can find your User ID under your Nickname."}
-                    </p>
+                    ))}
                   </div>
-                </div>
+                ) : (
+                  /* Original User ID input */
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="userId" className="text-brand-charcoal font-semibold text-base">
+                        Enter User ID *
+                      </Label>
+                      <div className="flex flex-row items-center gap-2 mt-2">
+                        <div className="relative flex-1 min-w-0">
+                          <Input
+                            id="userId"
+                            type="text"
+                            value={userId}
+                            onChange={(e) => setUserId(e.target.value)}
+                            placeholder="User ID"
+                            required
+                            autoComplete="off"
+                            className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 focus:ring-[#00BCD4] focus:border-[#00BCD4] w-full h-10 text-sm"
+                          />
+                        </div>
+
+                        {product.servers && product.servers.length > 0 && (
+                          <div className="w-28 md:w-48 flex-shrink-0">
+                            <Select value={selectedServer} onValueChange={setSelectedServer}>
+                              <SelectTrigger className="bg-white border-gray-200 text-brand-charcoal focus:ring-[#00BCD4] focus:border-[#00BCD4] h-10 text-sm">
+                                <SelectValue placeholder="Server" />
+                              </SelectTrigger>
+                              <SelectContent className="bg-white border-gray-100 shadow-xl">
+                                {product.servers.map((server: { id: string; name: string }) => (
+                                  <SelectItem key={server.id} value={server.name} className="focus:bg-gray-100 focus:text-brand-charcoal cursor-pointer">
+                                    {server.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        {product.uid_guide_image && (
+                          <div className="relative group/uid cursor-help flex-shrink-0">
+                            <HelpCircle className="h-5 w-5 text-[#00BCD4] hover:text-[#00BCD4]/80 transition-colors" />
+                            <div className="absolute bottom-full right-0 mb-3 w-[280px] md:w-[400px] max-w-[calc(100vw-40px)] p-2 bg-white rounded-xl shadow-2xl border border-gray-100 opacity-0 group-hover/uid:opacity-100 pointer-events-none transition-all duration-200 transform translate-y-2 group-hover/uid:translate-y-0 z-[100]">
+                              <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
+                                <Image
+                                  src={product.uid_guide_image}
+                                  alt="ID Guide"
+                                  fill
+                                  className="object-contain"
+                                  unoptimized
+                                />
+                              </div>
+                              <div className="absolute -bottom-2 right-2 w-4 h-4 bg-white border-r border-b border-gray-100 rotate-45" />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-brand-light-gray mt-2">
+                        {product.uid_instructions || "To find your User ID, click on your avatar, you can find your User ID under your Nickname."}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
 
 
             {/* Step 1 or 2: Select Voucher */}
-            <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
+            <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
               <div className="flex items-center gap-3 mb-4">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${(isTopupProduct && userId && (product.servers && product.servers.length > 0 ? selectedServer : true)) || (!isTopupProduct)
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${(isTopupProduct && (topupHasCheckout ? !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()) : (userId && (product.servers && product.servers.length > 0 ? selectedServer : true)))) || (!isTopupProduct)
                   ? "bg-[#00BCD4] text-white"
                   : "bg-gray-200 text-brand-light-gray"
                   }`}>
@@ -564,10 +596,12 @@ export default function ProductDetailPage() {
                     {product?.denomination_categories && product.denomination_categories.length > 0 ? (
                       <div className="relative min-w-0">
                         {/* Sticky Category Tabs */}
-                        <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-md py-3 mb-6 border-b border-gray-100 flex overflow-x-auto gap-2 shadow-sm rounded-t-lg hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                          <style dangerouslySetInnerHTML={{__html: `
-                            .hide-scrollbar::-webkit-scrollbar { display: none; }
-                          `}} />
+                        <div className="sticky top-16 z-30 pt-4 pb-3 mb-4 -mx-6 px-6 border-b border-gray-100 shadow-sm relative">
+                          <div className="absolute inset-0 bg-white/60 backdrop-blur-md z-0" />
+                          <div className="relative z-10 flex overflow-x-auto gap-2 hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                            <style dangerouslySetInnerHTML={{__html: `
+                              .hide-scrollbar::-webkit-scrollbar { display: none; }
+                            `}} />
                           {product.denomination_categories.map((cat: any) => {
                             const hasDenoms = giftCard.denominations.some((d: any) => d.categoryId === cat.id);
                             if (!hasDenoms) return null;
@@ -584,7 +618,7 @@ export default function ProductDetailPage() {
                                     window.scrollTo({ top: y, behavior: 'smooth' });
                                   }
                                 }}
-                                className="flex items-center gap-2 whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
+                                className="flex items-center gap-2 whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-full border border-gray-200/60 bg-white/50 backdrop-blur-sm text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
                               >
                                 {icon && <img src={icon} alt={cat.name} className="w-5 h-5 object-contain flex-shrink-0" />}
                                 <span>{cat.name}</span>
@@ -605,12 +639,13 @@ export default function ProductDetailPage() {
                                     window.scrollTo({ top: y, behavior: 'smooth' });
                                   }
                                 }}
-                                className="flex items-center gap-2 whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
+                                className="flex items-center gap-2 whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-full border border-gray-200/60 bg-white/50 backdrop-blur-sm text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
                               >
                                 <span>Other Options</span>
                               </button>
                             );
                           })()}
+                          </div>
                         </div>
 
                         <div className="space-y-8">
@@ -663,13 +698,13 @@ export default function ProductDetailPage() {
               })()}
             </div>
 
-            {/* Step 2 or 3 Alternative: Checkout fields */}
-            {(isDirectLoginProduct || isTopupProduct) && checkoutFields.length > 0 && (
+            {/* Step 2 or 3 Alternative: Checkout fields (only for direct-login; topup checkout fields are in Step 1) */}
+            {isDirectLoginProduct && checkoutFields.length > 0 && (
               <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
                 <div className="flex items-center gap-3 mb-4">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray"
                     }`}>
-                    {isTopupProduct ? "3" : "2"}
+                    2
                   </div>
                   <h2 className="text-xl font-semibold text-brand-charcoal">
                     Account Details
@@ -703,16 +738,16 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Step 3 or 4: Enter Details / Contact Information */}
+            {/* Contact Information */}
             <div className="glassmorphism p-6 rounded-lg shadow-md border bg-white border-gray-200">
               <div className="flex items-center gap-3 mb-4">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${((isDirectLoginProduct || isTopupProduct) && checkoutFields.length > 0)
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${((isDirectLoginProduct || topupHasCheckout) && checkoutFields.length > 0)
                     ? (selectedDenomination && !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()) ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray")
                     : (selectedDenomination ? "bg-[#00BCD4] text-white" : "bg-gray-200 text-brand-light-gray")
                     }`}
                 >
-                  {isTopupProduct ? (checkoutFields.length > 0 ? "4" : "3") : (isDirectLoginProduct && checkoutFields.length > 0 ? "3" : "2")}
+                  {isTopupProduct ? "3" : (isDirectLoginProduct && checkoutFields.length > 0 ? "3" : "2")}
                 </div>
                 <h2 className="text-xl font-semibold text-brand-charcoal">
                   Contact Information
@@ -738,7 +773,7 @@ export default function ProductDetailPage() {
                   <p className="text-xs mt-1 text-brand-light-gray">
                     {isTopupProduct
                       ? "Make sure your email address is correct, we will use it to send your order confirmation and status updates."
-                      : "Make sure your email address is correct, we will use it to send your order confirmation and status updates."}
+                      : "Make sure your email address is correct, we will use it to send your order confirmation and the digital code."}
                   </p>
                 </div>
               </div>
@@ -746,16 +781,16 @@ export default function ProductDetailPage() {
 
 
 
-            {/* Step 4 or 5: Select Payment */}
+            {/* Select Payment */}
             <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
               <div className="flex items-center gap-3 mb-4">
                 <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination && email && (!isTopupProduct || (userId && (product.servers && product.servers.length > 0 ? selectedServer : true))) && (!(isDirectLoginProduct || isTopupProduct) || !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${selectedDenomination && email && (!isTopupProduct || topupHasCheckout || (userId && (product.servers && product.servers.length > 0 ? selectedServer : true))) && (!(isDirectLoginProduct || topupHasCheckout) || !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))
                     ? "bg-[#00BCD4] text-white"
                     : "bg-gray-200 text-brand-light-gray"
                     }`}
                 >
-                  {isTopupProduct ? (checkoutFields.length > 0 ? "5" : "4") : (isDirectLoginProduct && checkoutFields.length > 0 ? "4" : "3")}
+                  {isTopupProduct ? "4" : (isDirectLoginProduct && checkoutFields.length > 0 ? "4" : "3")}
                 </div>
                 <h2 className="text-xl font-semibold text-brand-charcoal">Select payment</h2>
               </div>

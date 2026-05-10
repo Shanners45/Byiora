@@ -58,15 +58,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const initializeAuth = async () => {
       try {
         const supabase = createClient()
-        const { data: { session } } = await supabase.auth.getSession()
+        // SECURITY: Use getUser() instead of getSession() — getSession() reads
+        // from storage without JWT validation and can return tampered data.
+        const { data: { user: authUser } } = await supabase.auth.getUser()
 
-        if (session?.user) {
+        if (authUser) {
           try {
             // Verify user still exists in Supabase and get latest data
             const { data: existingUser, error } = await supabase
               .from("users")
               .select("*")
-              .eq("id", session.user.id)
+              .eq("id", authUser.id)
               .single()
 
             if (existingUser && !error) {

@@ -86,7 +86,6 @@ export async function addAdminUserAction(
       .insert({
         id: uid,
         email,
-        password_hash: "",
         name,
         role,
         status: "active",

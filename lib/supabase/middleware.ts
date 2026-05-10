@@ -124,6 +124,30 @@ export async function updateSession(request: NextRequest) {
         url.pathname = "/admin/login"
         return NextResponse.redirect(url)
       }
+
+      // SECURITY: Check if user is actually an active admin
+      const adminClient = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          cookies: {
+            get() { return "" },
+            set() {},
+            remove() {},
+          },
+        }
+      )
+
+      const { data: adminUser } = await adminClient
+        .from("admin_users")
+        .select("status")
+        .eq("id", user.id)
+        .single()
+
+      if (!adminUser || adminUser.status !== "active") {
+        url.pathname = "/"
+        return NextResponse.redirect(url)
+      }
     }
 
     return supabaseResponse

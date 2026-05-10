@@ -2,6 +2,9 @@
 
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { sendOrderPlacedEmail } from "@/lib/email/resend"
+import { headers } from "next/headers"
+import { rateLimit } from "@/lib/rate-limit"
+import crypto from "crypto"
 
 interface TransactionData {
   product: string
@@ -22,6 +25,14 @@ interface TransactionData {
  */
 export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any }> {
   try {
+    // SECURITY: Per-IP rate limiting to prevent order spam (5 orders/min per IP)
+    const h = await headers()
+    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+    const rl = await rateLimit(`order:${ip}`, { windowMs: 60_000, max: 5 })
+    if (!rl.ok) {
+      return { success: false, error: "Too many orders. Please wait a moment and try again." }
+    }
+
     const serviceSupabase = createServiceRoleClient()
 
     const productId = transactionData.productId || transactionData.product.toLowerCase().replace(/\s+/g, "-")
@@ -63,7 +74,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     const yy = String(now.getFullYear()).slice(-2)
     const mm = String(now.getMonth() + 1).padStart(2, '0')
     const dd = String(now.getDate()).padStart(2, '0')
-    const random = Math.random().toString(36).substring(2, 7).toUpperCase()
+    const random = crypto.randomUUID().split("-")[0].toUpperCase().substring(0, 5)
     const transactionId = `BYI-${yy}${mm}${dd}-${random}`
 
     const insertPayload: any = {
