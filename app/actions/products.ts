@@ -37,7 +37,7 @@ export async function createProductAction(productData: {
 
     const { data, error } = await serviceSupabase
       .from("products")
-      .insert([productData])
+      .insert([productData as any])
       .select()
       .single()
 
@@ -93,7 +93,7 @@ export async function updateProductAction(
 
     const { data, error } = await serviceSupabase
       .from("products")
-      .update(updateData)
+      .update(updateData as any)
       .eq("id", id)
       .select()
       .single()

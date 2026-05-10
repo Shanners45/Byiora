@@ -37,7 +37,7 @@ export default function AddProductPage() {
   const [description, setDescription] = useState("")
   const [isActive, setIsActive] = useState(true)
   const [ribbonText, setRibbonText] = useState("")
-  const [denominations, setDenominations] = useState<Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean }>>([])
+  const [denominations, setDenominations] = useState<Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean; categoryId?: string }>>([])
   const [denomIconUrl, setDenomIconUrl] = useState("")
   const [uidInstructions, setUidInstructions] = useState("To find your User ID, click on your avatar, you can find your User ID under your Nickname.")
   const [uidGuideImage, setUidGuideImage] = useState("")
