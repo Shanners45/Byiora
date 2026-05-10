@@ -29,7 +29,7 @@ export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, o
 
       {/* Custom ribbon badge (takes priority) */}
       {ribbon_text ? (
-        <div className="absolute top-2 left-2 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase tracking-wide">
+        <div className="absolute top-2 left-2 max-w-[calc(100%-16px)] bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase tracking-wide truncate">
           {ribbon_text}
         </div>
       ) : isNew ? (

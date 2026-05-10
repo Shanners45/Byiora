@@ -584,10 +584,10 @@ export default function ProductDetailPage() {
                                     window.scrollTo({ top: y, behavior: 'smooth' });
                                   }
                                 }}
-                                className="flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
+                                className="flex items-center gap-2 whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
                               >
-                                {icon && <img src={icon} alt={cat.name} className="w-5 h-5 object-contain" />}
-                                {cat.name}
+                                {icon && <img src={icon} alt={cat.name} className="w-5 h-5 object-contain flex-shrink-0" />}
+                                <span>{cat.name}</span>
                               </button>
                             );
                           })}
@@ -605,9 +605,9 @@ export default function ProductDetailPage() {
                                     window.scrollTo({ top: y, behavior: 'smooth' });
                                   }
                                 }}
-                                className="flex items-center gap-2 whitespace-nowrap px-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
+                                className="flex items-center gap-2 whitespace-nowrap flex-shrink-0 px-4 py-2 rounded-full border border-gray-200 bg-gray-50 text-brand-charcoal hover:bg-[#00BCD4] hover:text-white hover:border-[#00BCD4] transition-colors font-medium text-sm shadow-sm"
                               >
-                                Other Options
+                                <span>Other Options</span>
                               </button>
                             );
                           })()}
