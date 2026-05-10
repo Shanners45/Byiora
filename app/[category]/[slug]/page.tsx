@@ -469,7 +469,7 @@ export default function ProductDetailPage() {
 
 
             {/* Step 1 or 2: Select Voucher */}
-            <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200">
+            <div className="glassmorphism p-6 bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden">
               <div className="flex items-center gap-3 mb-4">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${(isTopupProduct && userId && (product.servers && product.servers.length > 0 ? selectedServer : true)) || (!isTopupProduct)
                   ? "bg-[#00BCD4] text-white"
@@ -562,9 +562,9 @@ export default function ProductDetailPage() {
                 return (
                   <RadioGroup value={selectedDenomination} onValueChange={setSelectedDenomination}>
                     {product?.denomination_categories && product.denomination_categories.length > 0 ? (
-                      <div className="relative">
+                      <div className="relative min-w-0">
                         {/* Sticky Category Tabs */}
-                        <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-md py-3 -mx-2 px-2 sm:-mx-0 sm:px-0 mb-6 border-b border-gray-100 flex overflow-x-auto gap-2 shadow-sm rounded-t-lg hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <div className="sticky top-16 z-30 bg-white/95 backdrop-blur-md py-3 mb-6 border-b border-gray-100 flex overflow-x-auto gap-2 shadow-sm rounded-t-lg hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                           <style dangerouslySetInnerHTML={{__html: `
                             .hide-scrollbar::-webkit-scrollbar { display: none; }
                           `}} />
