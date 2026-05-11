@@ -26,7 +26,7 @@ export default function RevenuePage() {
   const [loading, setLoading] = useState(true)
   const [isMounted, setIsMounted] = useState(false)
 
-  const currentDate = new Date()
+  const currentDate = useMemo(() => new Date(), [])
   const [selectedMonth, setSelectedMonth] = useState<string>(currentDate.getMonth().toString())
   const [selectedYear, setSelectedYear] = useState<string>(currentDate.getFullYear().toString())
 

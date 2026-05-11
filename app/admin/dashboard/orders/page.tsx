@@ -79,25 +79,28 @@ function DirectLoginCell({ transaction }: { transaction: Transaction }) {
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
       {isRevealed && decryptedData ? (
-        <div className="space-y-0.5">
+        <div className="space-y-1 bg-amber-50/80 border border-amber-200 rounded-md p-2">
           {Object.entries(decryptedData).map(([key, value]) => (
-            <div key={key} className="text-xs">
-              <span className="text-gray-400 capitalize">{key.replace(/_/g, " ")}:</span>{" "}
-              <span className="font-mono bg-amber-50 px-1 rounded text-amber-800">{value}</span>
+            <div key={key} className="text-xs flex items-baseline gap-1">
+              <span className="text-gray-500 capitalize font-medium">{key.replace(/_/g, " ")} :</span>{" "}
+              <span className="font-mono font-semibold text-amber-900">{value}</span>
             </div>
           ))}
         </div>
       ) : (
-        <span className="text-xs text-purple-600 font-medium">🔒 Encrypted</span>
+        <span className="inline-flex items-center gap-1 text-xs text-purple-700 bg-purple-50 border border-purple-200 font-medium px-2 py-1 rounded-md">
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          Encrypted
+        </span>
       )}
       <Button
         size="sm"
         variant="ghost"
         onClick={handleReveal}
         disabled={isDecrypting}
-        className="h-6 px-2 text-[10px]"
+        className={`h-6 px-2.5 text-[10px] rounded-md ${isRevealed ? "text-red-600 hover:text-red-700 hover:bg-red-50" : "text-purple-600 hover:text-purple-700 hover:bg-purple-50"}`}
       >
         {isDecrypting ? "..." : isRevealed ? <><EyeOff className="h-3 w-3 mr-1" />Hide</> : <><Eye className="h-3 w-3 mr-1" />Reveal</>}
       </Button>
@@ -211,7 +214,7 @@ export default function OrdersPage() {
 
   const sendOrderStatusNotification = async (transaction: Transaction, status: Transaction["status"], remarks?: string) => {
     try {
-      // Send notification to user when order status is updated
+      // Send notification to user when order status is updated (registered users only)
       if (transaction.user_id) {
         const isCompleted = status === "Completed"
         const title = isCompleted ? "Order Completed! 🎉" : "Order Failed ⚠️"
@@ -224,15 +227,13 @@ export default function OrdersPage() {
           message = `Your order for ${transaction.product_name} (${transaction.amount}) could not be processed.\n\nReason: ${remarksText}\n\nPlease check your transaction history for details or contact support if you need assistance.`
         }
 
-        await supabase.from("notifications").insert([
-          {
-            title,
-            message,
-            type: isCompleted ? "success" : "error",
-            user_id: transaction.user_id,
-            is_read: false,
-          },
-        ])
+        // Use server action with service role to bypass RLS
+        await insertNotificationAction(
+          title,
+          message,
+          isCompleted ? "success" : "error",
+          transaction.user_id
+        )
       }
     } catch (error) {
       console.error("Error sending order status notification:", error)
@@ -320,7 +321,7 @@ export default function OrdersPage() {
     setSendingCodeIds((prev) => ({ ...prev, [transaction.id]: true }))
     try {
       // Use Server Action with Service Role to bypass RLS
-      const result = await sendGiftcardCodeAction(transaction.id, code)
+      const result = await sendGiftcardCodeAction(transaction.transaction_id, code)
 
       if (result.error) {
         throw new Error(result.error)
@@ -350,18 +351,8 @@ export default function OrdersPage() {
       const emailResult = await response.json()
       if (!response.ok) throw new Error(emailResult.error || 'Failed to send')
 
-      // Send notification to user if they have a user_id
-      if (transaction.user_id) {
-        const notifResult = await insertNotificationAction(
-          "Order Completed! 🎉",
-          `Your order for ${transaction.product_name} (${transaction.amount}) is complete! Please check your email for your gift card code.`,
-          "success",
-          transaction.user_id
-        )
-        if (notifResult.error) {
-          console.error("Error inserting notification:", notifResult.error)
-        }
-      }
+      // Notification is already sent by updateTransactionStatus when status changes to Completed.
+      // The giftcode email from /api/send-code serves as the primary delivery mechanism.
 
       toast.success("Order marked as completed and email sent with giftcode!")
     } catch (error: any) {
@@ -390,10 +381,6 @@ export default function OrdersPage() {
       if (transaction.giftcard_code) {
         return transaction.giftcard_code
       }
-    }
-    // Fallback to user_id for registered users
-    if (transaction.user_id) {
-      return transaction.user_id
     }
     return "N/A"
   }
@@ -597,10 +584,11 @@ export default function OrdersPage() {
                       {transaction.product_category === "direct-login" ? (
                         <DirectLoginCell transaction={transaction} />
                       ) : transaction.product_category === "topup" ? (
-                        <div className="flex flex-col gap-2 items-start">
+                        transaction.encrypted_checkout_data ? (
+                          <DirectLoginCell transaction={transaction} />
+                        ) : (
                           <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono whitespace-pre-wrap">{getUIDForDisplay(transaction)}</span>
-                          {transaction.encrypted_checkout_data && <DirectLoginCell transaction={transaction} />}
-                        </div>
+                        )
                       ) : (transaction.product_category === "digital-goods" || transaction.product_category === "games" || (!transaction.product_category && transaction.product_name)) ? (
                         <div className="flex items-center gap-1.5">
                           <Input
