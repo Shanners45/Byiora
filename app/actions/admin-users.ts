@@ -178,6 +178,11 @@ export async function resetAdminPasswordAction(userId: string, newPassword: stri
   try {
     const serviceSupabase = createServiceRoleClient()
 
+    // SECURITY: Enforce minimum password strength
+    if (!newPassword || newPassword.length < 8) {
+      return { error: "Password must be at least 8 characters long." }
+    }
+
     // 1. Update the password in Supabase Auth
     const { error: authError } = await serviceSupabase.auth.admin.updateUserById(userId, {
       password: newPassword,

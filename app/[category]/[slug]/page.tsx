@@ -827,7 +827,7 @@ export default function ProductDetailPage() {
 
               <Button
                 onClick={() => setShowQRDialog(true)}
-                disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && (!userId || (product.servers && product.servers.length > 0 && !selectedServer))) || ((isDirectLoginProduct || isTopupProduct) && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
+                disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !topupHasCheckout && (!userId || (product.servers && product.servers.length > 0 && !selectedServer))) || ((isDirectLoginProduct || topupHasCheckout) && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
                 className="w-full mt-6 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white py-3 text-lg font-semibold"
               >
                 Proceed to Payment
@@ -885,7 +885,7 @@ export default function ProductDetailPage() {
 
       {/* QR Code Payment Dialog */}
       <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
-        <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-md bg-[#FFF8E7] border-[#F5D98E]" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <QrCode className="h-5 w-5" />

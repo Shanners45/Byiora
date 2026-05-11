@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
     const body = await request.json()
     const email = body.email
-    const giftcardCode = body.giftcardCode
+    const giftcardCode = sanitizeHtml(body.giftcardCode || "")
 
     const userName = sanitizeHtml(body.userName || "")
     const productName = sanitizeHtml(body.productName || "")
