@@ -187,8 +187,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
 
-      // After signup, we do login
-      return await login(email, password, captchaToken)
+      // After signup, the user is redirected to the OTP verification page.
+      // We do NOT call login() here because the user is not yet confirmed.
+      return true;
     } catch (error) {
       console.error("Signup error:", error);
       toast.error("Failed to create account. Please try again.");

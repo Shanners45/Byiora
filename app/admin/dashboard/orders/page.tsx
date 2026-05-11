@@ -83,15 +83,15 @@ function DirectLoginCell({ transaction }: { transaction: Transaction }) {
       {isRevealed && decryptedData ? (
         <div className="space-y-1 bg-amber-50/80 border border-amber-200 rounded-md p-2">
           {Object.entries(decryptedData).map(([key, value]) => (
-            <div key={key} className="text-xs flex items-baseline gap-1">
-              <span className="text-gray-500 capitalize font-medium">{key.replace(/_/g, " ")} :</span>{" "}
-              <span className="font-mono font-semibold text-amber-900">{value}</span>
+            <div key={key} className="text-xs">
+              <span className="text-gray-500 capitalize font-medium">{key.replace(/_/g, " ")}:</span>{" "}
+              <span className="font-mono font-semibold text-amber-900 break-all">{value}</span>
             </div>
           ))}
         </div>
       ) : (
         <span className="inline-flex items-center gap-1 text-xs text-purple-700 bg-purple-50 border border-purple-200 font-medium px-2 py-1 rounded-md">
-          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0110 0v4" /></svg>
           Encrypted
         </span>
       )}
@@ -125,7 +125,7 @@ export default function OrdersPage() {
   const itemsPerPage = 10
 
   useEffect(() => {
-    ;(async () => {
+    ; (async () => {
       try {
         const session = await getAdminSessionAction()
         if (session.success) setAdminUser({ role: session.data.role })
@@ -218,13 +218,13 @@ export default function OrdersPage() {
       if (transaction.user_id) {
         const isCompleted = status === "Completed"
         const title = isCompleted ? "Order Completed! 🎉" : "Order Failed ⚠️"
-        
+
         let message: string
         if (isCompleted) {
-          message = `Your order for ${transaction.product_name} (${transaction.amount}) is complete! Please check your email for your gift card code/details and visit your transaction history for more information.`
+          message = `Your order for ${transaction.product_name} (${transaction.amount}) is complete! Please check your email or transaction history for your gift card code/details.`
         } else {
           const remarksText = remarks?.trim() ? remarks : "No specific reason provided"
-          message = `Your order for ${transaction.product_name} (${transaction.amount}) could not be processed.\n\nReason: ${remarksText}\n\nPlease check your transaction history for details or contact support if you need assistance.`
+          message = `Your order for ${transaction.product_name} (${transaction.amount}) could not be processed.\n\nReason: ${remarksText}\n\nPlease contact support if you need assistance.`
         }
 
         // Use server action with service role to bypass RLS
@@ -536,30 +536,41 @@ export default function OrdersPage() {
                 <TableRow>
                   <TableHead className="text-[#1F2937] font-medium">Transaction ID</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Product</TableHead>
-                  <TableHead className="text-[#1F2937] font-medium">Amount</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Price</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Customer</TableHead>
-                  <TableHead className="text-[#1F2937] font-medium">Type</TableHead>
-                  <TableHead className="text-[#1F2937] font-medium">Payment</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Status</TableHead>
-                  <TableHead className="text-[#1F2937] font-medium">Date</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">UID / Giftcode</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedTransactions.map((transaction) => (
                   <TableRow key={transaction.id} className="hover:bg-[#FEF7E0]/50">
-                    <TableCell className="font-mono text-sm text-[#4B5563]">{transaction.transaction_id}</TableCell>
-                    <TableCell className="font-medium text-[#1F2937]">{transaction.product_name}</TableCell>
-                    <TableCell className="text-[#4B5563]">{transaction.amount}</TableCell>
-                    <TableCell className="text-[#4B5563]">Rs. {transaction.price}</TableCell>
-                    <TableCell className="text-[#4B5563]">{transaction.user_email}</TableCell>
                     <TableCell>
-                      <Badge variant={transaction.is_guest ? "secondary" : "default"}>
-                        {transaction.is_guest ? "Guest" : "Registered"}
-                      </Badge>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-mono text-sm text-[#4B5563]">{transaction.transaction_id}</span>
+                        <span className="text-xs text-gray-400">{new Date(transaction.created_at).toLocaleDateString()}</span>
+                      </div>
                     </TableCell>
-                    <TableCell className="text-[#4B5563]">{transaction.payment_method}</TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-medium text-[#1F2937]">{transaction.product_name}</span>
+                        <span className="text-xs text-[#4B5563]">{transaction.amount}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[#1F2937] font-medium">Rs. {transaction.price}</span>
+                        <span className="text-xs text-[#4B5563]">{transaction.payment_method}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[#4B5563] text-sm">{transaction.user_email}</span>
+                        <Badge variant={transaction.is_guest ? "secondary" : "default"} className="w-fit text-[10px] px-1.5 py-0 text-white">
+                          {transaction.is_guest ? "Guest" : "Registered"}
+                        </Badge>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <Select
                         value={transaction.status}
@@ -576,9 +587,6 @@ export default function OrdersPage() {
                           <SelectItem value="Failed">Failed</SelectItem>
                         </SelectContent>
                       </Select>
-                    </TableCell>
-                    <TableCell className="text-[#4B5563]">
-                      {new Date(transaction.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="text-[#4B5563] text-sm">
                       {transaction.product_category === "direct-login" ? (
@@ -616,7 +624,7 @@ export default function OrdersPage() {
                 ))}
                 {paginatedTransactions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="h-24 text-center text-[#4B5563]">
+                    <TableCell colSpan={6} className="h-24 text-center text-[#4B5563]">
                       {searchQuery || statusFilter !== "all"
                         ? "No transactions found matching your filters."
                         : "No transactions available."}
@@ -651,8 +659,8 @@ export default function OrdersPage() {
                       variant={currentPage === page ? "default" : "outline"}
                       size="sm"
                       onClick={() => setCurrentPage(page)}
-                      className={currentPage === page 
-                        ? "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" 
+                      className={currentPage === page
+                        ? "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"
                         : "border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
                       }
                     >

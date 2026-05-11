@@ -14,6 +14,7 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { useAuth } from "@/lib/auth-context"
 import { ArrowLeft, User, Lock } from "lucide-react"
+import { changePasswordAction } from "@/app/actions/auth"
 
 
 export default function SettingsPage() {
@@ -25,8 +26,6 @@ export default function SettingsPage() {
   const [name, setName] = useState(user?.name || "")
   const [email, setEmail] = useState(user?.email || "")
   const [isUpdating, setIsUpdating] = useState(false)
-
-  const [transactions, setTransactions] = useState([]) // Mock transaction state
 
   // Redirect if not logged in
   useEffect(() => {
@@ -73,14 +72,23 @@ export default function SettingsPage() {
 
     setIsUpdating(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      toast.success("Password changed successfully")
-      setCurrentPassword("")
-      setNewPassword("")
-      setConfirmPassword("")
+    try {
+      const result = await changePasswordAction(currentPassword, newPassword)
+      
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success("Password changed successfully")
+        setCurrentPassword("")
+        setNewPassword("")
+        setConfirmPassword("")
+      }
+    } catch (error) {
+      console.error("Change password error:", error)
+      toast.error("Failed to change password")
+    } finally {
       setIsUpdating(false)
-    }, 1000)
+    }
   }
 
 

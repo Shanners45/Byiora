@@ -37,7 +37,7 @@ export async function sendWelcomeEmail(input: { email: string; userName?: string
   `
 
   return await resend.emails.send({
-    from: "Byiora <no_reply@byiora.store>",
+    from: "Byiora <noreply@byiora.store>",
     to: [email],
     subject: "Welcome to Byiora!",
     html: htmlContent,
@@ -66,15 +66,15 @@ export async function sendOrderPlacedEmail(input: {
 
   const orderDate = input.orderDateIso
     ? new Date(input.orderDateIso).toLocaleString("en-US", {
-        timeZone: "Asia/Kathmandu",
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
+      timeZone: "Asia/Kathmandu",
+      dateStyle: "medium",
+      timeStyle: "short",
+    })
     : new Date().toLocaleString("en-US", {
-        timeZone: "Asia/Kathmandu",
-        dateStyle: "medium",
-        timeStyle: "short",
-      })
+      timeZone: "Asia/Kathmandu",
+      dateStyle: "medium",
+      timeStyle: "short",
+    })
 
   const row = (label: string, value: string) => `
     <tr>
@@ -125,6 +125,52 @@ export async function sendOrderPlacedEmail(input: {
     replyTo: "support@byiora.store",
     to: [email],
     subject: `Order Placed: ${productName}`,
+    html: htmlContent,
+  })
+}
+
+export async function sendPasswordChangedEmail(input: { email: string }) {
+  const resend = getResend()
+  const email = input.email.trim().toLowerCase()
+  const changeDate = new Date().toLocaleString("en-US", {
+    timeZone: "Asia/Kathmandu",
+    dateStyle: "medium",
+    timeStyle: "short",
+  })
+
+  const htmlContent = `
+<div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
+    <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
+      <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
+      <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Security Alert</p>
+    </div>
+    <div style="padding: 40px;">
+      <h2 style="color: #1E1E1E; font-size: 22px; margin-top: 0; text-align: center;">Password Changed Successfully</h2>
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; text-align: center; margin-top: 20px;">
+        Your Byiora account password was updated on <strong>${changeDate}</strong>.
+      </p>
+      <div style="margin: 30px 0; padding: 20px; background-color: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px;">
+        <p style="color: #991B1B; font-size: 14px; margin: 0; line-height: 1.6; text-align: center;">
+          <strong>Didn't make this change?</strong><br/>
+          Please contact our support team immediately to secure your account.
+        </p>
+      </div>
+      <div style="text-align: center; margin-top: 30px;">
+        <a href="https://www.byiora.store/contact" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Contact Support</a>
+      </div>
+    </div>
+    <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
+      <p style="color: #9ca3af; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
+    </div>
+  </div>
+</div>
+  `
+
+  return await resend.emails.send({
+    from: "Byiora <noreply@byiora.store>",
+    to: [email],
+    subject: "Your Byiora Password Has Been Changed",
     html: htmlContent,
   })
 }

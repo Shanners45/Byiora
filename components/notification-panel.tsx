@@ -1,13 +1,74 @@
 "use client"
-import { X, Bell, Check, CheckCheck } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { X, CheckCheck, Check } from "lucide-react"
 import { useNotifications } from "@/lib/notification-context"
 
 interface NotificationPanelProps {
   isOpen: boolean
   onClose: () => void
+}
+
+// Modern SVG icons per notification type
+const TypeIcon = ({ type }: { type: string }) => {
+  switch (type) {
+    case "success":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+          <polyline points="22 4 12 14.01 9 11.01" />
+        </svg>
+      )
+    case "warning":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+      )
+    case "error":
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+      )
+    default:
+      return (
+        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      )
+  }
+}
+
+const typeConfig: Record<string, { bg: string; iconBg: string; iconColor: string; dot: string }> = {
+  success: {
+    bg: "hover:bg-gray-50",
+    iconBg: "bg-emerald-100",
+    iconColor: "text-emerald-600",
+    dot: "bg-emerald-500",
+  },
+  warning: {
+    bg: "hover:bg-gray-50",
+    iconBg: "bg-amber-100",
+    iconColor: "text-amber-600",
+    dot: "bg-amber-500",
+  },
+  error: {
+    bg: "hover:bg-gray-50",
+    iconBg: "bg-red-100",
+    iconColor: "text-red-600",
+    dot: "bg-red-500",
+  },
+  info: {
+    bg: "hover:bg-gray-50",
+    iconBg: "bg-blue-100",
+    iconColor: "text-blue-600",
+    dot: "bg-blue-500",
+  },
 }
 
 export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
@@ -19,139 +80,138 @@ export function NotificationPanel({ isOpen, onClose }: NotificationPanelProps) {
     const now = new Date()
     const date = new Date(dateString)
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
-
     if (diffInMinutes < 1) return "Just now"
     if (diffInMinutes < 60) return `${diffInMinutes}m ago`
     if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
     return `${Math.floor(diffInMinutes / 1440)}d ago`
   }
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case "success":
-        return "✅"
-      case "warning":
-        return "⚠️"
-      case "error":
-        return "❌"
-      default:
-        return "ℹ️"
-    }
-  }
-
-  const getNotificationBorderColor = (type: string) => {
-    switch (type) {
-      case "success":
-        return "border-l-green-500"
-      case "warning":
-        return "border-l-yellow-500"
-      case "error":
-        return "border-l-red-500"
-      default:
-        return "border-l-blue-500"
-    }
-  }
-
   return (
-    <div className="fixed inset-0 z-50 bg-black bg-opacity-50" onClick={onClose}>
+    <div className="fixed inset-0 z-50" onClick={onClose}>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-[1px]" />
+
+      {/* Panel — compact popup card centered on mobile, right-aligned on desktop */}
       <div
-        className="absolute right-4 top-16 w-96 max-w-[90vw] bg-white rounded-lg shadow-xl border border-gray-200 max-h-[85vh] overflow-hidden flex flex-col"
+        className="absolute left-1/2 -translate-x-1/2 top-14 sm:left-auto sm:translate-x-0 sm:right-4 sm:top-16 w-[92vw] sm:w-[400px] max-h-[70vh] flex flex-col rounded-2xl shadow-2xl overflow-hidden bg-white border border-gray-200/60"
         onClick={(e) => e.stopPropagation()}
-        onWheel={e => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+        {/* Header — clean white */}
+        <div className="flex items-center justify-between px-5 py-4 flex-shrink-0 border-b border-gray-100">
           <div className="flex items-center gap-3">
-            <Bell className="h-6 w-6 text-gray-700" />
-            <h3 className="text-lg font-semibold text-gray-900">Notifications</h3>
-            {unreadCount > 0 && (
-              <Badge className="bg-red-500 text-white text-sm px-2 py-1 rounded-full">{unreadCount}</Badge>
-            )}
+            <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <svg viewBox="0 0 24 24" fill="none" className="w-[18px] h-[18px] text-gray-600" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-[15px] font-bold text-gray-900 leading-tight">Notifications</h3>
+              <p className="text-gray-400 text-xs">
+                {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {unreadCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
                 onClick={markAllAsRead}
-                className="text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50"
+                className="flex items-center gap-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors"
               >
-                <CheckCheck className="h-4 w-4 mr-1" />
-                Mark all read
-              </Button>
+                <CheckCheck className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Mark all read</span>
+                <span className="sm:hidden">All</span>
+              </button>
             )}
-            <Button variant="ghost" size="sm" onClick={onClose} className="hover:bg-gray-100">
-              <X className="h-5 w-5" />
-            </Button>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
-        {/* Notifications List - Scrollable */}
-        <div className="flex-1 overflow-y-auto" style={{ maxHeight: '60vh' }}>
-          <ScrollArea className="h-full">
-            {notifications.length === 0 ? (
-              <div className="p-12 text-center text-gray-500">
-                <Bell className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-                <p className="text-lg font-medium mb-2">No notifications yet</p>
-                <p className="text-sm text-gray-400">We'll notify you when something important happens</p>
+        {/* Notification List */}
+        <div
+          className="flex-1 overflow-y-auto overscroll-contain"
+          style={{ scrollbarWidth: "thin", scrollbarColor: "#d1d5db transparent" }}
+        >
+          {notifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+              <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
+                <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 text-gray-300" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
               </div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {notifications.map((notification) => (
+              <p className="text-sm font-semibold text-gray-700 mb-1">No notifications yet</p>
+              <p className="text-xs text-gray-400 max-w-[220px]">We&apos;ll let you know when something important happens</p>
+            </div>
+          ) : (
+            <div>
+              {notifications.map((notification, idx) => {
+                const cfg = typeConfig[notification.type] || typeConfig.info
+                return (
                   <div
                     key={notification.id}
-                    className={`p-5 hover:bg-gray-50 cursor-pointer transition-colors border-l-4 ${getNotificationBorderColor(
-                      notification.type,
-                    )} ${!notification.isRead ? "bg-blue-50" : ""}`}
                     onClick={() => !notification.isRead && markAsRead(notification.id)}
+                    className={`
+                      flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors
+                      ${!notification.isRead ? "bg-gray-50/80" : "bg-transparent"}
+                      ${cfg.bg}
+                      ${idx !== 0 ? "border-t border-gray-100" : ""}
+                    `}
                   >
-                    <div className="flex items-start gap-4">
-                      <span className="text-2xl flex-shrink-0 mt-1">{getNotificationIcon(notification.type)}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1">
-                            <p className="font-semibold text-gray-900 text-base mb-1 leading-tight">
-                              {notification.title}
-                            </p>
-                            <p className="text-gray-700 text-sm leading-relaxed mb-3 break-words">
-                              {notification.message}
-                            </p>
-                            <p className="text-xs text-gray-500 font-medium">{formatTimeAgo(notification.createdAt)}</p>
-                          </div>
-                          <div className="flex items-center gap-1 flex-shrink-0">
-                            {!notification.isRead && (
-                              <>
-                                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    markAsRead(notification.id)
-                                  }}
-                                  className="ml-2 p-2 hover:bg-blue-100"
-                                  title="Mark as read"
-                                >
-                                  <Check className="h-4 w-4 text-blue-600" />
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </div>
+                    {/* Icon pill */}
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${cfg.iconBg} ${cfg.iconColor}`}>
+                      <TypeIcon type={notification.type} />
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-semibold text-gray-900 leading-snug mb-0.5 break-words">
+                          {notification.title}
+                        </p>
+                        {!notification.isRead && (
+                          <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${cfg.dot}`} />
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 leading-relaxed mb-2 break-words">
+                        {notification.message}
+                      </p>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="text-[11px] text-gray-400 font-medium">
+                          {formatTimeAgo(notification.createdAt)}
+                        </span>
+                        {!notification.isRead && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              markAsRead(notification.id)
+                            }}
+                            className="flex items-center gap-1 text-[11px] font-medium text-gray-500 bg-gray-100 hover:bg-gray-200 px-2 py-0.5 rounded-full transition-colors"
+                          >
+                            <Check className="w-3 h-3" />
+                            Mark read
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </ScrollArea>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         {notifications.length > 0 && (
-          <div className="p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-            <p className="text-xs text-gray-500 text-center">
-              {notifications.length} notification{notifications.length !== 1 ? "s" : ""} total
+          <div className="px-5 py-2.5 border-t border-gray-100 flex-shrink-0">
+            <p className="text-[11px] text-gray-400 text-center tracking-wide">
+              {notifications.length} notification{notifications.length !== 1 ? "s" : ""} &middot; {unreadCount} unread
             </p>
           </div>
         )}
