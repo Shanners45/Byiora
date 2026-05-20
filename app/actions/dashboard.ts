@@ -2,7 +2,6 @@
 
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { createClient } from "@/lib/supabase/server"
-import { revalidatePath } from "next/cache"
 
 import { verifyAdmin } from "./admin-utils"
 
@@ -222,7 +221,6 @@ export async function sendNotificationAction(
       return { error: `Failed to send notification: ${error.message}` }
     }
 
-    revalidatePath("/admin/dashboard/notifications")
     return { success: true }
   } catch (error: any) {
     console.error("Error in sendNotificationAction:", error)
@@ -252,7 +250,6 @@ export async function deleteNotificationAction(id: string) {
       return { error: `Failed to delete notification: ${error.message}` }
     }
 
-    revalidatePath("/admin/dashboard/notifications")
     return { success: true }
   } catch (error: any) {
     console.error("Error in deleteNotificationAction:", error)

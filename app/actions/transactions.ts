@@ -124,10 +124,23 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       return { success: false, error: error.message || error.code || "Failed to add transaction" }
     }
 
+    let userName = undefined
+    if (transactionData.userId) {
+      const { data: userData } = await serviceSupabase
+        .from("users")
+        .select("name")
+        .eq("id", transactionData.userId)
+        .single()
+      if (userData?.name) {
+        userName = userData.name
+      }
+    }
+
     // Send order-placed email (non-blocking)
     try {
       sendOrderPlacedEmail({
         email: transactionData.email,
+        userName,
         productName: transactionData.product,
         denomination: transactionData.amount,
         transactionId,

@@ -5,6 +5,20 @@ import { getAllProducts, type Product } from "@/lib/product-categories"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 
+/** Strip HTML tags and decode common entities for plain-text display */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
 interface SearchResultsProps {
   query: string
   onItemClick: (category: string, slug: string) => void
@@ -57,8 +71,7 @@ export function SearchResults({ query, onItemClick }: SearchResultsProps) {
     const filtered = products
       .filter(
         (product) =>
-          product.name.toLowerCase().includes(query.toLowerCase()) ||
-          product.description?.toLowerCase().includes(query.toLowerCase()),
+          product.name.toLowerCase().includes(query.toLowerCase()),
       )
       .slice(0, 6)
     setFilteredProducts(filtered)
@@ -130,12 +143,11 @@ export function SearchResults({ query, onItemClick }: SearchResultsProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="font-medium text-gray-900 truncate">{product.name}</div>
-                <div className="text-sm text-gray-500 truncate">
-                  {product.description || `${product.category === "topup" ? "Top-up" : "Digital Goods"}`}
-                </div>
-              </div>
-              <div className="text-xs text-gray-400 flex-shrink-0">
-                {product.category === "topup" ? "Top-up" : "Gift Card"}
+                {product.description && (
+                  <div className="text-sm text-gray-500 truncate">
+                    {stripHtml(product.description)}
+                  </div>
+                )}
               </div>
               {activeId === product.id && (
                 <div className="w-4 h-4 border-2 border-brand-sky-blue border-t-transparent rounded-full animate-spin flex-shrink-0" />

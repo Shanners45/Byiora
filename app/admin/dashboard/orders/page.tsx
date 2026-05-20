@@ -434,9 +434,9 @@ export default function OrdersPage() {
     )
   }
 
-  // Calculate unique users
-  const uniqueRegisteredUsers = new Set(filteredTransactions.filter(t => !t.is_guest && t.user_id).map(t => t.user_id)).size
-  const uniqueGuestUsers = new Set(filteredTransactions.filter(t => t.is_guest).map(t => t.user_email)).size
+  // Calculate orders by user type
+  const registeredUserOrders = filteredTransactions.filter(t => !t.is_guest && t.user_id).length
+  const guestUserOrders = filteredTransactions.filter(t => t.is_guest).length
 
   return (
     <div className="space-y-6">
@@ -483,7 +483,7 @@ export default function OrdersPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-[#92400E]">Registered Users</p>
-                <p className="text-2xl font-bold text-[#1F2937]">{uniqueRegisteredUsers}</p>
+                <p className="text-2xl font-bold text-[#1F2937]">{registeredUserOrders}</p>
               </div>
             </div>
           </CardContent>
@@ -493,7 +493,7 @@ export default function OrdersPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-[#92400E]">Guest Users</p>
-                <p className="text-2xl font-bold text-[#1F2937]">{uniqueGuestUsers}</p>
+                <p className="text-2xl font-bold text-[#1F2937]">{guestUserOrders}</p>
               </div>
             </div>
           </CardContent>

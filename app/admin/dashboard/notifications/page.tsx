@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
-import { Send, Users, Bell, Trash2 } from "lucide-react"
+import { Send, Users, Bell, Trash2, Search, ChevronDown, X } from "lucide-react"
 import { getAllUsersAction, getAllNotificationsAction, sendNotificationAction, deleteNotificationAction } from "@/app/actions/dashboard"
 
 interface Notification {
@@ -32,6 +32,153 @@ interface User {
   id: string
   name: string
   email: string
+}
+
+// Known title prefixes for auto-generated order notifications
+const AUTO_NOTIFICATION_PREFIXES = [
+  "Order Placed Successfully",
+  "Order Completed",
+  "Order Failed",
+]
+
+function isAutoNotification(notification: Notification): boolean {
+  return AUTO_NOTIFICATION_PREFIXES.some((prefix) =>
+    notification.title.startsWith(prefix),
+  )
+}
+
+// ─── Searchable Recipient Picker ────────────────────────────────────────────
+function RecipientPicker({
+  users,
+  value,
+  onChange,
+}: {
+  users: User[]
+  value: string
+  onChange: (val: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState("")
+  const ref = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [])
+
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 50)
+    } else {
+      setSearch("")
+    }
+  }, [open])
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return users
+    const q = search.toLowerCase()
+    return users.filter(
+      (u) =>
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q),
+    )
+  }, [users, search])
+
+  const selectedLabel = useMemo(() => {
+    if (value === "broadcast") return "Broadcast to All Users"
+    const user = users.find((u) => u.id === value)
+    return user ? `${user.name} (${user.email})` : "Select recipient"
+  }, [value, users])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center justify-between w-full h-10 px-3 py-2 text-sm bg-white border-2 border-[#F59E0B]/30 rounded-md focus:border-[#F59E0B] focus:outline-none hover:bg-gray-50 transition-colors"
+      >
+        <span className="flex items-center gap-2 truncate text-left">
+          <Users className="h-4 w-4 flex-shrink-0 text-gray-500" />
+          <span className="truncate">{selectedLabel}</span>
+        </span>
+        <ChevronDown className={`h-4 w-4 flex-shrink-0 text-gray-500 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden animate-in slide-in-from-top-2 duration-150">
+          {/* Search bar inside dropdown */}
+          <div className="p-2 border-b border-gray-100">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="Search users..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-8 pr-8 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:border-[#F59E0B] placeholder:text-gray-400"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Options */}
+          <div className="max-h-[240px] overflow-y-auto">
+            {/* Broadcast option always visible */}
+            {(!search.trim()) && (
+              <button
+                type="button"
+                onClick={() => { onChange("broadcast"); setOpen(false) }}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-[#FEF7E0] transition-colors ${value === "broadcast" ? "bg-[#FEF7E0] font-medium" : ""}`}
+              >
+                <Users className="h-4 w-4 flex-shrink-0 text-[#F59E0B]" />
+                <span>Broadcast to All Users</span>
+              </button>
+            )}
+
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-sm text-center text-gray-400">
+                No users found
+              </div>
+            ) : (
+              filtered.map((user) => (
+                <button
+                  key={user.id}
+                  type="button"
+                  onClick={() => { onChange(user.id); setOpen(false) }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-[#FEF7E0] transition-colors ${value === user.id ? "bg-[#FEF7E0] font-medium" : ""}`}
+                >
+                  <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-semibold flex-shrink-0">
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate text-gray-900">{user.name}</div>
+                    <div className="truncate text-xs text-gray-500">{user.email}</div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function NotificationsPage() {
@@ -154,6 +301,9 @@ export default function NotificationsPage() {
     }
   }
 
+  // Filter out automatic order notifications — only show admin-sent ones
+  const manualNotifications = notifications.filter((n) => !isAutoNotification(n))
+
   return (
     <div className="space-y-6">
       <div>
@@ -178,27 +328,11 @@ export default function NotificationsPage() {
               <Label htmlFor="recipient" className="text-[#1F2937]">
                 Recipient
               </Label>
-              <Select value={selectedUser} onValueChange={setSelectedUser}>
-                <SelectTrigger className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]">
-                  <SelectValue placeholder="Select recipient" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="broadcast">
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      Broadcast to All Users
-                    </div>
-                  </SelectItem>
-                  {users.map((user) => (
-                    <SelectItem key={user.id} value={user.id}>
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        {user.name} ({user.email})
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <RecipientPicker
+                users={users}
+                value={selectedUser}
+                onChange={setSelectedUser}
+              />
             </div>
 
             <div className="space-y-2">
@@ -262,21 +396,21 @@ export default function NotificationsPage() {
               <Bell className="h-5 w-5" />
               Statistics
             </CardTitle>
-            <CardDescription className="text-[#92400E]">Notification delivery statistics</CardDescription>
+            <CardDescription className="text-[#92400E]">Admin notification delivery statistics</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
             <div className="space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-[#4B5563]">Total Notifications</span>
-                <span className="font-semibold text-[#1F2937]">{notifications.length}</span>
+                <span className="font-semibold text-[#1F2937]">{manualNotifications.length}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[#4B5563]">Broadcast Messages</span>
-                <span className="font-semibold text-[#1F2937]">{notifications.filter((n) => !n.user_id).length}</span>
+                <span className="font-semibold text-[#1F2937]">{manualNotifications.filter((n) => !n.user_id).length}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[#4B5563]">Direct Messages</span>
-                <span className="font-semibold text-[#1F2937]">{notifications.filter((n) => n.user_id).length}</span>
+                <span className="font-semibold text-[#1F2937]">{manualNotifications.filter((n) => n.user_id).length}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[#4B5563]">Active Users</span>
@@ -294,7 +428,7 @@ export default function NotificationsPage() {
           <CardDescription className="text-[#92400E]">Click on a recipient to view their notification history</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
-          {notifications.length === 0 ? (
+          {manualNotifications.length === 0 ? (
             <div className="h-24 flex items-center justify-center text-[#4B5563]">
               No notifications sent yet.
             </div>
@@ -302,14 +436,14 @@ export default function NotificationsPage() {
             <div className="space-y-3">
               {/* Process Broadcasts first */}
               {(() => {
-                const broadcasts = notifications.filter(n => !n.user_id)
+                const broadcasts = manualNotifications.filter(n => !n.user_id)
                 if (broadcasts.length === 0) return null
                 return <CollapsibleGroup title="Broadcast Messages" subtitle="All users" count={broadcasts.length} icon={<Users className="h-4 w-4" />} color="blue" items={broadcasts} deleteFn={deleteNotification} getTypeColor={getTypeColor} />
               })()}
 
               {/* Grouped User Notifications */}
-              {Array.from(new Set(notifications.filter(n => n.user_id).map(n => n.user_id))).map(userId => {
-                const userNotifications = notifications.filter(n => n.user_id === userId)
+              {Array.from(new Set(manualNotifications.filter(n => n.user_id).map(n => n.user_id))).map(userId => {
+                const userNotifications = manualNotifications.filter(n => n.user_id === userId)
                 const user = userNotifications[0].users
                 return (
                   <CollapsibleGroup 

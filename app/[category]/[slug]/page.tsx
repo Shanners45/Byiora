@@ -773,6 +773,8 @@ export default function ProductDetailPage() {
                   <p className="text-xs mt-1 text-brand-light-gray">
                     {isTopupProduct
                       ? "Make sure your email address is correct, we will use it to send your order confirmation and status updates."
+                      : isDirectLoginProduct
+                      ? "Make sure your email address is correct, we will use it to send your order confirmation."
                       : "Make sure your email address is correct, we will use it to send your order confirmation and the digital code."}
                   </p>
                 </div>

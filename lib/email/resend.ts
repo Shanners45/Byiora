@@ -90,7 +90,7 @@ export async function sendOrderPlacedEmail(input: {
       <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Order Placed Successfully</p>
     </div>
     <div style="padding: 40px;">
-      <h2 style="color: #1E1E1E; font-size: 20px; margin-top: 0;">Hi ${userName ? userName : "Valued Customer"},</h2>
+      <h2 style="color: #1E1E1E; font-size: 20px; margin-top: 0;">Hi ${userName ? userName : "valued customer"},</h2>
       <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Thank you for your order! We've successfully received your request for <strong>${productName}</strong>. Your order is currently being verified and processed.</p>
       <div style="margin: 32px 0; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
         <div style="background-color: #6B3FA0; padding: 12px 16px;">
