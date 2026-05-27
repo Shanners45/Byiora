@@ -163,6 +163,26 @@ async function ProductJsonLd({ slug }: { slug: string }) {
   }
 }
 
+async function ProductHiddenTitle({ slug }: { slug: string }) {
+  const supabase = await createClient()
+
+  try {
+    const { data: product } = await (supabase as any)
+      .from("products")
+      .select("name")
+      .eq("slug", slug)
+      .eq("is_active", true)
+      .single()
+
+    if (product) {
+      return <h1 className="sr-only">{product.name}</h1>
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
 export default async function ProductLayout({ params, children }: Props) {
   const { slug } = await params
 
@@ -173,6 +193,7 @@ export default async function ProductLayout({ params, children }: Props) {
           shows immediately instead of the old page staying visible. */}
       <Suspense fallback={null}>
         <ProductJsonLd slug={slug} />
+        <ProductHiddenTitle slug={slug} />
       </Suspense>
       {children}
     </>

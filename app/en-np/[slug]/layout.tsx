@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
 import type { Product } from "@/lib/product-categories"
 
@@ -39,7 +40,35 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function LocaleProductLayout({ children }: Props) {
-  return children
+async function HiddenTitle({ slug }: { slug: string }) {
+  const supabase = await createClient()
+
+  try {
+    const { data: product } = await (supabase as any)
+      .from("products")
+      .select("name")
+      .eq("slug", slug)
+      .eq("is_active", true)
+      .single()
+
+    if (product) {
+      return <h1 className="sr-only">{product.name}</h1>
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+export default async function LocaleProductLayout({ children, params }: Props) {
+  const { slug } = await params
+  return (
+    <>
+      <Suspense fallback={null}>
+        <HiddenTitle slug={slug} />
+      </Suspense>
+      {children}
+    </>
+  )
 }
 

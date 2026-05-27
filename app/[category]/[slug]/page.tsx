@@ -350,7 +350,7 @@ export default function ProductDetailPage() {
                   }}
                 />
               </div>
-              <h1 className="text-2xl font-bold text-brand-charcoal mb-2">{giftCard.name}</h1>
+              <h2 className="text-2xl font-bold text-brand-charcoal mb-2">{giftCard.name}</h2>
             </div>
 
             {/* Description & FAQ — visible on desktop only in this column */}

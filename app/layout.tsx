@@ -67,9 +67,6 @@ export const metadata: Metadata = {
       },
     ],
   },
-  alternates: {
-    canonical: "/",
-  },
   icons: {
     icon: [
       { url: "/icon.png", type: "image/png", sizes: "192x192" },
@@ -138,7 +135,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="canonical" href={BASE_URL} />
         {/* Preconnect to critical third-party origins for faster resource loading */}
         <link rel="preconnect" href="https://tkovigthghwpwbtjikyp.supabase.co" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://tkovigthghwpwbtjikyp.supabase.co" />
