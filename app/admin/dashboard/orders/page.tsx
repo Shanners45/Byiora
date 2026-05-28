@@ -549,6 +549,7 @@ export default function OrdersPage() {
                       <div className="flex flex-col gap-0.5">
                         <span className="font-mono text-sm text-[#4B5563]">{transaction.transaction_id}</span>
                         <span className="text-xs text-gray-400">{new Date(transaction.created_at).toLocaleDateString()}</span>
+                        <span className="text-xs text-gray-400">{new Date(transaction.created_at).toLocaleTimeString("en-US", { timeZone: "Asia/Kathmandu", hour: "2-digit", minute: "2-digit", hour12: true })} NPT</span>
                       </div>
                     </TableCell>
                     <TableCell>

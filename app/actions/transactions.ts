@@ -146,6 +146,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         transactionId,
         price: verifiedPrice,
         paymentMethod: transactionData.paymentMethod,
+        isGuest: !transactionData.userId,
       }).catch((e) => console.error("Order placed email error (non-blocking):", e))
     } catch (e) {
       console.error("Order placed email trigger failed (non-blocking):", e)

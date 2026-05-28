@@ -53,6 +53,7 @@ export async function sendOrderPlacedEmail(input: {
   price?: string
   paymentMethod?: string
   orderDateIso?: string
+  isGuest?: boolean
 }) {
   const resend = getResend()
 
@@ -108,9 +109,9 @@ export async function sendOrderPlacedEmail(input: {
       <p style="color: #4b5563; font-size: 15px; line-height: 1.6; text-align: center;">
         We will notify you again via email as soon as your order has been completed!
       </p>
-      <div style="margin-top: 35px; text-align: center;">
+      ${!input.isGuest ? `<div style="margin-top: 35px; text-align: center;">
          <a href="https://www.byiora.store/transactions" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Order Status</a>
-      </div>
+      </div>` : ''}
     </div>
     <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
       <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Need help with your order? <a href="https://www.byiora.store/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">Contact Support</a></p>
