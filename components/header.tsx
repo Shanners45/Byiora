@@ -5,11 +5,11 @@ import type React from "react"
 import { Menu, Search, User, Bell, LogOut, Settings, History, Home, Headset, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet"
-import { Dialog, DialogContent, DialogTrigger, DialogTitle } from "@/components/ui/dialog"
+
 import { Badge } from "@/components/ui/badge"
 import { NotificationPanel } from "./notification-panel"
 import { SearchResults } from "./search-results"
-import { SignInForm } from "./sign-in-form"
+
 import { useAuth } from "@/lib/auth-context"
 import { useNotifications } from "@/lib/notification-context"
 import { useRouter } from "next/navigation"
@@ -20,7 +20,6 @@ export function Header() {
   const { user, isLoggedIn, logout, isLoading } = useAuth()
   const { unreadCount } = useNotifications()
   const router = useRouter()
-  const [isSignInOpen, setIsSignInOpen] = useState(false)
   const [isNotificationOpen, setIsNotificationOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearchResults, setShowSearchResults] = useState(false)
@@ -29,18 +28,7 @@ export function Header() {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false)
   const mobileSearchRef = useRef<HTMLInputElement>(null)
 
-  // Check for ?login=open in URL
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search)
-      if (params.get("login") === "open") {
-        setIsSignInOpen(true)
-        // Clean up URL without triggering refresh
-        const newUrl = window.location.pathname
-        window.history.replaceState({}, "", newUrl)
-      }
-    }
-  }, [])
+
 
   // Auto-focus mobile search input when overlay opens
   useEffect(() => {
@@ -68,7 +56,7 @@ export function Header() {
 
   const handleUserIconClick = () => {
     if (!isLoggedIn) {
-      setIsSignInOpen(true)
+      router.push("/en-np/sign-up")
     } else {
       setIsAccountMenuOpen(!isAccountMenuOpen)
     }
@@ -292,7 +280,7 @@ export function Header() {
                           className="w-full bg-brand-sky-blue hover:bg-brand-sky-blue/90"
                           onClick={() => {
                             setIsMobileSidebarOpen(false)
-                            setIsSignInOpen(true)
+                            router.push("/en-np/sign-up")
                           }}
                         >
                           Sign In
@@ -436,16 +424,6 @@ export function Header() {
 
       <NotificationPanel isOpen={isNotificationOpen} onClose={() => setIsNotificationOpen(false)} />
 
-      {/* Sign In dialog for mobile (triggered from sidebar) */}
-      <Dialog open={isSignInOpen} onOpenChange={setIsSignInOpen}>
-        <DialogContent
-          className="w-[calc(100%-2rem)] sm:w-full rounded-xl sm:rounded-lg sm:max-w-md max-h-[90vh] overflow-y-auto bg-brand-white border-gray-200"
-          aria-describedby={undefined}
-        >
-          <DialogTitle className="sr-only">Sign In</DialogTitle>
-          <SignInForm onSuccess={() => setIsSignInOpen(false)} />
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

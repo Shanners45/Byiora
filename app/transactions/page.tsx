@@ -17,11 +17,7 @@ export default function TransactionsPage() {
   const router = useRouter();
   const { isLoggedIn, transactions, user, isLoading } = useAuth();
 
-  useEffect(() => {
-    if (!isLoggedIn && !isLoading) {
-      router.push("/");
-    }
-  }, [isLoggedIn, isLoading, router]);
+  // Removed automatic redirect so users can see the "Sign In Required" message
 
   const filteredTransactions = transactions.filter(transaction =>
     filterStatus === "all" || transaction.status.toLowerCase() === filterStatus.toLowerCase()
@@ -233,7 +229,7 @@ export default function TransactionsPage() {
 
   if (!isLoggedIn) {
     return (
-      <div className="min-h-screen">
+      <div className="min-h-screen bg-brand-purple">
         <Header />
         <div className="container mx-auto px-4 py-8">
           <div className="text-center py-12">
@@ -243,10 +239,10 @@ export default function TransactionsPage() {
               Please sign in to view your transaction history.
             </p>
             <Button
-              onClick={() => router.push("/")}
+              onClick={() => router.push("/en-np/sign-up")}
               className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white rounded-full px-8"
             >
-              Go to Home
+              Sign In
             </Button>
           </div>
         </div>

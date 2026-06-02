@@ -524,12 +524,17 @@ export default function ProductDetailPage() {
 
                   return (
                     <div key={denom.label} className={`relative ${isSelected && hasIcon ? "z-10" : ""}`}>
-                      {denom.bestseller && (
+                      {denom.bestseller && !isOutOfStock && (
                         <div className="absolute -top-3 -left-2 z-20 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
                           <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current">
                             <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
                           </svg>
                           Best Seller
+                        </div>
+                      )}
+                      {isOutOfStock && (
+                        <div className="absolute -top-3 -left-2 z-20 bg-gray-600 text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
+                          Out of Stock
                         </div>
                       )}
                       <RadioGroupItem value={denom.label} id={denom.label} className="peer sr-only" disabled={isOutOfStock} />

@@ -10,11 +10,12 @@ interface GiftCardProps {
   slug?: string
   isNew?: boolean
   ribbon_text?: string
+  isOutOfStock?: boolean
   denominations?: Array<any>
   onClick?: () => void
 }
 
-export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, onClick }: GiftCardProps) {
+export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, isOutOfStock, onClick }: GiftCardProps) {
   const isImageLogo = logo.startsWith("http") || logo.startsWith("/")
 
   return (
@@ -28,7 +29,11 @@ export function GiftCard({ id, name, logo, category, slug, isNew, ribbon_text, o
       <div className="absolute inset-0 bg-gradient-to-br from-purple-600/20 to-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
       {/* Custom ribbon badge (takes priority) */}
-      {ribbon_text ? (
+      {isOutOfStock ? (
+        <div className="absolute top-2 left-2 max-w-[calc(100%-16px)] bg-gray-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase tracking-wide truncate">
+          OUT OF STOCK
+        </div>
+      ) : ribbon_text ? (
         <div className="absolute top-2 left-2 max-w-[calc(100%-16px)] bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase tracking-wide truncate">
           {ribbon_text}
         </div>

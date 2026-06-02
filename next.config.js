@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+const { withSentryConfig } = require("@sentry/nextjs")
 
 const remotePatterns = [
   { protocol: "https", hostname: "hebbkx1anhila5yf.public.blob.vercel-storage.com" },
@@ -63,7 +64,7 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' blob: data: https://*.supabase.co https://www.byiora.store https://byiora.store https://hebbkx1anhila5yf.public.blob.vercel-storage.com https://cdn.worldvectorlogo.com https://upload.wikimedia.org https://logos-world.net; font-src 'self' https://fonts.gstatic.com; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' wss://*.supabase.co https://*.supabase.co https://*.resend.com https://api.upstash.com https://cloudflareinsights.com https://raw.githubusercontent.com; worker-src 'self' blob:; upgrade-insecure-requests;"
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' blob: data: https://*.supabase.co https://www.byiora.store https://byiora.store https://hebbkx1anhila5yf.public.blob.vercel-storage.com https://cdn.worldvectorlogo.com https://upload.wikimedia.org https://logos-world.net; font-src 'self' https://fonts.gstatic.com; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' wss://*.supabase.co https://*.supabase.co https://*.resend.com https://api.upstash.com https://cloudflareinsights.com https://raw.githubusercontent.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; worker-src 'self' blob:; upgrade-insecure-requests;"
           }
         ],
       },
@@ -71,4 +72,15 @@ const nextConfig = {
   },
 }
 
-module.exports = nextConfig
+module.exports = withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+  webpack: {
+    treeshake: {
+      removeDebugLogging: true,
+    },
+  },
+})

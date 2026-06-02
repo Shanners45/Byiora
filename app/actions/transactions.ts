@@ -77,8 +77,32 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     const random = crypto.randomUUID().split("-")[0].toUpperCase().substring(0, 5)
     const transactionId = `BYI-${yy}${mm}${dd}-${random}`
 
+    let actualUserId = transactionData.userId || null;
+    let actualUserName = undefined;
+
+    if (actualUserId) {
+      const { data: userData } = await serviceSupabase
+        .from("users")
+        .select("name")
+        .eq("id", actualUserId)
+        .single()
+      if (userData?.name) {
+        actualUserName = userData.name
+      }
+    } else if (transactionData.email) {
+      const { data: userData } = await serviceSupabase
+        .from("users")
+        .select("id, name")
+        .eq("email", transactionData.email.toLowerCase().trim())
+        .single()
+      if (userData) {
+        actualUserId = userData.id;
+        actualUserName = userData.name;
+      }
+    }
+
     const insertPayload: any = {
-      user_id: transactionData.userId || null,
+      user_id: actualUserId,
       product_id: productId,
       product_name: transactionData.product,
       amount: transactionData.amount,
@@ -124,29 +148,19 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       return { success: false, error: error.message || error.code || "Failed to add transaction" }
     }
 
-    let userName = undefined
-    if (transactionData.userId) {
-      const { data: userData } = await serviceSupabase
-        .from("users")
-        .select("name")
-        .eq("id", transactionData.userId)
-        .single()
-      if (userData?.name) {
-        userName = userData.name
-      }
-    }
+    // User name already resolved above
 
     // Send order-placed email (non-blocking)
     try {
       sendOrderPlacedEmail({
         email: transactionData.email,
-        userName,
+        userName: actualUserName,
         productName: transactionData.product,
         denomination: transactionData.amount,
         transactionId,
         price: verifiedPrice,
         paymentMethod: transactionData.paymentMethod,
-        isGuest: !transactionData.userId,
+        isGuest: !actualUserId,
       }).catch((e) => console.error("Order placed email error (non-blocking):", e))
     } catch (e) {
       console.error("Order placed email trigger failed (non-blocking):", e)

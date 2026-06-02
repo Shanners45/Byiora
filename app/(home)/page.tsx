@@ -44,7 +44,14 @@ export default async function Home() {
   // Map categories to their products
   const categories: HomepageCategory[] = (cats || []).map((cat: any) => {
     const catProducts = (cat.product_ids || [])
-      .map((id: string) => (prods || []).find((p: any) => p.id === id))
+      .map((id: string) => {
+        const p = (prods || []).find((p: any) => p.id === id)
+        if (p) {
+          const isOutOfStock = p.denominations && p.denominations.length > 0 && p.denominations.every((d: any) => d.in_stock === false)
+          return { ...p, isOutOfStock }
+        }
+        return null
+      })
       .filter(Boolean)
     return { ...cat, products: catProducts }
   })
@@ -64,6 +71,12 @@ export default async function Home() {
       <Header />
 
       <main className="container mx-auto px-4 py-8">
+        <h1 className="sr-only">
+            Buy Game Top-Ups and Gift Cards in Nepal
+          </h1>
+          <p className="sr-only">
+            Instant digital delivery for popular games, entertainment, and online services.
+          </p>
         <HomeContent categories={categories} banners={banners} />
       </main>
 
