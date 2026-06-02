@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { LayoutDashboard, ShoppingBag, Package, Settings, Users, LogOut, Menu, X, Bell, ImageIcon, DollarSign } from "lucide-react"
+import { LayoutDashboard, ShoppingBag, Package, Settings, Users, LogOut, Menu, X, Bell, ImageIcon, DollarSign, KeyRound } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import Image from "next/image"
@@ -102,6 +102,7 @@ export default function AdminDashboardLayout({
       roles: ["admin", "sub_admin", "order_management"],
     },
     { name: "Products", href: "/admin/dashboard/products", icon: Package, roles: ["admin", "sub_admin"] },
+    { name: "Inventory", href: "/admin/dashboard/inventory", icon: KeyRound, roles: ["admin", "sub_admin", "order_management"] },
     { name: "Revenue", href: "/admin/dashboard/revenue", icon: DollarSign, roles: ["admin"] },
     { name: "Customisation", href: "/admin/dashboard/customisation", icon: ImageIcon, roles: ["admin", "sub_admin"] },
     { name: "Admin Users", href: "/admin/dashboard/admin-users", icon: Users, roles: ["admin"] },

@@ -217,14 +217,21 @@ export default function ProductDetailPage() {
 
       // Order placed email is sent server-side (non-blocking) during transaction creation.
 
-      // Simulate payment processing time, then close dialog and show notifications
+      const isAutomatedGateway = ['nepalpay', 'fonepay', 'nepal pay', 'fone pay'].some(name => paymentMethodName.toLowerCase().includes(name))
+
+      if (isAutomatedGateway) {
+        toast.info("Redirecting to secure payment gateway...")
+        router.push(`/checkout/${transactionId}`)
+        return
+      }
+
+      // Simulate payment processing time, then close dialog and show notifications for manual payments
       setTimeout(async () => {
         setIsProcessing(false)
         setShowQRDialog(false)
 
         if (user) {
           // Send DB notification AFTER dialog closes so the toast popup is visible
-          // The notification context automatically fires a toast for us
           try {
             await sendNotification({
               title: "Order Placed Successfully! 🎉",
@@ -236,13 +243,13 @@ export default function ProductDetailPage() {
             console.error("Failed to send notification:", notifError)
           }
         } else {
-          // Fallback toast for guest users who do not rely on the notification context
+          // Fallback toast for guest users
           toast.success("Order Placed Successfully! 🎉", {
             description: `Your order for ${giftCard.name} (${selectedDenom?.label}) has been placed and is being processed.`,
           })
         }
 
-        // Reset form after successful order
+        // Reset form after successful manual order
         setSelectedDenomination("")
         setSelectedPayment("")
         setUserId("")

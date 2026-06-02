@@ -12,10 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
-import { Save, User, Lock, QrCode, CreditCard, Upload, Plus, Pencil, Trash2, X, Check } from "lucide-react"
+import { Save, User, Lock, QrCode, CreditCard, Upload, Plus, Pencil, Trash2, X, Check, ArrowUp, ArrowDown } from "lucide-react"
 import Image from "next/image"
 import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
 import { createPaymentMethodAction, deletePaymentMethodAction, getPaymentMethodsAction, updatePaymentMethodAction, type PaymentMethodRow } from "@/app/actions/payment-methods"
+import { getPaymentCredentialsAction, savePaymentCredentialsAction } from "@/app/actions/payment-credentials"
 
 interface PaymentMethod {
   id: string
@@ -48,10 +49,17 @@ export default function AdminSettingsPage() {
   const [showAddForm, setShowAddForm] = useState(false)
   const [newMethod, setNewMethod] = useState({
     name: "",
-    logo_url: "",
     qr_url: "",
     instructions: "Scan the QR code with your app. In remarks, please enter your name.",
   })
+
+  // Automated Gateways Credentials state
+  const [gatewayCreds, setGatewayCreds] = useState<Record<string, { username: string, isPasswordSet: boolean }>>({})
+  const [nepalpayUser, setNepalpayUser] = useState("")
+  const [nepalpayPass, setNepalpayPass] = useState("")
+  const [fonepayUser, setFonepayUser] = useState("")
+  const [fonepayPass, setFonepayPass] = useState("")
+  const [isSavingGateways, setIsSavingGateways] = useState(false)
 
   useEffect(() => {
     const fetchAdminUser = async () => {
@@ -62,10 +70,45 @@ export default function AdminSettingsPage() {
       }
       
       loadPaymentMethods()
+      loadGatewayCreds()
     }
 
     fetchAdminUser()
   }, [])
+
+  const loadGatewayCreds = async () => {
+    try {
+      const result = await getPaymentCredentialsAction()
+      if (result.success && result.data) {
+        setGatewayCreds(result.data)
+        if (result.data.nepalpay) setNepalpayUser(result.data.nepalpay.username)
+        if (result.data.fonepay) setFonepayUser(result.data.fonepay.username)
+      }
+    } catch (error) {
+      console.error("Error loading gateway creds:", error)
+    }
+  }
+
+  const handleSaveGateway = async (provider: string, user: string, pass: string) => {
+    if (!user) return toast.error(`Username is required for ${provider}`)
+    
+    setIsSavingGateways(true)
+    try {
+      const result = await savePaymentCredentialsAction(provider, user, pass || undefined)
+      if (result.success) {
+        toast.success(`${provider} credentials saved securely!`)
+        loadGatewayCreds()
+        if (provider === "nepalpay") setNepalpayPass("")
+        if (provider === "fonepay") setFonepayPass("")
+      } else {
+        toast.error(result.error || "Failed to save credentials")
+      }
+    } catch (err) {
+      toast.error("An error occurred")
+    } finally {
+      setIsSavingGateways(false)
+    }
+  }
 
   const loadPaymentMethods = async () => {
     setIsLoadingPayments(true)
@@ -74,7 +117,26 @@ export default function AdminSettingsPage() {
       if (result.error) {
         toast.error(result.error)
       } else {
-        setPaymentMethods((result.data || []) as PaymentMethod[])
+        const methods = (result.data || []) as PaymentMethod[]
+        const hasNepalPay = methods.some(m => m.name.toLowerCase().includes("nepalpay"))
+        const hasFonepay = methods.some(m => m.name.toLowerCase().includes("fonepay"))
+        
+        let shouldReload = false
+        if (!hasNepalPay) {
+          await createPaymentMethodAction({ name: "NepalPay", is_enabled: false, logo_url: null, qr_url: null, instructions: "Pay securely via NepalPay App.", sort_order: 98 })
+          shouldReload = true
+        }
+        if (!hasFonepay) {
+          await createPaymentMethodAction({ name: "Fonepay", is_enabled: false, logo_url: null, qr_url: null, instructions: "Pay securely via Fonepay App.", sort_order: 99 })
+          shouldReload = true
+        }
+
+        if (shouldReload) {
+          const freshResult = await getPaymentMethodsAction()
+          setPaymentMethods((freshResult.data || []) as PaymentMethod[])
+        } else {
+          setPaymentMethods(methods)
+        }
       }
     } catch (error) {
       console.error("Error loading payment methods:", error)
@@ -189,6 +251,24 @@ export default function AdminSettingsPage() {
     toast.success("Payment method updated!")
   }
 
+  const moveMethod = async (index: number, direction: "up" | "down") => {
+    const newMethods = [...paymentMethods]
+    const swapIndex = direction === "up" ? index - 1 : index + 1
+    if (swapIndex < 0 || swapIndex >= newMethods.length) return
+
+    // Swap elements in array
+    const temp = newMethods[index]
+    newMethods[index] = newMethods[swapIndex]
+    newMethods[swapIndex] = temp
+
+    // Re-assign sort_orders based on new index
+    const updated = newMethods.map((m, i) => ({ ...m, sort_order: i + 1 }))
+    setPaymentMethods(updated)
+
+    // Save
+    Promise.all(updated.map(m => updatePaymentMethodAction(m.id, { sort_order: m.sort_order })))
+  }
+
   const handleDelete = async (method: PaymentMethod) => {
     if (!confirm(`Delete "${method.name}"? This cannot be undone.`)) return
     const result = await deletePaymentMethodAction(method.id)
@@ -209,11 +289,16 @@ export default function AdminSettingsPage() {
       qr_url: newMethod.qr_url || null,
       instructions: newMethod.instructions || null,
       is_enabled: true,
-      sort_order: paymentMethods.length + 1,
+      sort_order: 0, // Gets placed at the start
     })
     if (result.error) return toast.error("Failed to add payment method")
 
-    setPaymentMethods((prev) => [...prev, result.data as unknown as PaymentMethod])
+    setPaymentMethods((prev) => {
+      const updated = [result.data as unknown as PaymentMethod, ...prev]
+      updated.forEach((m, i) => { m.sort_order = i + 1 })
+      Promise.all(updated.map(m => updatePaymentMethodAction(m.id, { sort_order: m.sort_order })))
+      return updated
+    })
     setNewMethod({
       name: "",
       logo_url: "",
@@ -476,7 +561,10 @@ export default function AdminSettingsPage() {
                               </Button>
                             </div>
                           </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          
+                          {!(editForm.name?.toLowerCase().includes("nepalpay") || editForm.name?.toLowerCase().includes("fonepay")) ? (
+                            <>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label className="text-[#1F2937]">Name</Label>
                               <Input
@@ -549,6 +637,59 @@ export default function AdminSettingsPage() {
                               </div>
                             </div>
                           </div>
+                          </>
+                          ) : (
+
+                          /* AUTOMATED GATEWAY CREDENTIALS */
+                          <div className="mt-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                            <h4 className="font-semibold text-sm text-slate-800 mb-3 flex items-center gap-2">
+                              <Lock className="h-4 w-4 text-green-600" />
+                              Automated Gateway Credentials ({editForm.name?.toLowerCase().includes("nepalpay") ? "NepalPay" : "Fonepay"})
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label className="text-xs">Username (Merchant Code)</Label>
+                                <Input 
+                                  value={editForm.name?.toLowerCase().includes("nepalpay") ? nepalpayUser : fonepayUser}
+                                  onChange={(e) => {
+                                    if (editForm.name?.toLowerCase().includes("nepalpay")) setNepalpayUser(e.target.value)
+                                    else setFonepayUser(e.target.value)
+                                  }}
+                                  className="bg-white border-slate-300 h-9 text-sm"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs">
+                                  Password {(editForm.name?.toLowerCase().includes("nepalpay") ? gatewayCreds.nepalpay?.isPasswordSet : gatewayCreds.fonepay?.isPasswordSet) && <span className="text-green-600">(Saved)</span>}
+                                </Label>
+                                <Input 
+                                  type="password"
+                                  value={editForm.name?.toLowerCase().includes("nepalpay") ? nepalpayPass : fonepayPass}
+                                  onChange={(e) => {
+                                    if (editForm.name?.toLowerCase().includes("nepalpay")) setNepalpayPass(e.target.value)
+                                    else setFonepayPass(e.target.value)
+                                  }}
+                                  placeholder="Enter to update"
+                                  className="bg-white border-slate-300 h-9 text-sm"
+                                />
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              onClick={async () => {
+                                const isNepal = editForm.name?.toLowerCase().includes("nepalpay")
+                                const provider = isNepal ? "nepalpay" : "fonepay"
+                                const u = isNepal ? nepalpayUser : fonepayUser
+                                const p = isNepal ? nepalpayPass : fonepayPass
+                                await handleSaveGateway(provider, u, p)
+                              }}
+                              disabled={isSavingGateways}
+                              className="mt-3 bg-green-600 hover:bg-green-700 text-white w-full"
+                            >
+                              {isSavingGateways ? "Saving..." : "Save Credentials Securely"}
+                            </Button>
+                          </div>
+                          )}
                         </div>
                       ) : (
                         /* —— VIEW MODE —— */
@@ -581,6 +722,24 @@ export default function AdminSettingsPage() {
                                 onCheckedChange={() => handleToggleEnabled(method)}
                               />
                             </div>
+                            
+                            <div className="flex flex-col border-l border-r border-gray-200 px-2 gap-1 ml-2">
+                              <button 
+                                onClick={() => moveMethod(paymentMethods.findIndex(m => m.id === method.id), "up")}
+                                disabled={paymentMethods.findIndex(m => m.id === method.id) === 0}
+                                className="text-gray-400 hover:text-[#7E3AF2] disabled:opacity-30 transition-colors"
+                              >
+                                <ArrowUp className="h-4 w-4" />
+                              </button>
+                              <button 
+                                onClick={() => moveMethod(paymentMethods.findIndex(m => m.id === method.id), "down")}
+                                disabled={paymentMethods.findIndex(m => m.id === method.id) === paymentMethods.length - 1}
+                                className="text-gray-400 hover:text-[#7E3AF2] disabled:opacity-30 transition-colors"
+                              >
+                                <ArrowDown className="h-4 w-4" />
+                              </button>
+                            </div>
+
                             <Button
                               size="sm"
                               variant="ghost"
@@ -685,6 +844,7 @@ export default function AdminSettingsPage() {
             </Card>
           </TabsContent>
         )}
+
       </Tabs>
     </div>
   )
