@@ -40,7 +40,7 @@ async function handler(req: Request) {
       const PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
       const PROXY_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
 
-      const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", provider).single()
+      const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", provider).single() as any
       if (!credsRes.data) return NextResponse.json({ error: "Credentials missing" }, { status: 500 })
 
       const username = await decryptBankCredentials(credsRes.data.encrypted_username)

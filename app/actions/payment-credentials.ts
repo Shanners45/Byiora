@@ -43,7 +43,7 @@ export async function getPaymentCredentialsAction() {
   if (!(await verifyAdmin())) return { error: "Unauthorized" }
 
   const supabase = createServiceRoleClient()
-  const { data, error } = await supabase.from("payment_credentials").select("*")
+  const { data, error } = await supabase.from("payment_credentials").select("*") as any
   
   if (error) return { error: error.message }
   
@@ -76,7 +76,7 @@ export async function savePaymentCredentialsAction(provider: string, username: s
     const supabase = createServiceRoleClient()
     
     // Check if exists
-    const { data: existing } = await supabase.from("payment_credentials").select("encrypted_password").eq("provider", provider).single()
+    const { data: existing } = await supabase.from("payment_credentials").select("encrypted_password").eq("provider", provider).single() as any
 
     const encryptedUsername = await encryptBankCredentials(username)
     
@@ -89,14 +89,14 @@ export async function savePaymentCredentialsAction(provider: string, username: s
       return { error: "Password is required for new credentials" }
     }
 
-    const { error } = await supabase
+    const { error } = await (supabase
       .from("payment_credentials")
       .upsert({
         provider,
         encrypted_username: encryptedUsername,
         encrypted_password: encryptedPassword,
         updated_at: new Date().toISOString()
-      })
+      }) as any)
 
     if (error) return { error: error.message }
     return { success: true }

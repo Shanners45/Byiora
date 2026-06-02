@@ -44,18 +44,21 @@ export async function getOrGenerateQRAction(transactionId: string) {
     if (txn.status !== "Processing") {
       return { success: false, error: "Transaction is already completed or cancelled", status: txn.status }
     }
+    
+    // Cast to any because Supabase types might not be updated with the newest columns
+    const typedTxn = txn as any;
 
     // 2. Check if cached QR is valid (less than 15 mins old)
-    if (txn.qr_payload && txn.validation_trace_id) {
+    if (typedTxn.qr_payload && typedTxn.validation_trace_id) {
       // Check if it's less than 15 mins since created_at or updated_at (we can use updated_at to track when QR was generated)
-      const qrAge = (new Date().getTime() - new Date(txn.updated_at).getTime()) / 1000 / 60
+      const qrAge = (new Date().getTime() - new Date(typedTxn.updated_at).getTime()) / 1000 / 60
       if (qrAge < 14) {
         return { 
           success: true, 
-          qrString: txn.qr_payload,
-          validationTraceId: txn.validation_trace_id,
-          amount: txn.price,
-          product: txn.product_name,
+          qrString: typedTxn.qr_payload,
+          validationTraceId: typedTxn.validation_trace_id,
+          amount: typedTxn.price,
+          product: typedTxn.product_name,
           expiresIn: Math.floor(15 * 60 - qrAge * 60)
         }
       }
@@ -90,7 +93,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
 
     const providerKey = isNepalPay ? "nepalpay" : "fonepay"
     
-    const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", providerKey).single()
+    const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", providerKey).single() as any
     if (credsRes.error || !credsRes.data) {
       return { success: false, error: `${providerKey} credentials not configured by Admin` }
     }
@@ -198,7 +201,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
       return { success: true, completed: true }
     }
 
-    const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", provider).single()
+    const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", provider).single() as any
     if (!credsRes.data) return { success: false, error: "Credentials missing" }
 
     const username = await decryptBankCredentials(credsRes.data.encrypted_username)
