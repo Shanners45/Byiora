@@ -511,7 +511,7 @@ export async function expireTransactionAction(transactionId: string) {
     let customMsg = "We noticed your payment session expired and your order has been marked as <strong>Payment Failed</strong>."
 
     // Add verification button text
-    const isDynamic = txn.payment_category === "nepalpay" || txn.payment_category === "fonepay"
+    const isDynamic = (txn as any).payment_category === "nepalpay" || (txn as any).payment_category === "fonepay"
     if (isDynamic) {
       if (txn.user_id) {
         customMsg += "<br/><br/>If you have already paid but your order still failed, please verify your payment. "
