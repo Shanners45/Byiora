@@ -571,7 +571,7 @@ export default function ProductEditPage() {
                     className="bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-500"
                     placeholder="auto-generated-slug"
                   />
-                  <p className="text-xs text-[#4B5563]">URL: byiora.store/{category}/{slug || generateSlug(name)}</p>
+                  <p className="text-xs text-[#4B5563]">URL: byiora.com.np/{category}/{slug || generateSlug(name)}</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -141,7 +141,7 @@ export default function AdminDashboardLayout({
           <div className="flex items-center gap-4">
             <div className="h-8 relative flex items-center">
               <Image
-                src="https://www.byiora.store/logo-final.png"
+                src="https://www.byiora.com.np/logo-final.png"
                 alt="Byiora Logo"
                 width={120}
                 height={36}

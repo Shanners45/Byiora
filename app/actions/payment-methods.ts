@@ -11,6 +11,7 @@ export type PaymentMethodRow = {
   instructions: string | null
   is_enabled: boolean
   sort_order: number
+  category: "static" | "nepalpay" | "fonepay"
 }
 
 export async function getPaymentMethodsAction() {
@@ -19,18 +20,34 @@ export async function getPaymentMethodsAction() {
   const serviceSupabase = createServiceRoleClient()
   const { data, error } = await serviceSupabase
     .from("payment_methods")
-    .select("id, name, logo_url, qr_url, instructions, is_enabled, sort_order")
+    .select("id, name, logo_url, qr_url, instructions, is_enabled, sort_order, category")
     .order("sort_order", { ascending: true })
 
   if (error) return { error: error.message }
-  return { success: true, data: (data || []) as PaymentMethodRow[] }
+  return { success: true, data: (data || []) as unknown as PaymentMethodRow[] }
+}
+
+/**
+ * Fetch enabled payment methods for public (homepage) use.
+ * No admin check required — only returns enabled methods.
+ */
+export async function getPublicPaymentMethodsAction() {
+  const serviceSupabase = createServiceRoleClient()
+  const { data, error } = await serviceSupabase
+    .from("payment_methods")
+    .select("id, name, logo_url, qr_url, instructions, is_enabled, sort_order, category")
+    .eq("is_enabled", true)
+    .order("sort_order", { ascending: true })
+
+  if (error) return { error: error.message }
+  return { success: true, data: (data || []) as unknown as PaymentMethodRow[] }
 }
 
 export async function updatePaymentMethodAction(id: string, patch: Partial<Omit<PaymentMethodRow, "id">>) {
   if (!(await verifyAdmin())) return { error: "Unauthorized: Admin access required" }
 
   const serviceSupabase = createServiceRoleClient()
-  const { error } = await serviceSupabase.from("payment_methods").update(patch).eq("id", id)
+  const { error } = await serviceSupabase.from("payment_methods").update(patch as any).eq("id", id)
   if (error) return { error: error.message }
   return { success: true }
 }
@@ -41,12 +58,12 @@ export async function createPaymentMethodAction(method: Omit<PaymentMethodRow, "
   const serviceSupabase = createServiceRoleClient()
   const { data, error } = await serviceSupabase
     .from("payment_methods")
-    .insert([method])
-    .select("id, name, logo_url, qr_url, instructions, is_enabled, sort_order")
+    .insert([method as any])
+    .select("id, name, logo_url, qr_url, instructions, is_enabled, sort_order, category")
     .single()
 
   if (error) return { error: error.message }
-  return { success: true, data: data as PaymentMethodRow }
+  return { success: true, data: data as unknown as PaymentMethodRow }
 }
 
 export async function deletePaymentMethodAction(id: string) {
@@ -58,3 +75,30 @@ export async function deletePaymentMethodAction(id: string) {
   return { success: true }
 }
 
+/**
+ * Exclusive toggle: When enabling a dynamic payment method (nepalpay/fonepay),
+ * disable all other methods of the same category first.
+ */
+export async function toggleExclusiveAction(id: string, category: string, enable: boolean) {
+  if (!(await verifyAdmin())) return { error: "Unauthorized: Admin access required" }
+
+  const serviceSupabase = createServiceRoleClient()
+
+  if (enable && (category === "nepalpay" || category === "fonepay")) {
+    // Disable all other methods of the same category
+    await serviceSupabase
+      .from("payment_methods")
+      .update({ is_enabled: false } as any)
+      .eq("category" as any, category)
+      .neq("id", id)
+  }
+
+  // Toggle the target method
+  const { error } = await serviceSupabase
+    .from("payment_methods")
+    .update({ is_enabled: enable } as any)
+    .eq("id", id)
+
+  if (error) return { error: error.message }
+  return { success: true }
+}

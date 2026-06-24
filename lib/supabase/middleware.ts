@@ -35,7 +35,7 @@ export async function updateSession(request: NextRequest) {
 
   // ── Admin subdomain detection ───────────────────────────────────────────
   const host = request.headers.get("host") || ""
-  const isAdminHost = host === "admin.byiora.store" || host === "www.admin.byiora.store"
+  const isAdminHost = host === "admin.byiora.com.np" || host === "www.admin.byiora.com.np"
 
   // ┌──────────────────────────────────────────────────────────────────────────
   // │ QUOTA SAVER: Let all public GET browsing pass WITHOUT touching Upstash.
@@ -145,7 +145,7 @@ export async function updateSession(request: NextRequest) {
         .single()
 
       if (!adminUser || adminUser.status !== "active") {
-        url.pathname = "/"
+        url.pathname = "/admin/login"
         return NextResponse.redirect(url)
       }
     }
@@ -175,6 +175,12 @@ export async function updateSession(request: NextRequest) {
   }
 
   // ── Default: refresh Supabase session and continue ─────────────────────
+  // Skip session refresh for Server Actions to prevent cookie clobbering
+  // and unnecessary getUser() rate limits from frequent polling actions.
+  if (isServerAction) {
+    return NextResponse.next()
+  }
+
   return await refreshSupabaseSession(request)
 }
 
@@ -189,22 +195,17 @@ async function refreshSupabaseSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
+        getAll() {
+          return request.cookies.getAll()
         },
-        set(name: string, value: string, options: any) {
-          request.cookies.set({ name, value, ...options })
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
-            request: { headers: request.headers },
+            request,
           })
-          supabaseResponse.cookies.set({ name, value, ...options })
-        },
-        remove(name: string, options: any) {
-          request.cookies.set({ name, value: "", ...options })
-          supabaseResponse = NextResponse.next({
-            request: { headers: request.headers },
-          })
-          supabaseResponse.cookies.set({ name, value: "", ...options })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
         },
       },
     }

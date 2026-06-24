@@ -26,7 +26,7 @@ export default function RefundPolicyPage() {
 
           <div className="space-y-8 text-gray-700 leading-relaxed text-sm md:text-base">
             <p>
-              This Refund and Return Policy applies to all purchases made on Byiora (byiora.store). By completing a purchase on our platform, you explicitly acknowledge and legally agree to the terms set forth below.
+              This Refund and Return Policy applies to all purchases made on Byiora (byiora.com.np). By completing a purchase on our platform, you explicitly acknowledge and legally agree to the terms set forth below.
             </p>
 
             <div>
@@ -66,7 +66,7 @@ export default function RefundPolicyPage() {
 
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-3">5. Verification Process & Burden of Proof</h2>
-              <p className="mb-2">If you claim a key is defective, you must contact us at <a href="mailto:support@byiora.store" className="text-brand-sky-blue hover:underline">support@byiora.store</a> within 24 hours of delivery. To process an investigation, you must provide:</p>
+              <p className="mb-2">If you claim a key is defective, you must contact us at <a href="mailto:support@byiora.com.np" className="text-brand-sky-blue hover:underline">support@byiora.com.np</a> within 24 hours of delivery. To process an investigation, you must provide:</p>
               <ul className="list-disc pl-5 space-y-2">
                 <li>Your exact Order ID and Transaction ID.</li>
                 <li>Uncropped, full-screen screenshots showing the error message on the official redemption platform (e.g., Steam, Rockstar Launcher).</li>
@@ -88,7 +88,7 @@ export default function RefundPolicyPage() {
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-3">7. Contact Us</h2>
               <p>
-                For any technical issues regarding the redemption of your legally purchased digital keys, please contact our support team at <a href="mailto:support@byiora.store" className="text-brand-sky-blue hover:underline">support@byiora.store</a>. We are committed to assisting you in getting your valid products working.
+                For any technical issues regarding the redemption of your legally purchased digital keys, please contact our support team at <a href="mailto:support@byiora.com.np" className="text-brand-sky-blue hover:underline">support@byiora.com.np</a>. We are committed to assisting you in getting your valid products working.
               </p>
             </div>
           </div>

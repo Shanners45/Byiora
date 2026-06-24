@@ -3,7 +3,7 @@ import { Suspense } from "react"
 import { createClient } from "@/lib/supabase/server"
 import type { Product } from "@/lib/product-categories"
 
-const BASE_URL = "https://www.byiora.store"
+const BASE_URL = "https://www.byiora.com.np"
 
 interface Props {
   params: Promise<{ category: string; slug: string }>

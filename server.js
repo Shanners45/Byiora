@@ -48,10 +48,11 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // CORS
-    res.setHeader('Access-Control-Allow-Origin', 'http://localhost:3000'); // restrict CORS
+    // CORS — use env or restrict to known origins
+    const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-internal-secret');
     
     if (req.method === 'OPTIONS') {
         res.writeHead(200);
@@ -62,6 +63,52 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ status: 'ok' }));
+        return;
+    }
+
+    // --- NEW ENDPOINT: VERIFY LOGIN CREDENTIALS ONLY ---
+    if (req.method === 'POST' && req.url === '/api/verify-login') {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', async () => {
+            try {
+                const { username, password } = JSON.parse(body);
+                const userKey = username.trim();
+
+                console.log("\n>>> VERIFYING LOGIN FOR", userKey);
+                
+                const loginData = await makeBankRequest(
+                    'https://business.nepalpay.com.np/backend/api/auth/signin',
+                    { username: userKey, password: password.trim() }
+                );
+
+                if (loginData.status !== "SUCCESS") {
+                    console.log("❌ Login Rejected:", loginData);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: "Login failed. Check credentials." }));
+                    return;
+                }
+
+                console.log("✅ Login Verified Successfully!");
+                
+                const accessToken = loginData.data?.accessToken;
+                let merchantCode = null;
+                if (accessToken) {
+                    const decoded = parseJwt(accessToken);
+                    merchantCode = decoded?.merchantCode || null;
+                    
+                    // Cache the token to avoid re-login on next request
+                    sessionCache[userKey] = accessToken;
+                }
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, message: "Credentials valid", merchantCode }));
+            } catch (err) {
+                console.error("🚨 CRASH:", err.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, message: "Crash: " + err.message }));
+            }
+        });
         return;
     }
 
@@ -121,7 +168,6 @@ const server = http.createServer(async (req, res) => {
                     console.log("LOGIN DATA:", JSON.stringify(loginData).substring(0, 1000));
                     accessToken = loginData.data.accessToken;
                     const decoded = parseJwt(accessToken);
-                    console.log("DECODED JWT:", JSON.stringify(decoded));
                     merchantCode = decoded.merchantCode;
                     
                     // Store in cache
@@ -160,7 +206,8 @@ const server = http.createServer(async (req, res) => {
                     res.end(JSON.stringify({ 
                         success: true, 
                         qrString: qrData.data.qrString,
-                        validationTraceId: qrData.data.validationTraceId || qrData.data.qrId
+                        validationTraceId: qrData.data.validationTraceId || qrData.data.qrId,
+                        accessToken: accessToken // Return for DB caching
                     }));
                 } else {
                     console.log("❌ QR Failed:", qrData);
@@ -183,10 +230,10 @@ const server = http.createServer(async (req, res) => {
         req.on('data', chunk => { body += chunk; });
         req.on('end', async () => {
             try {
-                const { nqrTxnId, username, password } = JSON.parse(body);
+                const { nqrTxnId, username, password, phoneNumber, amount, remarks } = JSON.parse(body);
                 const userKey = username.trim();
 
-                console.log(`\n🔍 [VERIFY] Checking nqrTxnId: ${nqrTxnId} for user ${userKey}`);
+                console.log(`\n🔍 [VERIFY] Checking nqrTxnId: ${nqrTxnId} or phone: ${phoneNumber} for user ${userKey}`);
 
                 let accessToken = null;
                 let merchantCode = null;
@@ -258,9 +305,20 @@ const server = http.createServer(async (req, res) => {
                 if (listData.status === "SUCCESS" && listData.data) {
                     const resultArr = listData.data.result;
                     if (Array.isArray(resultArr) && resultArr.length > 0) {
-                        // The nqrTxnId parameter we receive from frontend is actually the validationTraceId!
-                        // So we search the recent transactions list for a matching validationTraceId.
-                        const matchingTxn = resultArr.find(txn => txn.validationTraceId === nqrTxnId);
+                        // So we search the recent transactions list for a matching validationTraceId OR phone+amount
+                        const matchingTxn = resultArr.find(txn => {
+                            if (nqrTxnId && txn.validationTraceId === nqrTxnId) return true;
+                            if (phoneNumber && amount) {
+                                // Sometimes phone numbers have country codes or slightly differ, so we check if it ends with the user's phone
+                                const cleanTxnPhone = (txn.payerMobileNumber || txn.customerMobileNumber || "").replace(/\D/g, "");
+                                const isPhoneMatch = cleanTxnPhone && cleanTxnPhone.endsWith(phoneNumber.slice(-10));
+                                const isAmountMatch = txn.amount === amount || parseInt(txn.amount) === parseInt(amount);
+                                if (isPhoneMatch && isAmountMatch) return true;
+                            }
+                            // Fallback check on remarks if provided
+                            if (remarks && txn.remarks && txn.remarks.includes(remarks)) return true;
+                            return false;
+                        });
                         
                         if (matchingTxn) {
                             console.log(`✅ [VERIFY] MATCH FOUND! Final Txn ID:`, matchingTxn.nqrTxnId || matchingTxn.transactionId);
@@ -270,6 +328,7 @@ const server = http.createServer(async (req, res) => {
                                 data: { 
                                     status: "SUCCESS", 
                                     txnId: matchingTxn.nqrTxnId || matchingTxn.transactionId || matchingTxn.instructionId,
+                                    bankTxnId: matchingTxn.nqrTxnId || matchingTxn.transactionId,
                                     raw: matchingTxn 
                                 } 
                             }));

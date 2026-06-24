@@ -10,7 +10,7 @@ interface TransactionData {
   product: string
   amount: string
   price: string
-  status: "Completed" | "Failed" | "Processing" | "Cancelled"
+  status: string
   paymentMethod: string
   email: string
   productId?: string
@@ -101,17 +101,34 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       }
     }
 
+    // Look up the payment method category from the database
+    let paymentCategory = "static"
+    const { data: pmData } = await serviceSupabase
+      .from("payment_methods")
+      .select("category")
+      .eq("name", transactionData.paymentMethod)
+      .single()
+    if (pmData && (pmData as any).category) {
+      paymentCategory = (pmData as any).category
+    }
+
+    const isDynamic = paymentCategory === "nepalpay" || paymentCategory === "fonepay"
+
+    // Static payments start as Processing, Dynamic as Payment Pending
+    const initialStatus = isDynamic ? "Payment Pending" : "Processing"
+
     const insertPayload: any = {
       user_id: actualUserId,
       product_id: productId,
       product_name: transactionData.product,
       amount: transactionData.amount,
       price: verifiedPrice,
-      status: "Processing",
+      status: initialStatus,
       payment_method: transactionData.paymentMethod,
       transaction_id: transactionId,
       user_email: transactionData.email,
       guest_user_data: transactionData.guestData || null,
+      payment_category: paymentCategory,
     }
 
     if (transactionData.productCategory) {
@@ -150,24 +167,12 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
     // User name already resolved above
 
-    // Send order-placed email (non-blocking)
-    try {
-      sendOrderPlacedEmail({
-        email: transactionData.email,
-        userName: actualUserName,
-        productName: transactionData.product,
-        denomination: transactionData.amount,
-        transactionId,
-        price: verifiedPrice,
-        paymentMethod: transactionData.paymentMethod,
-        isGuest: !actualUserId,
-      }).catch((e) => console.error("Order placed email error (non-blocking):", e))
-    } catch (e) {
-      console.error("Order placed email trigger failed (non-blocking):", e)
-    }
+    // Send order-placed email (DEFERRED)
+    // As per new logic, we do NOT send the Order Placed email at checkout creation.
+    // Emails are only sent after the payment is successfully verified.
 
     // Send Discord Webhook Notification
-    if (process.env.DISCORD_WEBHOOK_URL) {
+    if (process.env.DISCORD_WEBHOOK_URL && (!isDynamic || transactionData.productCategory === "direct-login")) {
       try {
         const webhookUrl = process.env.DISCORD_WEBHOOK_URL
         const embed = {
@@ -204,6 +209,92 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     return { success: true, transactionId, data }
   } catch (error: any) {
     console.error("Add transaction error:", error)
+    return { success: false, error: error.message || "An unexpected error occurred" }
+  }
+}
+
+// This function clones an expired transaction and creates a new one
+// so the user can re-try checking out
+export async function reorderTransactionAction(oldTransactionId: string) {
+  try {
+    const supabase = createServiceRoleClient()
+    const { data: oldTxn, error: fetchError } = await supabase
+      .from("transactions")
+      .select("*")
+      .eq("transaction_id", oldTransactionId)
+      .single()
+    
+    if (fetchError || !oldTxn) {
+      return { success: false, error: "Original transaction not found" }
+    }
+
+    // Generate a new transaction ID with standard format
+    const now = new Date()
+    const yy = String(now.getFullYear()).slice(-2)
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const dd = String(now.getDate()).padStart(2, '0')
+    const random = crypto.randomUUID().split("-")[0].toUpperCase().substring(0, 5)
+    const newTransactionId = `BYI-${yy}${mm}${dd}-${random}`
+
+    // Create new payload based on the old transaction
+    const oldTxnAny = oldTxn as any;
+    const newStatus = oldTxnAny.payment_category === "nepalpay" || oldTxnAny.payment_category === "fonepay" 
+      ? "Payment Pending" 
+      : "Processing"
+
+    const insertPayload = {
+      user_id: oldTxn.user_id,
+      product_id: oldTxn.product_id,
+      product_name: oldTxn.product_name,
+      amount: oldTxn.amount,
+      price: oldTxn.price,
+      status: newStatus,
+      payment_method: oldTxn.payment_method,
+      payment_category: oldTxnAny.payment_category,
+      transaction_id: newTransactionId,
+      user_email: oldTxn.user_email,
+      guest_user_data: oldTxn.guest_user_data,
+      product_category: oldTxn.product_category,
+    }
+
+    // Use service client to bypass RLS
+    const serviceSupabase = createServiceRoleClient()
+    const { data: newTxn, error: insertError } = await serviceSupabase
+      .from("transactions")
+      .insert([insertPayload as any])
+      .select()
+      .single()
+
+    if (insertError) {
+      return { success: false, error: "Failed to create new transaction" }
+    }
+
+    // Send Discord alert
+    if (process.env.DISCORD_WEBHOOK_URL) {
+      try {
+        const webhookUrl = process.env.DISCORD_WEBHOOK_URL
+        const embed = {
+          title: "🔄 REORDER PLACED!",
+          color: 0x00BCD4,
+          fields: [
+            { name: "Old Txn", value: oldTransactionId, inline: true },
+            { name: "New Txn", value: newTransactionId, inline: true },
+            { name: "Product", value: oldTxn.product_name, inline: false },
+            { name: "Amount", value: oldTxn.amount, inline: true },
+          ],
+          timestamp: new Date().toISOString()
+        }
+        await fetch(webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ embeds: [embed] }),
+        })
+      } catch (e) {}
+    }
+
+    return { success: true, transactionId: newTransactionId }
+  } catch (error: any) {
+    console.error("Reorder transaction error:", error)
     return { success: false, error: error.message || "An unexpected error occurred" }
   }
 }

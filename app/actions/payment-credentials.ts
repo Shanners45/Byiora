@@ -54,7 +54,7 @@ export async function getPaymentCredentialsAction() {
   
   const formattedData: Record<string, { username: string, isPasswordSet: boolean }> = {}
   
-  for (const row of data) {
+  for (const row of data as any[]) {
     try {
       const username = await decryptBankCredentials(row.encrypted_username)
       formattedData[row.provider] = {
@@ -81,25 +81,60 @@ export async function savePaymentCredentialsAction(provider: string, username: s
     const encryptedUsername = await encryptBankCredentials(username)
     
     let encryptedPassword = existing?.encrypted_password
+    let plainPasswordToVerify = password
     if (password) {
       encryptedPassword = await encryptBankCredentials(password)
+    } else {
+      // If we are updating username but no new password is provided, we need to decrypt the old one to verify
+      if (existing?.encrypted_password) {
+        plainPasswordToVerify = (await decryptBankCredentials(existing.encrypted_password)) || undefined
+      }
     }
 
-    if (!encryptedPassword) {
+    if (!encryptedPassword || !plainPasswordToVerify) {
       return { error: "Password is required for new credentials" }
+    }
+
+    // --- VERIFY LOGIN WITH PROXY BEFORE SAVING ---
+    let merchantCode = null;
+    if (provider.toLowerCase() === "nepalpay" || provider.toLowerCase().includes("nepal pay")) {
+      const PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
+      const PROXY_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
+
+      try {
+        const verifyRes = await fetch(`${PROXY_URL}/api/verify-login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": PROXY_SECRET
+          },
+          body: JSON.stringify({
+            username: username,
+            password: plainPasswordToVerify,
+            provider: provider.toLowerCase()
+          })
+        })
+        const verifyData = await verifyRes.json()
+        if (!verifyData.success) {
+          return { error: "Bank Verification Failed: " + (verifyData.message || "Invalid credentials") }
+        }
+        merchantCode = verifyData.merchantCode;
+      } catch (e) {
+        return { error: "Failed to connect to bank proxy for verification." }
+      }
     }
 
     const { error } = await (supabase
       .from("payment_credentials")
       .upsert({
-        provider,
+        provider: provider.toLowerCase(),
         encrypted_username: encryptedUsername,
         encrypted_password: encryptedPassword,
         updated_at: new Date().toISOString()
-      }) as any)
+      } as any) as any)
 
     if (error) return { error: error.message }
-    return { success: true }
+    return { success: true, merchantCode }
 
   } catch (error: any) {
     console.error("Save credentials error:", error)

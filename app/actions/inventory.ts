@@ -40,7 +40,7 @@ export async function getProductStockAction(productId: string) {
   // Aggregate stats
   const stats: Record<string, { available: number; delivered: number }> = {}
   
-  data.forEach(item => {
+  data.forEach((item: any) => {
     if (!stats[item.denomination_label]) {
       stats[item.denomination_label] = { available: 0, delivered: 0 }
     }
@@ -85,7 +85,7 @@ export async function addInventoryCodesAction(productId: string, denominationLab
           encrypted_code: encryptedBlob,
           code_hash: codeHash,
           added_by: adminUserId || "unknown-admin"
-        })
+        } as any)
 
       if (insertErr) {
         // Handle unique constraint violation
@@ -126,7 +126,7 @@ export async function revealAdminCodeAction(inventoryId: string) {
 
   if (error || !data) return { error: "Code not found" }
 
-  const decryptResult = await decryptInventoryCode(data.encrypted_code)
+  const decryptResult = await decryptInventoryCode((data as any).encrypted_code)
   if (!decryptResult.success) return { error: decryptResult.error }
 
   // TODO: Log this reveal in an audit table

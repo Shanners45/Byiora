@@ -205,7 +205,8 @@ export default function SignUpPage() {
 
       clearSignupState()
       toast.success("Welcome to Byiora! Your account has been verified.")
-      window.location.href = "/"
+      const redirect = new URLSearchParams(window.location.search).get("redirect") || "/"
+      window.location.href = redirect
     } catch (error) {
       console.error("OTP verification error:", error)
       toast.error("Verification failed. Please try again.")
@@ -248,7 +249,8 @@ export default function SignUpPage() {
       const success = await login(email, password, captchaToken)
       if (success) {
         toast.success("Welcome back! Sign in successful.")
-        window.location.href = "/"
+        const redirect = new URLSearchParams(window.location.search).get("redirect") || "/"
+        window.location.href = redirect
       }
     } catch (error) {
       console.error("Auth error:", error)

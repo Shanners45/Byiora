@@ -23,7 +23,7 @@ interface Transaction {
   product_name: string
   amount: string
   price: string
-  status: "Completed" | "Failed" | "Processing"
+  status: "Completed" | "Failed" | "Processing" | "Payment Pending" | "Expired" | "Archived" | "Refunded" | "Cancelled" | "Payment Done" | "Payment Failed"
   payment_method: string
   transaction_id: string
   user_email: string
@@ -34,6 +34,8 @@ interface Transaction {
   product_category?: string
   giftcard_code?: string
   failure_remarks?: string
+  bank_txn_id?: string
+  payment_category?: string
   users?: {
     id: string
     name: string
@@ -207,8 +209,20 @@ export default function OrdersPage() {
         return "bg-red-100 text-red-800"
       case "Cancelled":
         return "bg-gray-100 text-gray-800"
+      case "Payment Pending":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
+      case "Payment Done":
+        return "bg-orange-100 text-orange-800 border-orange-200"
+      case "Payment Failed":
+        return "bg-red-50 text-red-700 border-red-200"
+      case "Expired":
+        return "bg-orange-100 text-orange-800 border-orange-200"
+      case "Archived":
+        return "bg-gray-50 text-gray-400 border-gray-200"
+      case "Refunded":
+        return "bg-purple-100 text-purple-800 border-purple-200"
       default:
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-100 text-gray-800 border-gray-200"
     }
   }
 
@@ -261,17 +275,29 @@ export default function OrdersPage() {
         return
       }
 
-      // Update local state
-      setTransactions((prev) => prev.map((t) => (t.transaction_id === transactionId ? { ...t, status: newStatus, failure_remarks: remarks } : t)))
+      const actualNewStatus = result.finalStatus || newStatus
 
-      // Send notification if order is marked as completed
+      // Update local state
+      setTransactions((prev) => prev.map((t) => {
+        if (t.transaction_id === transactionId) {
+          return { 
+            ...t, 
+            status: actualNewStatus, 
+            failure_remarks: remarks,
+            ...(result.giftcardCode ? { giftcard_code: result.giftcardCode } : {})
+          }
+        }
+        return t;
+      }))
+
       // Send notification if order status is updated to Completed or Failed
-      if ((newStatus === "Completed" || newStatus === "Failed") && oldStatus !== newStatus && transaction) {
-        await sendOrderStatusNotification(transaction, newStatus, remarks)
+      if ((actualNewStatus === "Completed" || actualNewStatus === "Failed") && oldStatus !== actualNewStatus && transaction) {
+        await sendOrderStatusNotification(transaction, actualNewStatus, remarks)
       }
 
       // Send Order Status Email for Completed or Failed changes
-      if (transaction && (newStatus === "Completed" || newStatus === "Failed") && newStatus !== oldStatus) {
+      // Skip if the action already sent an email (e.g. auto-fulfilled with giftcard code)
+      if (!result.emailSent && transaction && (actualNewStatus === "Completed" || actualNewStatus === "Failed") && actualNewStatus !== oldStatus) {
         try {
           await fetch('/api/send-order-status', {
             method: 'POST',
@@ -281,7 +307,7 @@ export default function OrdersPage() {
               userName: transaction.users?.name || transaction.guest_user_data?.name || transaction.user_email.split('@')[0],
               productName: transaction.product_name,
               denomination: transaction.amount,
-              status: newStatus,
+              status: actualNewStatus,
               transactionId: transaction.transaction_id,
               remarks: remarks || undefined,
             })
@@ -526,6 +552,11 @@ export default function OrdersPage() {
                 <SelectItem value="Processing">Processing</SelectItem>
                 <SelectItem value="Completed">Completed</SelectItem>
                 <SelectItem value="Failed">Failed</SelectItem>
+                <SelectItem value="Payment Pending">Payment Pending</SelectItem>
+                <SelectItem value="Payment Done">Payment Done</SelectItem>
+                <SelectItem value="Payment Failed">Payment Failed</SelectItem>
+                <SelectItem value="Refunded">Refunded</SelectItem>
+                <SelectItem value="Archived">Archived</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -535,6 +566,7 @@ export default function OrdersPage() {
               <TableHeader className="bg-white">
                 <TableRow>
                   <TableHead className="text-[#1F2937] font-medium">Transaction ID</TableHead>
+                  <TableHead className="text-[#1F2937] font-medium">Bank Txn ID</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Product</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Price</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Customer</TableHead>
@@ -551,6 +583,13 @@ export default function OrdersPage() {
                         <span className="text-xs text-gray-400">{new Date(transaction.created_at).toLocaleDateString()}</span>
                         <span className="text-xs text-gray-400">{new Date(transaction.created_at).toLocaleTimeString("en-US", { timeZone: "Asia/Kathmandu", hour: "2-digit", minute: "2-digit", hour12: true })} NPT</span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {transaction.bank_txn_id ? (
+                        <span className="font-mono text-sm text-[#4B5563]">{transaction.bank_txn_id}</span>
+                      ) : (
+                        <span className="text-xs text-gray-300">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
@@ -573,21 +612,44 @@ export default function OrdersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Select
-                        value={transaction.status}
-                        onValueChange={(value) =>
-                          updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
+                      {(() => {
+                        const isDynamic =
+                          transaction.payment_category === "nepalpay" ||
+                          transaction.payment_category === "fonepay" ||
+                          transaction.payment_method?.toLowerCase().includes("nepalpay") ||
+                          transaction.payment_method?.toLowerCase().includes("fonepay")
+
+                        if (isDynamic && transaction.status !== "Payment Done") {
+                          return <Badge className={`${getStatusColor(transaction.status)} whitespace-nowrap w-fit`}>{transaction.status}</Badge>
                         }
-                      >
-                        <SelectTrigger className="w-32 h-8">
-                          <Badge className={getStatusColor(transaction.status)}>{transaction.status}</Badge>
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Processing">Processing</SelectItem>
-                          <SelectItem value="Completed">Completed</SelectItem>
-                          <SelectItem value="Failed">Failed</SelectItem>
-                        </SelectContent>
-                      </Select>
+
+                        return (
+                          <Select
+                            value={transaction.status}
+                            onValueChange={(value) =>
+                              updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
+                            }
+                          >
+                            <SelectTrigger className="w-[140px] h-9 p-1 flex justify-between items-center">
+                              <Badge className={`${getStatusColor(transaction.status)} whitespace-nowrap w-full justify-center`}>{transaction.status}</Badge>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {isDynamic ? (
+                                <>
+                                  <SelectItem value={transaction.status}>{transaction.status}</SelectItem>
+                                  <SelectItem value="Refunded">Refunded</SelectItem>
+                                </>
+                              ) : (
+                                <>
+                                  <SelectItem value="Processing">Processing</SelectItem>
+                                  <SelectItem value="Completed">Completed</SelectItem>
+                                  <SelectItem value="Failed">Failed</SelectItem>
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell className="text-[#4B5563] text-sm">
                       {transaction.product_category === "direct-login" ? (
@@ -604,17 +666,17 @@ export default function OrdersPage() {
                             placeholder="Enter Giftcard Code"
                             value={giftcardCodes[transaction.id] !== undefined ? giftcardCodes[transaction.id] : (transaction.giftcard_code || '')}
                             onChange={(e) => setGiftcardCodes(prev => ({ ...prev, [transaction.id]: e.target.value }))}
-                            disabled={transaction.status === "Failed" || (transaction.status === "Completed" && !!transaction.giftcard_code)}
-                            readOnly={transaction.status === "Completed" && !!transaction.giftcard_code}
-                            className={`w-[170px] h-8 text-xs placeholder:text-gray-500 ${transaction.status === "Completed" && transaction.giftcard_code ? "bg-green-50 border-green-200 text-green-800 font-mono" : ""}`}
+                            disabled={["Failed", "Completed", "Payment Failed", "Payment Pending"].includes(transaction.status)}
+                            readOnly={transaction.status === "Completed"}
+                            className={`w-[170px] h-8 text-xs placeholder:text-gray-500 ${transaction.status === "Completed" ? "bg-green-50 border-green-200 text-green-800 font-mono" : ""}`}
                           />
                           <Button
                             size="sm"
                             onClick={() => handleSendGiftcardCode(transaction)}
-                            disabled={transaction.status === "Failed" || sendingCodeIds[transaction.id] || (transaction.status === "Completed" && !!transaction.giftcard_code)}
-                            className={`h-8 px-2 flex-shrink-0 ${transaction.status === "Completed" && transaction.giftcard_code ? "bg-green-500 hover:bg-green-500 text-white cursor-not-allowed" : "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"}`}
+                            disabled={["Failed", "Completed", "Payment Failed", "Payment Pending"].includes(transaction.status) || sendingCodeIds[transaction.id]}
+                            className={`h-8 px-2 flex-shrink-0 ${transaction.status === "Completed" ? "bg-green-500 hover:bg-green-500 text-white cursor-not-allowed" : "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"}`}
                           >
-                            {sendingCodeIds[transaction.id] ? "..." : (transaction.status === "Completed" && transaction.giftcard_code ? "✓" : <Send className="h-3 w-3" />)}
+                            {sendingCodeIds[transaction.id] ? "..." : (transaction.status === "Completed" ? "✓" : <Send className="h-3 w-3" />)}
                           </Button>
                         </div>
                       ) : (

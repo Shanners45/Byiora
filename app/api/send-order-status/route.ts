@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
     <tr>
       <td style="background-color: #5A3588; padding: 30px 20px; text-align: center;">
-        <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 40px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
+        <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 40px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
         <p style="color: #EBE3F5; margin: 12px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Order Delivered Successfully</p>
       </td>
     </tr>
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
 
     <tr>
       <td style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 20px; text-align: center;">
-        <p style="color: #4A2A70; font-size: 13px; margin: 0 0 8px 0;">Need help? <a href="https://www.byiora.store/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+        <p style="color: #4A2A70; font-size: 13px; margin: 0 0 8px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
         <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
       </td>
     </tr>
@@ -107,7 +107,7 @@ export async function POST(request: Request) {
 
     <tr>
       <td style="background-color: #5A3588; padding: 30px 20px; text-align: center;">
-        <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 40px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
+        <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 40px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
         <p style="color: #EBE3F5; margin: 12px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Order Processing Issue</p>
       </td>
     </tr>
@@ -147,7 +147,7 @@ export async function POST(request: Request) {
 
     <tr>
       <td style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 20px; text-align: center;">
-        <p style="color: #4A2A70; font-size: 13px; margin: 0 0 8px 0;">Need help? <a href="https://www.byiora.store/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+        <p style="color: #4A2A70; font-size: 13px; margin: 0 0 8px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
         <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
       </td>
     </tr>
@@ -159,26 +159,12 @@ export async function POST(request: Request) {
     const htmlContent = isCompleted ? completedTemplate : failedTemplate
 
     const data = await resend.emails.send({
-      from: 'Byiora <order-status@byiora.store>',
-      replyTo: 'support@byiora.store',
+      from: 'Byiora <order-status@byiora.com.np>',
+      replyTo: 'support@byiora.com.np',
       to: [email],
       subject: emailSubject,
       html: htmlContent,
     })
-
-    // Resend Automation: fire event for failed orders to trigger follow-up email
-    // (Contact was already added to Audience at order placement)
-    if (!isCompleted) {
-      try {
-        await resend.events.send({
-          event: 'failed_order_email_received',
-          email: email,
-        })
-      } catch (eventError) {
-        console.error('Resend automation trigger failed (non-blocking):', eventError)
-      }
-    }
-
     return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('Error sending order status email:', error)

@@ -61,7 +61,7 @@ export async function POST(request: Request) {
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
 
     <div style="background-color: #5A3588; padding: 35px 40px; text-align: center;">
-      <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
     </div>
 
     <div style="text-align: center; padding: 30px 40px 20px;">
@@ -91,12 +91,12 @@ export async function POST(request: Request) {
       </p>
 
       <div style="margin-top: 35px; text-align: center;">
-         <a href="https://www.byiora.store" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(107, 63, 160, 0.25);">Return to Store</a>
+         <a href="https://www.byiora.com.np" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 36px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 6px rgba(107, 63, 160, 0.25);">Return to Store</a>
       </div>
     </div>
 
     <div style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 24px; text-align: center;">
-      <p style="color: #4A2A70; font-size: 13px; margin: 0 0 10px 0;">Need help activating? <a href= "https://www.byiora.store/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+      <p style="color: #4A2A70; font-size: 13px; margin: 0 0 10px 0;">Need help activating? <a href= "https://www.byiora.com.np/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
       <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
     </div>
 
@@ -105,8 +105,8 @@ export async function POST(request: Request) {
     `
 
     const data = await resend.emails.send({
-      from: 'Byiora <order-status@byiora.store>',
-      replyTo: 'support@byiora.store',
+      from: 'Byiora <order-status@byiora.com.np>',
+      replyTo: 'support@byiora.com.np',
       to: [emailStr],
       subject: emailSubject,
       html: htmlContent,

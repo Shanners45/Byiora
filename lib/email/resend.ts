@@ -16,7 +16,7 @@ export async function sendWelcomeEmail(input: { email: string; userName?: string
 <div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
     <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
-      <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
       <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Welcome to the Family</p>
     </div>
     <div style="padding: 40px;">
@@ -25,11 +25,11 @@ export async function sendWelcomeEmail(input: { email: string; userName?: string
         We're thrilled to have you on board. Byiora is your premium destination for instant digital gift cards and game vouchers.
       </p>
       <div style="text-align: center; margin-top: 35px;">
-        <a href="https://www.byiora.store" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Start Shopping Now</a>
+        <a href="https://www.byiora.com.np" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Start Shopping Now</a>
       </div>
     </div>
     <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
-      <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Have any questions? <a href="https://www.byiora.store/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">We're here to help!</a></p>
+      <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Have any questions? <a href="https://www.byiora.com.np/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">We're here to help!</a></p>
       <p style="color: #9ca3af; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
     </div>
   </div>
@@ -37,7 +37,7 @@ export async function sendWelcomeEmail(input: { email: string; userName?: string
   `
 
   return await resend.emails.send({
-    from: "Byiora <noreply@byiora.store>",
+    from: "Byiora <noreply@byiora.com.np>",
     to: [email],
     subject: "Welcome to Byiora!",
     html: htmlContent,
@@ -54,6 +54,8 @@ export async function sendOrderPlacedEmail(input: {
   paymentMethod?: string
   orderDateIso?: string
   isGuest?: boolean
+  status?: string
+  customMessage?: string
 }) {
   const resend = getResend()
 
@@ -64,6 +66,8 @@ export async function sendOrderPlacedEmail(input: {
   const denomination = sanitizeHtml(input.denomination || "")
   const price = sanitizeHtml(input.price || "")
   const paymentMethod = sanitizeHtml(input.paymentMethod || "")
+  const statusLabel = input.status || "Order Placed Successfully"
+  const customMsg = input.customMessage || "Thank you for your order! We've successfully received your request for <strong>" + productName + "</strong>. Your order is currently being verified and processed."
 
   const orderDate = input.orderDateIso
     ? new Date(input.orderDateIso).toLocaleString("en-US", {
@@ -87,12 +91,12 @@ export async function sendOrderPlacedEmail(input: {
 <div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
     <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
-      <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
-      <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Order Placed Successfully</p>
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
+      <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">${statusLabel}</p>
     </div>
     <div style="padding: 40px;">
       <h2 style="color: #1E1E1E; font-size: 20px; margin-top: 0;">Hi ${userName ? userName : "valued customer"},</h2>
-      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">Thank you for your order! We've successfully received your request for <strong>${productName}</strong>. Your order is currently being verified and processed.</p>
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">${customMsg}</p>
       <div style="margin: 32px 0; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
         <div style="background-color: #6B3FA0; padding: 12px 16px;">
           <p style="margin: 0; color: #ffffff; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Order Summary</p>
@@ -110,11 +114,11 @@ export async function sendOrderPlacedEmail(input: {
         We will notify you again via email as soon as your order has been completed!
       </p>
       ${!input.isGuest ? `<div style="margin-top: 35px; text-align: center;">
-         <a href="https://www.byiora.store/transactions" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Order Status</a>
+         <a href="https://www.byiora.com.np/transactions" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Order Status</a>
       </div>` : ''}
     </div>
     <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
-      <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Need help with your order? <a href="https://www.byiora.store/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+      <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Need help with your order? <a href="https://www.byiora.com.np/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">Contact Support</a></p>
       <p style="color: #9ca3af; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
     </div>
   </div>
@@ -122,10 +126,55 @@ export async function sendOrderPlacedEmail(input: {
   `
 
   return await resend.emails.send({
-    from: "Byiora <order-status@byiora.store>",
-    replyTo: "support@byiora.store",
+    from: "Byiora <order-status@byiora.com.np>",
+    replyTo: "support@byiora.com.np",
     to: [email],
     subject: `Order Placed: ${productName}`,
+    html: htmlContent,
+  })
+}
+
+export async function sendGiftcardCodeEmail(input: {
+  email: string
+  userName?: string
+  productName: string
+  denomination: string
+  transactionId: string
+  price: string
+  paymentMethod: string
+  giftcardCode: string
+  isGuest: boolean
+}) {
+  const resend = getResend()
+  const email = input.email.trim().toLowerCase()
+  const userName = sanitizeHtml(input.userName || "Customer")
+  
+  const htmlContent = `
+<div style="background-color: #f3f4f6; padding: 40px 20px; font-family: sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+    <div style="background-color: #10B981; padding: 35px 40px; text-align: center;">
+      <h2 style="color: white; margin: 0;">Your Code is Ready!</h2>
+    </div>
+    <div style="padding: 40px; text-align: center;">
+      <p style="font-size: 16px; color: #4b5563;">Hi ${userName},</p>
+      <p style="font-size: 16px; color: #4b5563;">Thank you for your purchase of <strong>${input.productName} (${input.denomination})</strong>.</p>
+      <div style="margin: 30px 0; padding: 20px; background-color: #f8fafc; border: 2px dashed #10B981; border-radius: 8px;">
+        <p style="margin: 0; font-size: 14px; color: #64748b; text-transform: uppercase;">Your Gift Card Code</p>
+        <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: #0f172a; letter-spacing: 2px;">
+          ${sanitizeHtml(input.giftcardCode)}
+        </p>
+      </div>
+      <p style="font-size: 14px; color: #64748b;">Transaction ID: ${input.transactionId}</p>
+      <p style="font-size: 14px; color: #64748b;">Amount Paid: NPR ${input.price} via ${input.paymentMethod}</p>
+    </div>
+  </div>
+</div>`
+
+  return await resend.emails.send({
+    from: "Byiora <delivery@byiora.com.np>",
+    replyTo: "support@byiora.com.np",
+    to: [email],
+    subject: `Your Code: ${input.productName}`,
     html: htmlContent,
   })
 }
@@ -143,7 +192,7 @@ export async function sendPasswordChangedEmail(input: { email: string }) {
 <div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
   <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
     <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
-      <img src="https://www.byiora.store/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
       <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Security Alert</p>
     </div>
     <div style="padding: 40px;">
@@ -158,7 +207,7 @@ export async function sendPasswordChangedEmail(input: { email: string }) {
         </p>
       </div>
       <div style="text-align: center; margin-top: 30px;">
-        <a href="https://www.byiora.store/contact" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Contact Support</a>
+        <a href="https://www.byiora.com.np/contact" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Contact Support</a>
       </div>
     </div>
     <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
@@ -169,7 +218,7 @@ export async function sendPasswordChangedEmail(input: { email: string }) {
   `
 
   return await resend.emails.send({
-    from: "Byiora <noreply@byiora.store>",
+    from: "Byiora <noreply@byiora.com.np>",
     to: [email],
     subject: "Your Byiora Password Has Been Changed",
     html: htmlContent,

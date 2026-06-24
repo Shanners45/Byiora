@@ -1,7 +1,8 @@
 "use server"
 
+import { verifyTurnstileToken } from "@/lib/captcha"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { getPaymentCredentialsAction, decryptBankCredentials } from "./payment-credentials"
+import { decryptBankCredentials } from "./payment-credentials"
 import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 import { headers } from "next/headers"
@@ -15,16 +16,31 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   })
   ratelimit = new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(30, "1 m"), // 30 requests per minute
+    limiter: Ratelimit.slidingWindow(30, "1 m"),
   })
 }
 
-// Proxy Server URL
-const PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
+// Proxy Server URLs
+const NEPALPAY_PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
+const FONEPAY_PROXY_URL = process.env.FONEPAY_PROXY_URL || "http://localhost:3002"
 const PROXY_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
 
+const QR_EXPIRY_MINUTES = 5
+
+function getProxyUrl(category: string) {
+  return category === "fonepay" ? FONEPAY_PROXY_URL : NEPALPAY_PROXY_URL
+}
+
+function getProxyEndpoints(category: string) {
+  if (category === "fonepay") {
+    return { qr: "/api/trigger-fonepay-qr", verify: "/api/verify-fonepay-transaction" }
+  }
+  return { qr: "/api/trigger-nepalpay-qr", verify: "/api/verify-nepalpay-transaction" }
+}
+
 /**
- * Gets or generates a QR code payload for a transaction
+ * Gets or generates a QR code payload for a transaction.
+ * Uses payment_methods.category from DB instead of name string matching.
  */
 export async function getOrGenerateQRAction(transactionId: string) {
   try {
@@ -41,61 +57,77 @@ export async function getOrGenerateQRAction(transactionId: string) {
       return { success: false, error: "Transaction not found" }
     }
 
-    if (txn.status !== "Processing") {
-      return { success: false, error: "Transaction is already completed or cancelled", status: txn.status }
+    if (txn.status === "Completed") {
+      return { success: false, error: "Transaction is already completed", status: "Completed", isGuest: !txn.user_id }
     }
-    
-    // Cast to any because Supabase types might not be updated with the newest columns
+
+    const currentStatus = txn.status as string;
+    if (currentStatus === "Expired" || currentStatus === "Failed" || currentStatus === "Cancelled" || currentStatus === "Payment Failed") {
+      return { success: false, error: `Transaction is ${currentStatus.toLowerCase()}`, status: currentStatus, isGuest: !txn.user_id }
+    }
+
     const typedTxn = txn as any;
 
-    // 2. Check if cached QR is valid (less than 15 mins old)
-    if (typedTxn.qr_payload && typedTxn.validation_trace_id) {
-      // Check if it's less than 15 mins since created_at or updated_at (we can use updated_at to track when QR was generated)
-      const qrAge = (new Date().getTime() - new Date(typedTxn.updated_at).getTime()) / 1000 / 60
-      if (qrAge < 14) {
-        return { 
-          success: true, 
-          qrString: typedTxn.qr_payload,
-          validationTraceId: typedTxn.validation_trace_id,
-          amount: typedTxn.price,
-          product: typedTxn.product_name,
-          expiresIn: Math.floor(15 * 60 - qrAge * 60)
-        }
-      }
-    }
+    // 2. Get payment method category from DB
+    const { data: methodData } = await supabase
+      .from("payment_methods")
+      .select("category, name")
+      .eq("name", txn.payment_method)
+      .single()
 
-    // 3. Needs new QR. Get credentials.
-    const methodLower = txn.payment_method.toLowerCase()
-    const isNepalPay = methodLower.includes("nepalpay") || methodLower.includes("nepal pay")
-    const isFonepay = methodLower.includes("fonepay")
-    
-    if (!isNepalPay && !isFonepay) {
-      // STATIC PAYMENT METHOD FALLBACK
-      const { data: methodData, error: methodError } = await supabase
+    const paymentCategory = (methodData as any)?.category || typedTxn.payment_category || "static"
+    const paymentMethodName = (methodData as any)?.name || txn.payment_method
+
+    // 3. Static payment — return static QR
+    if (paymentCategory === "static") {
+      const { data: staticMethod } = await supabase
         .from("payment_methods")
         .select("qr_url, instructions")
         .eq("name", txn.payment_method)
         .single()
 
-      if (methodError || !methodData) {
-        return { success: false, error: "Payment method details not found" }
-      }
-
       return {
         success: true,
         isStatic: true,
-        staticQrUrl: methodData.qr_url,
-        instructions: methodData.instructions,
+        staticQrUrl: (staticMethod as any)?.qr_url,
+        instructions: (staticMethod as any)?.instructions,
         amount: txn.price,
-        product: txn.product_name
+        product: txn.product_name,
+        denomination: txn.amount,
+        paymentMethodName,
+        paymentCategory,
+        isGuest: !txn.user_id
       }
     }
 
-    const providerKey = isNepalPay ? "nepalpay" : "fonepay"
-    
-    const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", providerKey).single() as any
+    // 4. Dynamic payment — check cached QR (less than 5 mins old)
+    if (typedTxn.qr_payload && typedTxn.validation_trace_id) {
+      const qrAge = (new Date().getTime() - new Date(typedTxn.updated_at).getTime()) / 1000 / 60
+      if (qrAge < (QR_EXPIRY_MINUTES - 1)) {
+        return {
+          success: true,
+          qrString: typedTxn.qr_payload,
+          validationTraceId: typedTxn.validation_trace_id,
+          amount: txn.price,
+          product: txn.product_name,
+          denomination: txn.amount,
+          expiresIn: Math.floor(QR_EXPIRY_MINUTES * 60 - qrAge * 60),
+          paymentMethodName,
+          paymentCategory,
+          isGuest: !txn.user_id
+        }
+      }
+    }
+
+    // 5. Generate fresh QR via proxy
+    const credsRes = await supabase
+      .from("payment_credentials")
+      .select("*")
+      .eq("provider", paymentCategory)
+      .single() as any
+
     if (credsRes.error || !credsRes.data) {
-      return { success: false, error: `${providerKey} credentials not configured by Admin` }
+      return { success: false, error: `${paymentCategory} credentials not configured by Admin` }
     }
 
     const username = await decryptBankCredentials(credsRes.data.encrypted_username)
@@ -105,42 +137,85 @@ export async function getOrGenerateQRAction(transactionId: string) {
       return { success: false, error: "Failed to decrypt bank credentials" }
     }
 
-    // 4. Generate QR via proxy
-    const proxyPayload = {
+    const proxyUrl = getProxyUrl(paymentCategory)
+    const endpoints = getProxyEndpoints(paymentCategory)
+
+    const proxyPayload: any = {
       username,
       password,
       amount: parseInt(txn.price),
       remarks: transactionId
     }
 
-    const endpoint = isNepalPay ? "/api/trigger-nepalpay-qr" : "/api/trigger-fonepay-qr" // Fallback if fonepay added later
-    
-    console.log(`[QR GENERATION] Triggering proxy for ${transactionId} via ${providerKey}...`)
-    
-    const response = await fetch(`${PROXY_URL}${endpoint}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-internal-secret": PROXY_SECRET
-      },
-      body: JSON.stringify(proxyPayload),
-      cache: 'no-store'
-    })
+    // Use globally cached token from Redis if available
+    let redisClient: Redis | null = null
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      redisClient = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+      try {
+        const cachedToken = await redisClient.get<string>(`payment_token:${paymentCategory}`)
+        if (cachedToken) {
+          proxyPayload.token = cachedToken
+        }
+      } catch (e) {
+        console.error("Redis token fetch error:", e)
+      }
+    }
 
-    const proxyData = await response.json()
+    // Fallback to transaction-level token if needed
+    if (!proxyPayload.token && typedTxn.cached_token) {
+      proxyPayload.token = typedTxn.cached_token
+    }
+
+    console.log(`[QR GENERATION] Triggering proxy for ${transactionId} via ${paymentCategory}...`)
+
+    const tryGenerateQR = async (payload: any) => {
+      const resp = await fetch(`${proxyUrl}${endpoints.qr}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": PROXY_SECRET
+        },
+        body: JSON.stringify(payload),
+        cache: 'no-store'
+      })
+      return await resp.json()
+    }
+
+    let proxyData = await tryGenerateQR(proxyPayload)
+
+    // If it failed and we used a token, maybe the token was invalid/expired. Try again without token.
+    if (!proxyData.success && proxyPayload.token) {
+      console.log(`[QR GENERATION] Token might be expired, retrying without token...`)
+      delete proxyPayload.token
+      proxyData = await tryGenerateQR(proxyPayload)
+    }
 
     if (!proxyData.success) {
       return { success: false, error: proxyData.message || "Proxy failed to generate QR" }
     }
 
-    // 5. Cache it in database
+    // Save the new token to Redis if proxy returned one
+    if (proxyData.token && redisClient && proxyData.token !== proxyPayload.token) {
+      try {
+        // Cache for 48 hours based on NepalPay session lifetimes
+        await redisClient.set(`payment_token:${paymentCategory}`, proxyData.token, { ex: 60 * 60 * 48 })
+      } catch (e) {
+        console.error("Redis token save error:", e)
+      }
+    }
+
+    // 6. Cache QR in database
     await supabase.from("transactions").update({
       qr_payload: proxyData.qrString,
       validation_trace_id: proxyData.validationTraceId,
+      payment_category: paymentCategory,
       updated_at: new Date().toISOString()
-    }).eq("transaction_id", transactionId)
+    } as any).eq("transaction_id", transactionId)
 
-    // 6. Schedule QStash Webhook if available (Fire and Forget)
+    // 7. Schedule QStash Webhook if available
     if (process.env.QSTASH_TOKEN && process.env.QSTASH_URL) {
       try {
         const webhookUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/webhooks/qstash`
@@ -149,13 +224,13 @@ export async function getOrGenerateQRAction(transactionId: string) {
           headers: {
             "Authorization": `Bearer ${process.env.QSTASH_TOKEN}`,
             "Content-Type": "application/json",
-            "Upstash-Retries": "15", // Retry 15 times
-            "Upstash-Delay": "10s", // Every 10s
+            "Upstash-Retries": "10",
+            "Upstash-Delay": "15s",
           },
           body: JSON.stringify({
-            transactionId: transactionId,
+            transactionId,
             validationTraceId: proxyData.validationTraceId,
-            provider: providerKey
+            provider: paymentCategory
           })
         })
         console.log(`[QSTASH] Scheduled background polling for ${transactionId}`)
@@ -164,13 +239,17 @@ export async function getOrGenerateQRAction(transactionId: string) {
       }
     }
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       qrString: proxyData.qrString,
       validationTraceId: proxyData.validationTraceId,
       amount: txn.price,
       product: txn.product_name,
-      expiresIn: 15 * 60
+      denomination: txn.amount,
+      expiresIn: QR_EXPIRY_MINUTES * 60,
+      paymentMethodName,
+      paymentCategory,
+      isGuest: !txn.user_id
     }
 
   } catch (error: any) {
@@ -180,7 +259,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
 }
 
 /**
- * Checks payment status via Proxy
+ * Checks payment status via Proxy server
  */
 export async function verifyPaymentAction(transactionId: string, validationTraceId: string, provider: string) {
   try {
@@ -209,16 +288,17 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
 
     if (!username || !password) return { success: false, error: "Failed to decrypt bank credentials" }
 
-    const endpoint = provider === "nepalpay" ? "/api/verify-nepalpay-transaction" : "/api/verify-fonepay-transaction"
+    const proxyUrl = getProxyUrl(provider)
+    const endpoints = getProxyEndpoints(provider)
 
-    const response = await fetch(`${PROXY_URL}${endpoint}`, {
+    const response = await fetch(`${proxyUrl}${endpoints.verify}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-internal-secret": PROXY_SECRET
       },
       body: JSON.stringify({
-        nqrTxnId: validationTraceId, // Proxy expects validationTraceId in this field
+        nqrTxnId: validationTraceId,
         username,
         password
       }),
@@ -228,24 +308,31 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
     const proxyData = await response.json()
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
-      // Payment found in bank logs!
-      // NOTE: We could fulfill it here, but QStash will also do it.
-      // Doing it here provides instant UI feedback if the user keeps tab open.
-      
-      // Let's call our internal webhook function directly to deduplicate logic
-      const fulfillRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/webhooks/qstash`, {
+      // Payment found! Call the webhook to fulfill
+      const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
+      const host = headersList.get("host") || "localhost:3000"
+      const protocol = host.includes("localhost") ? "http" : "https"
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
+
+      const fulfillRes = await fetch(`${siteUrl}/api/webhooks/qstash`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": INTERNAL_SECRET
+        },
         body: JSON.stringify({
           transactionId,
           validationTraceId,
           provider,
-          internalTrigger: true // Bypasses QStash signature verification for internal calls
+          bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
+          internalTrigger: true
         })
       })
 
       if (fulfillRes.ok) {
-        return { success: true, completed: true }
+        // Fetch the final status set by the webhook
+        const { data: finalTxn } = await supabase.from("transactions").select("status").eq("transaction_id", transactionId).single()
+        return { success: true, completed: true, status: finalTxn?.status || "Completed" }
       }
     }
 
@@ -253,5 +340,236 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
   } catch (error: any) {
     console.error("Verify payment error:", error)
     return { success: false, error: error.message || "Verification failed" }
+  }
+}
+
+/**
+ * User-initiated payment verification using their phone number.
+ * Server-side only — searches NepalPay/Fonepay transaction list by phone + amount + remarks.
+ * Used when QR expires but user believes they already paid.
+ */
+export async function verifyPaymentByPhoneAction(transactionId: string, phoneNumber: string, captchaToken?: string) {
+  try {
+    // Rate limit
+    const headersList = await headers()
+    const ip = headersList.get("x-forwarded-for") ?? "127.0.0.1"
+    if (ratelimit) {
+      const { success } = await ratelimit.limit(`phone-verify:${ip}`)
+      if (!success) {
+        return { success: false, error: "Too many attempts. Please wait a moment." }
+      }
+    }
+
+    // Captcha validation
+    if (!captchaToken) {
+      return { success: false, error: "Security check required" }
+    }
+    const isCaptchaValid = await verifyTurnstileToken(captchaToken, ip)
+    if (!isCaptchaValid) {
+      return { success: false, error: "Security validation failed" }
+    }
+
+    // Validate phone
+    const cleanPhone = phoneNumber.replace(/\D/g, "")
+    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
+      return { success: false, error: "Invalid phone number" }
+    }
+
+    const supabase = createServiceRoleClient()
+
+    // Fetch the transaction
+    const { data: txn, error: txnError } = await supabase
+      .from("transactions")
+      .select("*")
+      .eq("transaction_id", transactionId)
+      .single()
+
+    if (txnError || !txn) {
+      return { success: false, error: "Transaction not found" }
+    }
+
+    // Only allow verification on Expired, Processing, Payment Pending, Payment Failed transactions
+    if (txn.status === "Completed") {
+      return { success: true, alreadyCompleted: true }
+    }
+    if (!["Processing", "Expired", "Payment Pending", "Payment Failed"].includes(txn.status)) {
+      return { success: false, error: "This transaction cannot be verified" }
+    }
+
+    const typedTxn = txn as any
+    const paymentCategory = typedTxn.payment_category || "nepalpay"
+
+    if (paymentCategory === "static") {
+      return { success: false, error: "Phone verification is only available for NepalPay/Fonepay payments" }
+    }
+
+    // Get credentials
+    const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", paymentCategory).single() as any
+    if (!credsRes.data) return { success: false, error: "Payment provider credentials not found" }
+
+    const username = await decryptBankCredentials(credsRes.data.encrypted_username)
+    const password = await decryptBankCredentials(credsRes.data.encrypted_password)
+    if (!username || !password) return { success: false, error: "Decryption failed" }
+
+    // Call proxy to get transaction list and search by phone + amount + remarks
+    const proxyUrl = getProxyUrl(paymentCategory)
+    const endpoints = getProxyEndpoints(paymentCategory)
+
+    const response = await fetch(`${proxyUrl}${endpoints.verify}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-secret": PROXY_SECRET
+      },
+      body: JSON.stringify({
+        nqrTxnId: typedTxn.validation_trace_id || "",
+        username,
+        password,
+        // Extra fields for phone-based matching
+        phoneNumber: cleanPhone,
+        amount: parseInt(txn.price),
+        remarks: transactionId
+      }),
+      cache: 'no-store'
+    })
+
+    const proxyData = await response.json()
+
+    if (proxyData.success && proxyData.data?.status === "SUCCESS") {
+      // Payment found! Fulfill the order
+      const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
+      const headersList = await headers()
+      const host = headersList.get("host") || "localhost:3000"
+      const protocol = host.includes("localhost") ? "http" : "https"
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
+
+      const fulfillRes = await fetch(`${siteUrl}/api/webhooks/qstash`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": INTERNAL_SECRET
+        },
+        body: JSON.stringify({
+          transactionId,
+          validationTraceId: typedTxn.validation_trace_id,
+          provider: paymentCategory,
+          bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
+          internalTrigger: true
+        })
+      })
+
+      if (fulfillRes.ok) {
+        return { success: true, verified: true }
+      } else {
+        const errorText = await fulfillRes.text()
+        console.error("Webhook fulfillment failed:", errorText)
+        return { success: false, error: "Internal error processing the payment" }
+      }
+    }
+
+    return {
+      success: false,
+      error: "No matching payment found."
+    }
+  } catch (error: any) {
+    console.error("Phone verification error:", error)
+    return { success: false, error: "Verification failed. Please try again." }
+  }
+}
+
+/**
+ * Fallback to explicitly fail a transaction if the frontend timer reaches 0.
+ * This is primarily for immediate feedback locally since QStash/Cron might not fire immediately.
+ */
+export async function expireTransactionAction(transactionId: string) {
+  try {
+    const supabase = createServiceRoleClient()
+
+    // Verify it is still pending before expiring
+    const { data: txn } = await supabase.from("transactions").select("*").eq("transaction_id", transactionId).single()
+    if (!txn || txn.status !== "Payment Pending") {
+      return { success: false }
+    }
+
+    await supabase.from("transactions").update({
+      status: "Payment Failed",
+      failure_remarks: "QR code expired without payment confirmation (Client Timeout)"
+    } as any).eq("transaction_id", transactionId)
+
+    // Send Payment Failed Email
+    const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
+    const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
+
+    let userName = undefined
+    if (txn.user_id) {
+      const { data: userData } = await supabase.from("users").select("name").eq("id", txn.user_id).single()
+      if (userData) userName = userData.name
+    } else if ((txn as any).guest_user_data && (txn as any).guest_user_data.name) {
+      userName = (txn as any).guest_user_data.name
+    }
+
+    let customMsg = "We noticed your payment session expired and your order has been marked as <strong>Payment Failed</strong>."
+
+    // Add verification button text
+    const isDynamic = txn.payment_category === "nepalpay" || txn.payment_category === "fonepay"
+    if (isDynamic) {
+      if (txn.user_id) {
+        customMsg += "<br/><br/>If you have already paid but your order still failed, please verify your payment. "
+        customMsg += `<a href="https://www.byiora.com.np/transactions" style="color: #6B3FA0; font-weight: 600;">Go to your Transaction History</a>, and click the <strong>Verify Payment</strong> button.`
+      } else {
+        // Guest user logic with magic link
+        const rawToken = await generateGuestVerificationToken(transactionId)
+        const token = encodeURIComponent(rawToken)
+        customMsg += "<br/><br/>If you have already paid but your order still failed, please click the secure link below to verify your payment. "
+        customMsg += `This link will expire in exactly 24 hours.<br/><br/>`
+        customMsg += `<div style="text-align: center;"><a href="https://www.byiora.com.np/verify-guest?token=${token}" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Verify Payment Securely</a></div>`
+      }
+    }
+
+    try {
+      await sendOrderPlacedEmail({
+        email: txn.user_email,
+        userName: userName,
+        productName: txn.product_name,
+        denomination: txn.amount,
+        transactionId: transactionId,
+        price: txn.price,
+        paymentMethod: txn.payment_method,
+        isGuest: !txn.user_id,
+        status: "Payment Failed",
+        customMessage: customMsg
+      })
+    } catch (e) {
+      console.error("Failed to send failed email:", e)
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error("Expire transaction error:", error)
+    return { success: false }
+  }
+}
+
+/**
+ * Explicitly cancel a transaction by the user
+ */
+export async function cancelTransactionAction(transactionId: string) {
+  try {
+    const supabase = createServiceRoleClient()
+
+    const { data: txn } = await supabase.from("transactions").select("status").eq("transaction_id", transactionId).single()
+    if (!txn || !["Payment Pending", "Processing"].includes(txn.status)) {
+      return { success: false, error: "Cannot cancel this transaction" }
+    }
+
+    await supabase.from("transactions").update({
+      status: "Payment Failed",
+      failure_remarks: "Cancelled by user"
+    } as any).eq("transaction_id", transactionId)
+
+    return { success: true }
+  } catch (error) {
+    console.error("Cancel transaction error:", error)
+    return { success: false, error: "An error occurred while cancelling" }
   }
 }

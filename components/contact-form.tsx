@@ -9,7 +9,7 @@ import { Mail, MessageCircle, Facebook, Instagram, Youtube, Clock, Send, Chevron
 import { TurnstileWidget } from "@/components/turnstile-widget"
 
 const CONTACT_DETAILS = {
-  email: "support@byiora.store",
+  email: "support@byiora.com.np",
   whatsapp: "+977-9842864103",
   whatsappLink: "https://wa.me/9779842864103",
   facebook: "https://www.facebook.com/byiora",

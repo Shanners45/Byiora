@@ -17,7 +17,7 @@ interface Transaction {
   product: string
   amount: string
   price: string
-  status: "Completed" | "Failed" | "Processing" | "Cancelled"
+  status: string
   paymentMethod: string
   date: string
   transactionId: string
@@ -26,6 +26,7 @@ interface Transaction {
   guestData?: any
   giftcard_code?: string
   failure_remarks?: string
+  payment_category?: string
 }
 
 interface AuthContextType {
@@ -44,6 +45,7 @@ interface AuthContextType {
       guestData?: any
     },
   ) => Promise<string>
+  refreshTransactions: () => Promise<void>
   isLoading: boolean
 }
 
@@ -114,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from("transactions")
         .select("*")
         .eq("user_id", userId)
+        .neq("status" as any, "Archived")
         .order("created_at", { ascending: false })
 
       if (error) {
@@ -134,6 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isGuest: false,
         giftcard_code: transaction.giftcard_code,
         failure_remarks: transaction.failure_remarks,
+        payment_category: transaction.payment_category,
       }))
 
       setTransactions(formattedTransactions)
@@ -306,6 +310,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         updateProfile,
         addTransaction,
+        refreshTransactions: async () => {
+          if (user) await loadTransactions(user.id);
+        },
         isLoading,
       }}
     >

@@ -13,7 +13,7 @@ const nunito = Nunito({
   display: "swap",
 })
 
-const BASE_URL = "https://www.byiora.store"
+const BASE_URL = "https://www.byiora.com.np"
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     "Fonepay gaming",
     "online game recharge Nepal",
     "Byiora",
-    "byiora.store",
+    "byiora.com.np",
   ],
   authors: [{ name: "Byiora" }],
   creator: "Byiora",

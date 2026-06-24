@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Shield, HelpCircle, QrCode } from "lucide-react"
+import { ArrowLeft, Shield, HelpCircle, QrCode, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -36,6 +36,7 @@ interface PaymentMethod {
   qr_url: string | null
   instructions: string | null
   is_enabled: boolean
+  category?: "static" | "nepalpay" | "fonepay"
 }
 
 
@@ -217,7 +218,7 @@ export default function ProductDetailPage() {
 
       // Order placed email is sent server-side (non-blocking) during transaction creation.
 
-      const isAutomatedGateway = ['nepalpay', 'fonepay', 'nepal pay', 'fone pay'].some(name => paymentMethodName.toLowerCase().includes(name))
+      const isAutomatedGateway = selectedPaymentMethod?.category === "nepalpay" || selectedPaymentMethod?.category === "fonepay"
 
       if (isAutomatedGateway) {
         toast.info("Redirecting to secure payment gateway...")
@@ -281,7 +282,7 @@ export default function ProductDetailPage() {
     offers: giftCard.denominations.map((denom: any) => ({
       "@type": "Offer",
       name: `${product.name} - ${denom.label}`,
-      url: `https://www.byiora.store/en-np/${productSlug}`,
+      url: `https://www.byiora.com.np/en-np/${productSlug}`,
       priceCurrency: "NPR",
       price: parseFloat(String(denom.price).replace(/,/g, "")) || 0,
       availability: "https://schema.org/InStock",
@@ -290,7 +291,7 @@ export default function ProductDetailPage() {
         "@type": "MerchantReturnPolicy",
         applicableCountry: "NP",
         returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
-        merchantReturnLink: "https://www.byiora.store/refund-policy",
+        merchantReturnLink: "https://www.byiora.com.np/refund-policy",
       },
       shippingDetails: {
         "@type": "OfferShippingDetails",
@@ -840,7 +841,14 @@ export default function ProductDetailPage() {
               </RadioGroup>
 
               <Button
-                onClick={() => setShowQRDialog(true)}
+                onClick={() => {
+                  const isAutomatedGateway = selectedPaymentMethod?.category === "nepalpay" || selectedPaymentMethod?.category === "fonepay"
+                  if (isAutomatedGateway) {
+                    handlePurchase()
+                  } else {
+                    setShowQRDialog(true)
+                  }
+                }}
                 disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !topupHasCheckout && (!userId || (product.servers && product.servers.length > 0 && !selectedServer))) || ((isDirectLoginProduct || topupHasCheckout) && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
                 className="w-full mt-6 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white py-3 text-lg font-semibold"
               >
@@ -919,6 +927,33 @@ export default function ProductDetailPage() {
                   <QrCode className="h-16 w-16 text-gray-400" />
                 )}
               </div>
+              
+              {selectedPaymentMethod?.qr_url && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mb-4 text-brand-sky-blue border-brand-sky-blue/20 hover:bg-brand-sky-blue/10"
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(selectedPaymentMethod.qr_url!);
+                      const blob = await response.blob();
+                      const blobUrl = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = blobUrl;
+                      link.download = `byiora-${selectedPaymentMethod.name.toLowerCase()}-qr.png`;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+                    } catch (err) {
+                      window.open(selectedPaymentMethod.qr_url!, '_blank');
+                    }
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" /> Download QR
+                </Button>
+              )}
+
               <p className="text-sm text-gray-600 mb-2">
                 Scan this QR code with your {selectedPaymentMethod?.name} app
               </p>

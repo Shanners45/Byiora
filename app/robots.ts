@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/admin", "/admin/*", "/api/*", "/settings", "/transactions"],
       },
     ],
-    sitemap: "https://www.byiora.store/sitemap.xml",
+    sitemap: "https://www.byiora.com.np/sitemap.xml",
   }
 }

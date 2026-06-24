@@ -61,9 +61,9 @@ export async function POST(request: Request) {
     `
 
     const data = await resend.emails.send({
-      from: 'Byiora Support Form <contact@byiora.store>',
+      from: 'Byiora Support Form <contact@byiora.com.np>',
       replyTo: sanitizedEmail,
-      to: ['support@byiora.store'],
+      to: ['support@byiora.com.np'],
       subject: `Contact Form: ${sanitizedSubject}`,
       html: htmlContent,
     })

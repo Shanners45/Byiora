@@ -1,21 +1,46 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Filter, Download, Lock, Eye, EyeOff, Gift } from "lucide-react";
+import { ArrowLeft, Filter, Download, Lock, Eye, EyeOff, Gift, RefreshCw, RefreshCcw, Phone, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { useAuth } from "@/lib/auth-context";
+import { toast } from "sonner";
+import { reorderTransactionAction } from "@/app/actions/transactions";
+import { verifyPaymentByPhoneAction } from "@/app/actions/checkout";
+import { TurnstileWidget } from "@/components/turnstile-widget";
 
 export default function TransactionsPage() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [revealedCodes, setRevealedCodes] = useState<Record<string, boolean>>({});
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
+  
+  // Phone verification state
+  const [verifyingPhoneId, setVerifyingPhoneId] = useState<string | null>(null);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [isPhoneVerifying, setIsPhoneVerifying] = useState(false);
+
   const router = useRouter();
-  const { isLoggedIn, transactions, user, isLoading } = useAuth();
+  const { isLoggedIn, transactions, user, isLoading, refreshTransactions } = useAuth();
+
+  // Show success toast when redirected from /checkout after payment completion
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("paid") === "success") {
+      toast.success("Payment received! Your order is now visible below.");
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
+      refreshTransactions();
+    }
+  }, [refreshTransactions]);
 
   // Removed automatic redirect so users can see the "Sign In Required" message
 
@@ -31,8 +56,63 @@ export default function TransactionsPage() {
         return <Badge variant="destructive">Failed</Badge>;
       case "processing":
         return <Badge className="bg-brand-soft-yellow text-brand-charcoal">Processing</Badge>;
+      case "payment failed":
+      case "expired":
+        return <Badge className="bg-red-100 text-red-800 border-red-200">Payment Failed</Badge>;
+      case "payment done":
+        return <Badge className="bg-green-100 text-green-800 border-green-200">Payment Done</Badge>;
+      case "payment pending":
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 animate-pulse">Payment Pending</Badge>;
       default:
         return <Badge variant="secondary">{status}</Badge>;
+    }
+  };
+
+  const handleReorder = async (oldTransactionId: string) => {
+    setReorderingId(oldTransactionId);
+    try {
+      const res = await reorderTransactionAction(oldTransactionId);
+      if (res.success && res.transactionId) {
+        toast.success("Processing reorder... taking you to checkout");
+        router.push(`/checkout/${res.transactionId}`);
+      } else {
+        toast.error(res.error || "Failed to process reorder");
+      }
+    } catch (e) {
+      toast.error("An unexpected error occurred");
+    } finally {
+      setReorderingId(null);
+    }
+  };
+
+  const [captchaToken, setCaptchaToken] = useState("");
+
+  const handleVerifyPhone = async (transactionId: string) => {
+    if (!phoneNumber || phoneNumber.length < 10) {
+      toast.error("Please enter a valid phone number");
+      return;
+    }
+    if (!captchaToken) {
+      toast.error("Please complete the security check");
+      return;
+    }
+
+    setIsPhoneVerifying(true);
+    try {
+      const res = await verifyPaymentByPhoneAction(transactionId, phoneNumber, captchaToken);
+      if (res.success) {
+        toast.success("Payment verified successfully! Your order is being fulfilled.");
+        setVerifyingPhoneId(null);
+        setPhoneNumber("");
+        setCaptchaToken("");
+        await refreshTransactions();
+      } else {
+        toast.error(res.error || "Verification failed");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Verification failed");
+    } finally {
+      setIsPhoneVerifying(false);
     }
   };
 
@@ -206,7 +286,7 @@ export default function TransactionsPage() {
       doc.setFont("helvetica", "normal");
       doc.setTextColor(156, 163, 175);
       doc.text("Thank you for shopping with Byiora!", pageWidth / 2, footerY - 5, { align: "center" });
-      doc.text("support@byiora.store", pageWidth / 2, footerY, { align: "center" });
+      doc.text("support@byiora.com.np", pageWidth / 2, footerY, { align: "center" });
 
       doc.save(`Byiora_Receipt_${transaction.transactionId}.pdf`);
     } catch (error) {
@@ -239,7 +319,7 @@ export default function TransactionsPage() {
               Please sign in to view your transaction history.
             </p>
             <Button
-              onClick={() => router.push("/en-np/sign-up")}
+              onClick={() => router.push("/en-np/sign-up?redirect=/transactions")}
               className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white rounded-full px-8"
             >
               Sign In
@@ -280,6 +360,9 @@ export default function TransactionsPage() {
                 <SelectItem value="completed" className="text-brand-charcoal">Completed</SelectItem>
                 <SelectItem value="processing" className="text-brand-charcoal">Processing</SelectItem>
                 <SelectItem value="failed" className="text-brand-charcoal">Failed</SelectItem>
+                <SelectItem value="payment done" className="text-brand-charcoal">Payment Done</SelectItem>
+                <SelectItem value="payment pending" className="text-brand-charcoal">Payment Pending</SelectItem>
+                <SelectItem value="payment failed" className="text-brand-charcoal">Payment Failed</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -354,24 +437,128 @@ export default function TransactionsPage() {
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                  <p className="text-sm text-brand-light-gray">
+                  <p className="text-sm text-brand-light-gray flex-1">
                     {transaction.status === "Completed" ? "✅ Completed" :
+                      transaction.status === "Payment Done" ? "✅ Payment Verified (Pending Fulfillment)" :
                       transaction.status === "Processing" ? "⏳ Payment processing" :
-                        transaction.failure_remarks ? `❌ ${transaction.failure_remarks}` : "❌ Transaction failed"}
+                      transaction.status === "Payment Pending" ? "⏳ Waiting for payment" :
+                      transaction.status === "Payment Failed" ? "❌ Payment Failed" :
+                      transaction.status === "Expired" ? "❌ Payment Failed" :
+                      transaction.failure_remarks ? `❌ ${transaction.failure_remarks}` : "❌ Transaction failed"}
                   </p>
 
-                  {transaction.status === "Completed" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDownloadReceipt(transaction.transactionId)}
-                      className="border-brand-sky-blue text-brand-sky-blue hover:bg-brand-sky-blue/10"
-                    >
-                      <Download className="h-4 w-4 mr-2" />
-                      Download Receipt
-                    </Button>
-                  )}
+                  <div className="flex gap-2">
+                    {transaction.status === "Payment Failed" && transaction.failure_remarks !== "Cancelled by user" && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setVerifyingPhoneId(transaction.transactionId);
+                            setPhoneNumber("");
+                          }}
+                          className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 font-semibold"
+                        >
+                          <Phone className="h-4 w-4 mr-2" />
+                          Verify Payment
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleReorder(transaction.transactionId)}
+                          disabled={reorderingId === transaction.transactionId}
+                          className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
+                        >
+                          {reorderingId === transaction.transactionId ? (
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <RefreshCcw className="h-4 w-4 mr-2" />
+                          )}
+                          Buy Again
+                        </Button>
+                      </>
+                    )}
+
+                    {transaction.status === "Payment Pending" && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setVerifyingPhoneId(transaction.transactionId);
+                            setPhoneNumber("");
+                          }}
+                          className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 font-semibold"
+                        >
+                          Verify Payment
+                        </Button>
+                        {new Date().getTime() - new Date(transaction.date).getTime() < 5 * 60 * 1000 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => router.push(`/checkout/${transaction.transactionId}`)}
+                            className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
+                          >
+                            Return to Payment
+                          </Button>
+                        )}
+                      </>
+                    )}
+
+                    {transaction.status === "Completed" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownloadReceipt(transaction.transactionId)}
+                        className="border-brand-sky-blue text-brand-sky-blue hover:bg-brand-sky-blue/10"
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        Download Receipt
+                      </Button>
+                    )}
+                  </div>
                 </div>
+
+                {/* Phone Verification Dialog */}
+                <Dialog open={verifyingPhoneId === transaction.transactionId} onOpenChange={(open) => !open && setVerifyingPhoneId(null)}>
+                  <DialogContent className="sm:max-w-md bg-white/80 backdrop-blur-xl border border-white/50 shadow-2xl">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2 text-gray-800">
+                        <Phone className="h-5 w-5 text-[#0ea5e9]" />
+                        Verify Mobile Payment
+                      </DialogTitle>
+                      <DialogDescription className="text-gray-500">
+                        If you already paid but the session expired, enter the phone number you used to pay. We will verify it with the bank.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-4 mt-4">
+                      <div className="flex gap-3">
+                        <Input
+                          type="tel"
+                          placeholder="e.g. 98XXXXXXXX"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          className="flex-1 border-gray-300 focus:border-[#0ea5e9] bg-white/70 placeholder:text-gray-400"
+                        />
+                        <Button
+                          onClick={() => handleVerifyPhone(transaction.transactionId)}
+                          disabled={isPhoneVerifying || !phoneNumber || !captchaToken}
+                          className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white shadow-md"
+                        >
+                          {isPhoneVerifying ? (
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4 mr-2" />
+                          )}
+                          Verify
+                        </Button>
+                      </div>
+                      <div className="flex justify-center">
+                        <TurnstileWidget onToken={setCaptchaToken} />
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
             </Card>
           ))}

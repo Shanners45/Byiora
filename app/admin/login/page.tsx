@@ -56,7 +56,7 @@ export default function AdminLogin() {
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <Image
-              src="https://www.byiora.store/logo-final.png"
+              src="https://www.byiora.com.np/logo-final.png"
               alt="Byiora"
               width={160}
               height={56}
