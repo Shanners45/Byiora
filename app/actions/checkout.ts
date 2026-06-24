@@ -392,7 +392,7 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
     if (txn.status === "Completed") {
       return { success: true, alreadyCompleted: true }
     }
-    if (!["Processing", "Expired", "Payment Pending", "Payment Failed"].includes(txn.status)) {
+    if (!["Processing", "Expired", "Payment Pending", "Payment Failed"].includes(txn.status as string)) {
       return { success: false, error: "This transaction cannot be verified" }
     }
 
@@ -487,7 +487,7 @@ export async function expireTransactionAction(transactionId: string) {
 
     // Verify it is still pending before expiring
     const { data: txn } = await supabase.from("transactions").select("*").eq("transaction_id", transactionId).single()
-    if (!txn || txn.status !== "Payment Pending") {
+    if (!txn || (txn.status as string) !== "Payment Pending") {
       return { success: false }
     }
 
@@ -558,7 +558,7 @@ export async function cancelTransactionAction(transactionId: string) {
     const supabase = createServiceRoleClient()
 
     const { data: txn } = await supabase.from("transactions").select("status").eq("transaction_id", transactionId).single()
-    if (!txn || !["Payment Pending", "Processing"].includes(txn.status)) {
+    if (!txn || !["Payment Pending", "Processing"].includes(txn.status as string)) {
       return { success: false, error: "Cannot cancel this transaction" }
     }
 
