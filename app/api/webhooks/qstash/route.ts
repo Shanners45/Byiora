@@ -56,11 +56,12 @@ async function handler(req: Request) {
     const supabase = createServiceRoleClient()
 
     // 1. Check Transaction Status
-    const { data: txn, error: txnError } = await supabase
+    const { data: _txn, error: txnError } = await supabase
       .from("transactions")
       .select("*")
       .eq("transaction_id", transactionId)
       .single()
+    const txn = _txn as any;
 
     if (txnError || !txn) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 })
@@ -121,7 +122,7 @@ async function handler(req: Request) {
     let deliveredCode: string | null = null
     let decryptedCode: string | null = null
 
-    if (txn.product_category && categoriesWithInventory.includes(txn.product_category.toLowerCase())) {
+    if ((txn as any).product_category && categoriesWithInventory.includes((txn as any).product_category.toLowerCase())) {
       console.log(`[FULFILLMENT] Claiming inventory code for ${transactionId}...`)
 
       const { data: claimData, error: claimError } = await supabase.rpc("claim_gift_card", {

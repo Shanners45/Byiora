@@ -49,17 +49,18 @@ export async function updateTransactionStatusAction(
     let emailSent = false;
 
     // Fetch transaction details
-    const { data: txn } = await serviceSupabase
+    const { data: _txn } = await serviceSupabase
       .from("transactions")
       .select("*, users(name)")
       .eq("transaction_id", transactionId)
       .single()
+    const txn = _txn as any;
 
     // Auto-fulfill if status is Payment Done
     if (newStatus === "Payment Done" && txn) {
       const categoriesWithInventory = ["digital-goods", "games"]
       
-      if (txn.product_category && categoriesWithInventory.includes(txn.product_category.toLowerCase())) {
+      if ((txn as any).product_category && categoriesWithInventory.includes((txn as any).product_category.toLowerCase())) {
         const { data: claimData, error: claimError } = await serviceSupabase.rpc("claim_gift_card", {
           p_product_id: txn.product_id,
           p_denomination_label: txn.amount,
@@ -182,11 +183,12 @@ export async function sendGiftcardCodeAction(
   try {
     const serviceSupabase = createServiceRoleClient()
 
-    const { data: txn } = await serviceSupabase
+    const { data: _txn } = await serviceSupabase
       .from("transactions")
       .select("*, users(name)")
       .eq("transaction_id", transactionId)
       .single()
+    const txn = _txn as any;
 
     const { error } = await serviceSupabase
       .from("transactions")

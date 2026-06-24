@@ -47,7 +47,7 @@ export default async function VerifyGuestPage({
   const supabase = createServiceRoleClient()
   const { data: txn, error } = await supabase
     .from("transactions")
-    .select("status, product_name, amount, price, payment_category")
+    .select("status, product_name, amount, price")
     .eq("transaction_id", result.transactionId)
     .single()
 
@@ -65,7 +65,7 @@ export default async function VerifyGuestPage({
     )
   }
 
-  if (txn.status === "Completed" || txn.status === "Payment Done") {
+  if ((txn.status as string) === "Completed" || (txn.status as string) === "Payment Done") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center border border-gray-100">
