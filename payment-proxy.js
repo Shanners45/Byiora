@@ -80,7 +80,7 @@ async function makeBankRequest(url, payload, token = null, method = 'POST') {
         }
         return JSON.parse(trimmed);
     } catch (e) {
-        throw new Error("Bank request failed (curl): " + e.message);
+        throw new Error("Bank request failed (curl): " + e.message + " | RAW OUTPUT: " + (typeof trimmed !== 'undefined' ? trimmed : ""));
     }
 }
 
