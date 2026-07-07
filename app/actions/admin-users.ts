@@ -3,6 +3,7 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import crypto from "crypto"
 
 import { verifyAdmin } from "./admin-utils"
 
@@ -29,7 +30,7 @@ export async function promoteUserAction(userId: string, newRole: "sub_admin" | "
     }
 
     // 2. Generate a secure random password and update auth
-    const newPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8) + "!"
+    const newPassword = crypto.randomBytes(16).toString('base64url') + "!"
     const { error: authError } = await serviceSupabase.auth.admin.updateUserById(userId, {
       password: newPassword,
     })

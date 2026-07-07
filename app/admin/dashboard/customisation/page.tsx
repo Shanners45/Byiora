@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
-import { Upload, Trash2, ImageIcon, Plus, ChevronUp, ChevronDown, Check, X, Layers, Package } from "lucide-react"
+import { Upload, Trash2, ImageIcon, Plus, ChevronUp, ChevronDown, Check, X, Layers, Package, Megaphone } from "lucide-react"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { revalidateHomepageAction } from "@/app/actions/customisation"
@@ -21,6 +21,17 @@ interface Banner {
   link_url: string | null
   is_active: boolean
   sort_order: number
+}
+
+interface Announcement {
+  id: string
+  title: string
+  message: string
+  type: string
+  theme: string
+  link_url: string
+  link_text: string
+  is_active: boolean
 }
 
 interface Category {
@@ -39,7 +50,145 @@ interface ProductInfo {
 
 export default function CustomisationPage() {
   const supabase = createClient()
-  const [activeTab, setActiveTab] = useState("banners")
+  const [activeTab, setActiveTab] = useState("announcements")
+
+  // ====================== ANNOUNCEMENTS STATE ======================
+  const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true)
+  const [showAddAnnouncementForm, setShowAddAnnouncementForm] = useState(false)
+  const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null)
+  const [newAnnouncement, setNewAnnouncement] = useState({ title: "", message: "", type: "banner", theme: "info", link_url: "", link_text: "" })
+
+  const loadAnnouncements = async () => {
+    setIsLoadingAnnouncements(true)
+    try {
+      const { data, error } = await supabase
+        .from("store_announcements")
+        .select("*")
+        .order("created_at", { ascending: false })
+      if (error) toast.error("Failed to load announcements")
+      else if (data) setAnnouncements(data)
+    } finally {
+      setIsLoadingAnnouncements(false)
+    }
+  }
+
+  const handleAddAnnouncement = async () => {
+    if (!newAnnouncement.title || !newAnnouncement.message) {
+      return toast.error("Title and message are required")
+    }
+    
+    // Auto-disable all others if this one is active?
+    // Actually, let's insert as inactive, or if inserted as active, disable others.
+    // Let's insert as active for convenience and disable others.
+    
+    try {
+      if (editingAnnouncementId) {
+        // Edit mode
+        const { data, error } = await supabase
+          .from("store_announcements")
+          // @ts-ignore
+          .update({
+            title: newAnnouncement.title,
+            message: newAnnouncement.message,
+            type: newAnnouncement.type,
+            theme: newAnnouncement.theme,
+            link_url: newAnnouncement.link_url,
+            link_text: newAnnouncement.link_text
+          })
+          .eq("id", editingAnnouncementId)
+          .select()
+          .single()
+          
+        if (error) throw error
+        setAnnouncements(prev => prev.map(a => a.id === editingAnnouncementId ? (data as Announcement) : a))
+        toast.success("Announcement updated")
+      } else {
+        // Add mode
+        // First disable all others
+        // @ts-ignore
+        await supabase.from("store_announcements").update({ is_active: false }).neq('id', '00000000-0000-0000-0000-000000000000')
+        
+        const { data, error } = await supabase
+          .from("store_announcements")
+          // @ts-ignore
+          .insert([{
+            ...newAnnouncement,
+            is_active: true
+          }])
+          .select()
+          .single()
+          
+        if (error) throw error
+        setAnnouncements(prev => [data as Announcement, ...prev.map(a => ({ ...a, is_active: false }))])
+        toast.success("Announcement added")
+      }
+
+      setShowAddAnnouncementForm(false)
+      setEditingAnnouncementId(null)
+      setNewAnnouncement({ title: "", message: "", type: "banner", theme: "info", link_url: "", link_text: "" })
+    } catch (e) {
+      toast.error(editingAnnouncementId ? "Failed to update announcement" : "Failed to add announcement")
+    }
+  }
+
+  const handleEditAnnouncement = (ann: Announcement) => {
+    setNewAnnouncement({
+      title: ann.title,
+      message: ann.message,
+      type: ann.type,
+      theme: ann.theme,
+      link_url: ann.link_url || "",
+      link_text: ann.link_text || ""
+    })
+    setEditingAnnouncementId(ann.id)
+    setShowAddAnnouncementForm(true)
+  }
+
+  const handleUpdateAnnouncementStatus = async (id: string, is_active: boolean) => {
+    try {
+      // If turning on, turn off all others first to ensure only 1 active announcement
+      if (is_active) {
+        // @ts-ignore
+        await supabase.from("store_announcements").update({ is_active: false }).neq('id', '00000000-0000-0000-0000-000000000000')
+      }
+      
+      const { error } = await supabase
+        .from("store_announcements")
+        // @ts-ignore
+        .update({ is_active })
+        .eq("id", id)
+        
+      if (error) throw error
+      
+      if (is_active) {
+        setAnnouncements(prev => prev.map(a => 
+          a.id === id ? { ...a, is_active: true } : { ...a, is_active: false }
+        ))
+      } else {
+        setAnnouncements(prev => prev.map(a => 
+          a.id === id ? { ...a, is_active: false } : a
+        ))
+      }
+      toast.success("Status updated")
+    } catch {
+      toast.error("Failed to update status")
+    }
+  }
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this announcement?")) return
+    try {
+      const { error } = await supabase.from("store_announcements").delete().eq("id", id)
+      if (error) throw error
+      setAnnouncements(prev => prev.filter(a => a.id !== id))
+      toast.success("Announcement deleted")
+    } catch {
+      toast.error("Failed to delete announcement")
+    }
+  }
+
+
 
   // ====================== BANNERS STATE ======================
   const [banners, setBanners] = useState<Banner[]>([])
@@ -61,6 +210,7 @@ export default function CustomisationPage() {
   const [editCategoryTitle, setEditCategoryTitle] = useState("")
 
   useEffect(() => {
+    loadAnnouncements()
     loadBanners()
     loadCategoriesAndProducts()
   }, [])
@@ -347,9 +497,12 @@ export default function CustomisationPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md h-12 bg-[#FEF7E0] border border-[#F59E0B]/20 p-1">
+        <TabsList className="grid w-full grid-cols-3 max-w-2xl h-12 bg-[#FEF7E0] border border-[#F59E0B]/20 p-1">
+          <TabsTrigger value="announcements" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full">
+            <Megaphone className="h-4 w-4 mr-2" /> Announcements
+          </TabsTrigger>
           <TabsTrigger value="banners" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full">
-            <ImageIcon className="h-4 w-4 mr-2" /> Banners
+            <ImageIcon className="h-4 w-4 mr-2" /> Hero Banners
           </TabsTrigger>
           <TabsTrigger value="categories" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full">
             <Layers className="h-4 w-4 mr-2" /> Categories
@@ -551,6 +704,184 @@ export default function CustomisationPage() {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        </TabsContent>
+        {/* ANNOUNCEMENTS TAB */}
+        <TabsContent value="announcements" className="space-y-6 mt-6">
+          <div className="flex justify-between items-end">
+            <div>
+              <h2 className="text-xl font-semibold text-[#1F2937]">Global Announcements</h2>
+              <p className="text-sm text-[#4B5563] mt-1">Manage top banners and critical modal alerts.</p>
+            </div>
+            <Button onClick={() => {
+              setEditingAnnouncementId(null)
+              setNewAnnouncement({ title: "", message: "", type: "banner", theme: "info", link_url: "", link_text: "" })
+              setShowAddAnnouncementForm(true)
+            }} className="bg-red-600 hover:bg-red-700 text-white">
+              <Plus className="h-4 w-4 mr-2" /> Add Announcement
+            </Button>
+          </div>
+
+          {showAddAnnouncementForm && !editingAnnouncementId && (
+            <Card className="border-2 border-red-200 bg-white shadow-md">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-[#1F2937] flex items-center gap-2">
+                  <Megaphone className="h-5 w-5" /> {editingAnnouncementId ? "Edit Announcement" : "New Announcement"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Title</Label>
+                    <Input value={newAnnouncement.title} onChange={e => setNewAnnouncement(n => ({ ...n, title: e.target.value }))} placeholder="Summer Sale" className="placeholder:text-gray-500 text-gray-900 bg-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Message</Label>
+                    <Input value={newAnnouncement.message} onChange={e => setNewAnnouncement(n => ({ ...n, message: e.target.value }))} placeholder="Get 20% off all diamonds!" className="placeholder:text-gray-500 text-gray-900 bg-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Type</Label>
+                    <select 
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 py-2 text-sm text-gray-900"
+                      value={newAnnouncement.type} 
+                      onChange={e => setNewAnnouncement(n => ({ ...n, type: e.target.value }))}
+                    >
+                      <option value="banner">Top Banner (Marketing/Sales)</option>
+                      <option value="modal">Center Modal (Critical/Maintenance)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Theme Color</Label>
+                    <select 
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 py-2 text-sm text-gray-900"
+                      value={newAnnouncement.theme} 
+                      onChange={e => setNewAnnouncement(n => ({ ...n, theme: e.target.value }))}
+                    >
+                      <option value="info">Info (Blue)</option>
+                      <option value="sale">Sale (Vibrant Gradient)</option>
+                      <option value="critical">Critical (Red)</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Link Text (Optional)</Label>
+                    <Input value={newAnnouncement.link_text} onChange={e => setNewAnnouncement(n => ({ ...n, link_text: e.target.value }))} placeholder="Top Up Now" className="placeholder:text-gray-500 text-gray-900 bg-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Link URL (Optional)</Label>
+                    <Input value={newAnnouncement.link_url} onChange={e => setNewAnnouncement(n => ({ ...n, link_url: e.target.value }))} placeholder="/checkout" className="placeholder:text-gray-500 text-gray-900 bg-white" />
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Button onClick={handleAddAnnouncement} className="bg-red-600 hover:bg-red-700">
+                    {editingAnnouncementId ? "Update" : "Save"}
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowAddAnnouncementForm(false)}>Cancel</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="grid gap-4">
+            {announcements.map((ann, index) => (
+              <Card key={ann.id} className={`bg-white border ${editingAnnouncementId === ann.id ? 'border-red-400 shadow-md' : (ann.is_active ? 'border-red-400' : 'border-gray-200')} p-4`}>
+                {editingAnnouncementId === ann.id ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Megaphone className="h-5 w-5 text-gray-700" />
+                      <h3 className="text-[#1F2937] font-semibold text-lg">Edit Announcement</h3>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Title</Label>
+                        <Input value={newAnnouncement.title} onChange={e => setNewAnnouncement(n => ({ ...n, title: e.target.value }))} placeholder="Summer Sale" className="placeholder:text-gray-500 text-gray-900 bg-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Message</Label>
+                        <Input value={newAnnouncement.message} onChange={e => setNewAnnouncement(n => ({ ...n, message: e.target.value }))} placeholder="Get 20% off all diamonds!" className="placeholder:text-gray-500 text-gray-900 bg-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Type</Label>
+                        <select 
+                          className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 py-2 text-sm text-gray-900"
+                          value={newAnnouncement.type} 
+                          onChange={e => setNewAnnouncement(n => ({ ...n, type: e.target.value }))}
+                        >
+                          <option value="banner">Top Banner (Marketing/Sales)</option>
+                          <option value="modal">Center Modal (Critical/Maintenance)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Theme Color</Label>
+                        <select 
+                          className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 py-2 text-sm text-gray-900"
+                          value={newAnnouncement.theme} 
+                          onChange={e => setNewAnnouncement(n => ({ ...n, theme: e.target.value }))}
+                        >
+                          <option value="info">Info (Blue)</option>
+                          <option value="sale">Sale (Vibrant Gradient)</option>
+                          <option value="critical">Critical (Red)</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Link Text (Optional)</Label>
+                        <Input value={newAnnouncement.link_text} onChange={e => setNewAnnouncement(n => ({ ...n, link_text: e.target.value }))} placeholder="Top Up Now" className="placeholder:text-gray-500 text-gray-900 bg-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Link URL (Optional)</Label>
+                        <Input value={newAnnouncement.link_url} onChange={e => setNewAnnouncement(n => ({ ...n, link_url: e.target.value }))} placeholder="/checkout" className="placeholder:text-gray-500 text-gray-900 bg-white" />
+                      </div>
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                      <Button onClick={handleAddAnnouncement} className="bg-red-600 hover:bg-red-700">
+                        Update
+                      </Button>
+                      <Button variant="outline" onClick={() => { setEditingAnnouncementId(null); setShowAddAnnouncementForm(false) }}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
+                          ann.type === 'modal' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {ann.type.toUpperCase()}
+                        </span>
+                        <span className={`px-2 py-0.5 text-xs font-bold rounded-full border ${
+                          ann.theme === 'critical' ? 'border-red-500 text-red-600' : 
+                          ann.theme === 'sale' ? 'border-fuchsia-500 text-fuchsia-600' : 'border-blue-500 text-blue-600'
+                        }`}>
+                          {ann.theme}
+                        </span>
+                      </div>
+                      <p className="font-bold text-lg text-gray-900">{ann.title}</p>
+                      <p className="text-sm text-gray-600">{ann.message}</p>
+                      {ann.link_url && (
+                        <p className="text-xs text-blue-500 mt-1">Link: {ann.link_text} ({ann.link_url})</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col items-end mr-4">
+                        <span className="text-xs font-medium text-gray-500 mb-1">Active</span>
+                        <Switch 
+                          checked={ann.is_active} 
+                          onCheckedChange={(checked) => handleUpdateAnnouncementStatus(ann.id, checked)} 
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => handleEditAnnouncement(ann)}>Edit</Button>
+                        <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteAnnouncement(ann.id)}>Delete</Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            ))}
+            {announcements.length === 0 && !isLoadingAnnouncements && (
+              <div className="text-center py-8 text-gray-500">
+                No announcements created yet.
+              </div>
+            )}
           </div>
         </TabsContent>
       </Tabs>

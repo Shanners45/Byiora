@@ -106,7 +106,7 @@ export async function sendOrderPlacedEmail(input: {
           ${row("Amount", denomination || "—")}
           ${row("Price", price ? `NPR ${price}` : "—")}
           ${row("Payment Method", paymentMethod || "—")}
-          ${row("Transaction ID", transactionId || "—")}
+          ${row("Order ID", transactionId || "—")}
           ${row("Order Date", orderDate)}
         </table>
       </div>
@@ -164,7 +164,7 @@ export async function sendGiftcardCodeEmail(input: {
           ${sanitizeHtml(input.giftcardCode)}
         </p>
       </div>
-      <p style="font-size: 14px; color: #64748b;">Transaction ID: ${input.transactionId}</p>
+      <p style="font-size: 14px; color: #64748b;">Order ID: ${input.transactionId}</p>
       <p style="font-size: 14px; color: #64748b;">Amount Paid: NPR ${input.price} via ${input.paymentMethod}</p>
     </div>
   </div>

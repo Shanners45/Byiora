@@ -97,12 +97,20 @@ export async function savePaymentCredentialsAction(provider: string, username: s
 
     // --- VERIFY LOGIN WITH PROXY BEFORE SAVING ---
     let merchantCode = null;
-    if (provider.toLowerCase() === "nepalpay" || provider.toLowerCase().includes("nepal pay")) {
+    const providerLower = provider.toLowerCase();
+    const isNepalPay = providerLower === "nepalpay" || providerLower.includes("nepal pay");
+    const isFonepay = providerLower === "fonepay";
+
+    if (isNepalPay || isFonepay) {
       const PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
-      const PROXY_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
+      const PROXY_SECRET = process.env.INTERNAL_API_SECRET!
+      if (!PROXY_SECRET) return { error: "INTERNAL_API_SECRET is not configured." }
+
+      // Use the provider-specific verify-login endpoint on the unified proxy
+      const verifyEndpoint = isFonepay ? "/api/fonepay/verify-login" : "/api/nepalpay/verify-login";
 
       try {
-        const verifyRes = await fetch(`${PROXY_URL}/api/verify-login`, {
+        const verifyRes = await fetch(`${PROXY_URL}${verifyEndpoint}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -111,14 +119,13 @@ export async function savePaymentCredentialsAction(provider: string, username: s
           body: JSON.stringify({
             username: username,
             password: plainPasswordToVerify,
-            provider: provider.toLowerCase()
           })
         })
         const verifyData = await verifyRes.json()
         if (!verifyData.success) {
           return { error: "Bank Verification Failed: " + (verifyData.message || "Invalid credentials") }
         }
-        merchantCode = verifyData.merchantCode;
+        merchantCode = verifyData.merchantCode || null;
       } catch (e) {
         return { error: "Failed to connect to bank proxy for verification." }
       }

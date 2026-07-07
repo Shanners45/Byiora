@@ -200,15 +200,18 @@ export interface Database {
           product_name: string
           amount: string
           price: string
-          status: "Completed" | "Failed" | "Processing" | "Cancelled"
+          status: "Completed" | "Failed" | "Processing" | "Cancelled" | "Payment Pending" | "Paid" | "Payment Failed" | "Expired" | "Archived" | "Refunded"
           payment_method: string
           transaction_id: string
           user_email: string
           product_category: string | null
+          payment_category: string | null
           guest_user_data: any | null
           giftcard_code: string | null
           failure_remarks: string | null
           encrypted_checkout_data: string | null
+          bank_txn_id: string | null
+          validation_trace_id: string | null
           created_at: string
           updated_at: string
         }
@@ -219,15 +222,18 @@ export interface Database {
           product_name: string
           amount: string
           price: string
-          status?: "Completed" | "Failed" | "Processing" | "Cancelled"
+          status?: "Completed" | "Failed" | "Processing" | "Cancelled" | "Payment Pending" | "Paid" | "Payment Failed" | "Expired" | "Archived" | "Refunded"
           payment_method: string
           transaction_id: string
           user_email: string
           product_category?: string | null
+          payment_category?: string | null
           guest_user_data?: any | null
           giftcard_code?: string | null
           failure_remarks?: string | null
           encrypted_checkout_data?: string | null
+          bank_txn_id?: string | null
+          validation_trace_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -238,15 +244,18 @@ export interface Database {
           product_name?: string
           amount?: string
           price?: string
-          status?: "Completed" | "Failed" | "Processing" | "Cancelled"
+          status?: "Completed" | "Failed" | "Processing" | "Cancelled" | "Payment Pending" | "Paid" | "Payment Failed" | "Expired" | "Archived" | "Refunded"
           payment_method?: string
           transaction_id?: string
           user_email?: string
           product_category?: string | null
+          payment_category?: string | null
           guest_user_data?: any | null
           giftcard_code?: string | null
           failure_remarks?: string | null
           encrypted_checkout_data?: string | null
+          bank_txn_id?: string | null
+          validation_trace_id?: string | null
           created_at?: string
           updated_at?: string
         }

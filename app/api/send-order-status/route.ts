@@ -8,9 +8,16 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: Request) {
   try {
-    const session = await getAdminSessionAction()
-    if (!session.success) {
-      return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 })
+    // Allow admin sessions OR internal server-to-server calls (cron/webhook)
+    const internalSecret = request.headers.get("x-internal-secret")
+    const expectedSecret = process.env.INTERNAL_API_SECRET
+    const isInternalCall = internalSecret && expectedSecret && internalSecret === expectedSecret
+
+    if (!isInternalCall) {
+      const session = await getAdminSessionAction()
+      if (!session.success) {
+        return NextResponse.json({ error: "Forbidden: Admins only" }, { status: 403 })
+      }
     }
 
     const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
@@ -31,6 +38,19 @@ export async function POST(request: Request) {
     const productName = sanitizeHtml(body.productName || "")
     const denomination = sanitizeHtml(body.denomination || "")
     const remarks = sanitizeHtml(body.remarks || "")
+    const isGuest = Boolean(body.isGuest)
+    const isDynamic = Boolean(body.isDynamic)
+    let magicLinkToken = body.magicLinkToken ? sanitizeHtml(body.magicLinkToken) : undefined
+
+    if (isGuest && isDynamic && transactionId && !magicLinkToken) {
+      try {
+        const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
+        const rawToken = await generateGuestVerificationToken(transactionId)
+        magicLinkToken = encodeURIComponent(rawToken)
+      } catch (err) {
+        console.error("Failed to generate magic link for order status email", err)
+      }
+    }
 
     if (!email || !status) {
       return NextResponse.json({ error: 'Email and Status are required' }, { status: 400 })
@@ -77,7 +97,7 @@ export async function POST(request: Request) {
               <div style="font-size: 20px; font-weight: bold; color: #6B3FA0; letter-spacing: 2px; padding: 10px; background-color: #ffffff; border-radius: 8px; text-transform: uppercase;">
                 ${statusText}
               </div>
-              <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 12px;">Transaction ID: ${transactionId || 'N/A'}</p>
+              <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 12px;">Order ID: ${transactionId || 'N/A'}</p>
             </td>
           </tr>
         </table>
@@ -127,7 +147,7 @@ export async function POST(request: Request) {
               <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-weight: 600; word-break: break-word;">${productName} ${denomination}</td>
             </tr>
             <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Transaction ID</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Order ID</td>
               <td style="padding: 10px 16px; font-size: 13px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; word-break: break-all;">${transactionId || 'N/A'}</td>
             </tr>
             <tr>
@@ -141,6 +161,22 @@ export async function POST(request: Request) {
             </tr>` : ''}
           </table>
         </div>
+
+        ${magicLinkToken ? `
+        <div style="margin-top: 25px; padding: 20px; background-color: #F4F0F9; border-radius: 8px; text-align: center;">
+          <p style="color: #4A2A70; font-size: 15px; margin: 0 0 15px 0;">
+            If you have already paid but your order still failed, please click the secure link below to verify your payment. This link will expire in exactly 24 hours.
+          </p>
+          <a href="https://www.byiora.com.np/verify-guest?token=${magicLinkToken}" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Verify Payment Securely</a>
+        </div>
+        ` : (!isGuest && isDynamic ? `
+        <div style="margin-top: 25px; padding: 20px; background-color: #F4F0F9; border-radius: 8px; text-align: center;">
+          <p style="color: #4A2A70; font-size: 15px; margin: 0 0 15px 0;">
+            If you have already paid but your payment has been marked as failed, please verify your payment from your Transaction History.
+          </p>
+          <a href="https://www.byiora.com.np/transactions" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Visit Transaction History</a>
+        </div>
+        ` : '')}
 
       </td>
     </tr>

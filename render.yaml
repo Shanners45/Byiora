@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: byiora-payment-proxy
+    env: node
+    # Since the proxy is a standalone script inside a Next.js repo, 
+    # we skip the heavy Next.js build process to deploy instantly.
+    buildCommand: "echo 'Skipping Next.js build. Only deploying proxy.'"
+    startCommand: "node payment-proxy.js"
+    # Render requires binding to 0.0.0.0 and process.env.PORT (already implemented in code)
+    envVars:
+      - key: INTERNAL_API_SECRET
+        sync: false # Requires manual entry in Render dashboard for security
+      - key: NODE_ENV
+        value: production

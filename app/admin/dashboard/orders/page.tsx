@@ -23,7 +23,7 @@ interface Transaction {
   product_name: string
   amount: string
   price: string
-  status: "Completed" | "Failed" | "Processing" | "Payment Pending" | "Expired" | "Archived" | "Refunded" | "Cancelled" | "Payment Done" | "Payment Failed"
+  status: "Completed" | "Failed" | "Processing" | "Payment Pending" | "Archived" | "Refunded" | "Cancelled" | "Paid" | "Payment Failed"
   payment_method: string
   transaction_id: string
   user_email: string
@@ -211,12 +211,11 @@ export default function OrdersPage() {
         return "bg-gray-100 text-gray-800"
       case "Payment Pending":
         return "bg-yellow-100 text-yellow-800 border-yellow-200"
-      case "Payment Done":
+      case "Paid":
         return "bg-orange-100 text-orange-800 border-orange-200"
       case "Payment Failed":
         return "bg-red-50 text-red-700 border-red-200"
-      case "Expired":
-        return "bg-orange-100 text-orange-800 border-orange-200"
+
       case "Archived":
         return "bg-gray-50 text-gray-400 border-gray-200"
       case "Refunded":
@@ -295,9 +294,10 @@ export default function OrdersPage() {
         await sendOrderStatusNotification(transaction, actualNewStatus, remarks)
       }
 
-      // Send Order Status Email for Completed or Failed changes
+      // Send Order Status Email for Completed, Failed, or (Payment Failed for nepalpay/fonepay)
       // Skip if the action already sent an email (e.g. auto-fulfilled with giftcard code)
-      if (!result.emailSent && transaction && (actualNewStatus === "Completed" || actualNewStatus === "Failed") && actualNewStatus !== oldStatus) {
+      const isPaymentFailedEmail = actualNewStatus === "Payment Failed" && (transaction?.payment_category === "nepalpay" || transaction?.payment_category === "fonepay");
+      if (!result.emailSent && transaction && (actualNewStatus === "Completed" || actualNewStatus === "Failed" || isPaymentFailedEmail) && actualNewStatus !== oldStatus) {
         try {
           await fetch('/api/send-order-status', {
             method: 'POST',
@@ -310,6 +310,8 @@ export default function OrdersPage() {
               status: actualNewStatus,
               transactionId: transaction.transaction_id,
               remarks: remarks || undefined,
+              isGuest: !transaction.user_id,
+              isDynamic: transaction.payment_category === "nepalpay" || transaction.payment_category === "fonepay"
             })
           })
         } catch (e) {
@@ -418,7 +420,7 @@ export default function OrdersPage() {
   }
 
   const exportTransactions = () => {
-    const headers = ["Transaction ID", "Product", "Amount", "Price", "Status", "Payment Method", "Customer", "Type", "UID", "Date"]
+    const headers = ["Order ID", "Product", "Amount", "Price", "Status", "Payment Method", "Customer", "Type", "UID", "Date"]
 
     const rows = filteredTransactions.map((t) => [
       t.transaction_id,
@@ -536,7 +538,7 @@ export default function OrdersPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
-                placeholder="Search by product, email, or transaction ID..."
+                placeholder="Search by product, email, or order ID..."
                 className="pl-10 bg-white border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-400"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -553,8 +555,7 @@ export default function OrdersPage() {
                 <SelectItem value="Completed">Completed</SelectItem>
                 <SelectItem value="Failed">Failed</SelectItem>
                 <SelectItem value="Payment Pending">Payment Pending</SelectItem>
-                <SelectItem value="Payment Done">Payment Done</SelectItem>
-                <SelectItem value="Payment Failed">Payment Failed</SelectItem>
+                <SelectItem value="Paid">Paid</SelectItem>
                 <SelectItem value="Refunded">Refunded</SelectItem>
                 <SelectItem value="Archived">Archived</SelectItem>
               </SelectContent>
@@ -565,7 +566,7 @@ export default function OrdersPage() {
             <Table>
               <TableHeader className="bg-white">
                 <TableRow>
-                  <TableHead className="text-[#1F2937] font-medium">Transaction ID</TableHead>
+                  <TableHead className="text-[#1F2937] font-medium">Order ID</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Bank Txn ID</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Product</TableHead>
                   <TableHead className="text-[#1F2937] font-medium">Price</TableHead>
@@ -619,7 +620,7 @@ export default function OrdersPage() {
                           transaction.payment_method?.toLowerCase().includes("nepalpay") ||
                           transaction.payment_method?.toLowerCase().includes("fonepay")
 
-                        if (isDynamic && transaction.status !== "Payment Done") {
+                        if (isDynamic && transaction.status !== "Paid") {
                           return <Badge className={`${getStatusColor(transaction.status)} whitespace-nowrap w-fit`}>{transaction.status}</Badge>
                         }
 
@@ -700,7 +701,7 @@ export default function OrdersPage() {
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-[#F59E0B]/20">
+            <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
               <div className="text-sm text-[#4B5563]">
                 Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredTransactions.length)} of {filteredTransactions.length} orders
               </div>
@@ -716,19 +717,32 @@ export default function OrdersPage() {
                   Previous
                 </Button>
                 <div className="flex items-center gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => setCurrentPage(page)}
-                      className={currentPage === page
-                        ? "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"
-                        : "border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(page => page === 1 || page === totalPages || Math.abs(currentPage - page) <= 1)
+                    .reduce((acc: (number | string)[], page) => {
+                      if (acc.length > 0 && typeof acc[acc.length - 1] === "number" && (acc[acc.length - 1] as number) < page - 1) {
+                        acc.push("...");
                       }
-                    >
-                      {page}
-                    </Button>
+                      acc.push(page);
+                      return acc;
+                    }, [])
+                    .map((page, index) => (
+                      page === "..." ? (
+                        <span key={`ellipsis-${index}`} className="px-2 text-gray-500 text-sm">...</span>
+                      ) : (
+                        <Button
+                          key={page}
+                          variant={currentPage === page ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(page as number)}
+                          className={currentPage === page
+                            ? "bg-[#6B3FA0] hover:bg-[#5A3586] text-white"
+                            : "border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
+                          }
+                        >
+                          {page}
+                        </Button>
+                      )
                   ))}
                 </div>
                 <Button

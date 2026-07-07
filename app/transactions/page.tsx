@@ -44,27 +44,65 @@ export default function TransactionsPage() {
 
   // Removed automatic redirect so users can see the "Sign In Required" message
 
-  const filteredTransactions = transactions.filter(transaction =>
-    filterStatus === "all" || transaction.status.toLowerCase() === filterStatus.toLowerCase()
-  );
+  const filteredTransactions = transactions.filter(transaction => {
+    if (filterStatus === "all") return true;
+    const status = transaction.status.toLowerCase();
+    
+    if (filterStatus === "pending") {
+      return ["processing", "payment pending", "paid"].includes(status);
+    }
+    if (filterStatus === "completed") {
+      return ["completed"].includes(status);
+    }
+    if (filterStatus === "failed") {
+      return ["failed", "payment failed", "cancelled"].includes(status);
+    }
+    return false;
+  });
+
+  const getNormalizedStatusText = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "processing":
+        return "Awaiting Confirmation";
+      case "payment pending":
+        return "Awaiting Payment";
+      case "paid":
+        return "Payment Received";
+      case "completed":
+        return "Completed";
+      case "failed":
+        return "Failed";
+      case "payment failed":
+        return "Payment Not Received";
+      case "cancelled":
+        return "Cancelled";
+      case "refunded":
+        return "Refunded";
+      default:
+        return status;
+    }
+  };
 
   const getStatusBadge = (status: string) => {
+    const label = getNormalizedStatusText(status);
     switch (status.toLowerCase()) {
-      case "completed":
-        return <Badge className="bg-green-500 text-white">Completed</Badge>;
-      case "failed":
-        return <Badge variant="destructive">Failed</Badge>;
       case "processing":
-        return <Badge className="bg-brand-soft-yellow text-brand-charcoal">Processing</Badge>;
-      case "payment failed":
-      case "expired":
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Payment Failed</Badge>;
-      case "payment done":
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Payment Done</Badge>;
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">{label}</Badge>;
       case "payment pending":
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 animate-pulse">Payment Pending</Badge>;
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 animate-pulse">{label}</Badge>;
+      case "paid":
+        return <Badge className="bg-green-100 text-green-800 border-green-200">{label}</Badge>;
+      case "completed":
+        return <Badge className="bg-green-500 text-white">{label}</Badge>;
+      case "failed":
+      case "payment failed":
+        return <Badge variant="destructive">{label}</Badge>;
+      case "cancelled":
+        return <Badge className="bg-gray-100 text-gray-800 border-gray-200">{label}</Badge>;
+      case "refunded":
+        return <Badge className="bg-purple-100 text-purple-800 border-purple-200">{label}</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge variant="secondary">{label}</Badge>;
     }
   };
 
@@ -181,7 +219,7 @@ export default function TransactionsPage() {
       const col1 = 20;
       const col2 = pageWidth / 2;
 
-      doc.text("Transaction ID:", col1, gridY);
+      doc.text("Order ID:", col1, gridY);
       doc.setFont("helvetica", "bold");
       doc.text(transaction.transactionId || "N/A", col1, gridY + 5);
 
@@ -357,12 +395,9 @@ export default function TransactionsPage() {
               </SelectTrigger>
               <SelectContent className="bg-brand-white border-gray-200">
                 <SelectItem value="all" className="text-brand-charcoal">All Transactions</SelectItem>
+                <SelectItem value="pending" className="text-brand-charcoal">Pending</SelectItem>
                 <SelectItem value="completed" className="text-brand-charcoal">Completed</SelectItem>
-                <SelectItem value="processing" className="text-brand-charcoal">Processing</SelectItem>
                 <SelectItem value="failed" className="text-brand-charcoal">Failed</SelectItem>
-                <SelectItem value="payment done" className="text-brand-charcoal">Payment Done</SelectItem>
-                <SelectItem value="payment pending" className="text-brand-charcoal">Payment Pending</SelectItem>
-                <SelectItem value="payment failed" className="text-brand-charcoal">Payment Failed</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -393,10 +428,10 @@ export default function TransactionsPage() {
                   </div>
                   <div>
                     <p className="text-brand-light-gray">Payment status</p>
-                    <p className="text-brand-charcoal font-medium">{transaction.status}</p>
+                    <p className="text-brand-charcoal font-medium">{getNormalizedStatusText(transaction.status)}</p>
                   </div>
                   <div>
-                    <p className="text-brand-light-gray">Transaction ID</p>
+                    <p className="text-brand-light-gray">Order ID</p>
                     <p className="text-brand-charcoal font-medium font-mono text-xs">{transaction.transactionId}</p>
                   </div>
                 </div>
@@ -439,11 +474,12 @@ export default function TransactionsPage() {
                 <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                   <p className="text-sm text-brand-light-gray flex-1">
                     {transaction.status === "Completed" ? "✅ Completed" :
-                      transaction.status === "Payment Done" ? "✅ Payment Verified (Pending Fulfillment)" :
-                      transaction.status === "Processing" ? "⏳ Payment processing" :
-                      transaction.status === "Payment Pending" ? "⏳ Waiting for payment" :
-                      transaction.status === "Payment Failed" ? "❌ Payment Failed" :
-                      transaction.status === "Expired" ? "❌ Payment Failed" :
+                      transaction.status === "Paid" ? "✅ Payment Verified (Pending Fulfillment)" :
+                      transaction.status === "Processing" ? "⏳ Awaiting Confirmation" :
+                      transaction.status === "Payment Pending" ? "⏳ Awaiting Payment" :
+                      transaction.status === "Payment Failed" ? "❌ Payment Not Received" :
+                      transaction.status === "Cancelled" ? "❌ Cancelled" :
+                      transaction.status === "Refunded" ? "🟣 Refunded" :
                       transaction.failure_remarks ? `❌ ${transaction.failure_remarks}` : "❌ Transaction failed"}
                   </p>
 

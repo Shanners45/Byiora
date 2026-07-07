@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { AlertCircle, RefreshCw, Smartphone, Clock, ShieldCheck, Phone, ArrowLeft, Download } from "lucide-react"
+import { AlertCircle, RefreshCw, Smartphone, Clock, ShieldCheck, Phone, ArrowLeft, Download, ShieldAlert } from "lucide-react"
+import { TurnstileWidget } from "@/components/turnstile-widget"
 import { QRCodeSVG } from "qrcode.react"
 import { getOrGenerateQRAction, verifyPaymentAction, verifyPaymentByPhoneAction, expireTransactionAction, cancelTransactionAction } from "@/app/actions/checkout"
 import { toast } from "sonner"
@@ -30,9 +31,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   const [showPhoneVerify, setShowPhoneVerify] = useState(false)
   const [phoneNumber, setPhoneNumber] = useState("")
   const [isPhoneVerifying, setIsPhoneVerifying] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState("")
 
   const pollInterval = useRef<NodeJS.Timeout | null>(null)
   const timerInterval = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    document.title = "Checkout | Byiora"
+  }, [])
 
   const loadQR = async () => {
     setLoading(true)
@@ -64,7 +70,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       if (res.success) {
         setQrData(res)
         setTimeLeft(res.expiresIn || 0)
-        
+
         // Save to localStorage for persistence (covers static & dynamic so users
         // returning to the same /checkout/[transaction_id] URL during the active
         // 5-minute window get the original QR + remaining time restored).
@@ -75,13 +81,13 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
           setIsCompleted(true)
         }
       } else {
-        if (res.status === "Completed") {
+        if (res.status === "Completed" || res.status === "Paid") {
           setIsCompleted(true)
-        } else if (res.status === "Expired" || res.status === "Payment Failed") {
+        } else if (res.status === "Payment Failed") {
           setIsExpired(true)
           setQrData(res)
         } else {
-          setError(res.error || "Failed to load QR code")
+          setError(res.error || "This order is no longer active.")
         }
       }
     } catch (err: any) {
@@ -134,21 +140,21 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   // Auto-redirect registered users on expiry
   useEffect(() => {
     let isMounted = true;
-    
-    const handleExpiry = async () => {
+
+    const handleExpiry = () => {
       if (isExpired && qrData) {
-        // Explicitly fail the transaction and wait for it to complete
-        await expireTransactionAction(transaction_id).catch(() => {})
+        // Fire-and-forget: don't block redirect on server action (DB update + email)
+        expireTransactionAction(transaction_id).catch(() => { })
 
         if (!qrData.isGuest && isMounted) {
-          toast.info("Session expired. Redirecting to your transactions...")
+          toast.info("Session expired. Redirecting to your orders...")
           router.push("/transactions")
         }
       }
     }
-    
+
     handleExpiry()
-    
+
     return () => { isMounted = false }
   }, [isExpired, qrData, router, transaction_id])
 
@@ -200,7 +206,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
         const res = await fetch(`/api/transaction-status?id=${transaction_id}`, { cache: "no-store" })
         if (res.ok) {
           const data = await res.json()
-          if (data.status === "Completed" || data.status === "Payment Done") {
+          if (data.status === "Completed" || data.status === "Paid") {
             setIsCompleted(true)
             clearInterval(interval)
             return
@@ -234,7 +240,12 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
     setIsPhoneVerifying(true)
     try {
-      const res = await verifyPaymentByPhoneAction(transaction_id, phoneNumber)
+      if (!captchaToken) {
+        toast.error("Please complete the security check")
+        setIsPhoneVerifying(false)
+        return
+      }
+      const res = await verifyPaymentByPhoneAction(transaction_id, phoneNumber, captchaToken)
       if (res.success && (res.verified || res.alreadyCompleted)) {
         setIsCompleted(true)
         toast.success("Payment verified successfully! Your order is being fulfilled.")
@@ -255,20 +266,26 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
   const handleManualVerify = async () => {
     if (!qrData || isCompleted || isExpired || error || qrData.isStatic) return
-    
+
     setIsVerifying(true)
     try {
       const provider = qrData.paymentCategory || "nepalpay"
       const res = await verifyPaymentAction(transaction_id, qrData.validationTraceId, provider)
-      
+
       if (res.success && res.completed) {
         setIsCompleted(true)
         toast.success("Payment verified successfully!")
+      } else if (res.error) {
+        if (res.error.toLowerCase().includes("fetch failed") || res.error.toLowerCase().includes("network")) {
+          toast.error("Our payment network is temporarily unresponsive. Please try again shortly.")
+        } else {
+          toast.error(res.error)
+        }
       } else {
-        toast.error("Payment not verified yet. We will keep checking automatically.")
+        toast.error("Payment not received.")
       }
-    } catch (e) {
-      toast.error("Error verifying payment")
+    } catch (e: any) {
+      toast.error(e?.message || "An unexpected error occurred while verifying the payment.")
     } finally {
       setIsVerifying(false)
     }
@@ -281,11 +298,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
         const res = await cancelTransactionAction(transaction_id)
         if (res.success) {
           localStorage.removeItem(`qr_${transaction_id}`)
-          if (qrData && !qrData.isGuest) {
-            router.push("/transactions")
-          } else {
-            router.push("/")
-          }
+          toast.success("Order cancelled successfully.")
+          setTimeout(() => {
+            if (qrData && !qrData.isGuest) {
+              router.push("/transactions")
+            } else {
+              router.push("/")
+            }
+          }, 1500)
         } else {
           toast.error(res.error || "Failed to cancel order")
           setIsCancelling(false)
@@ -315,7 +335,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
         if (!qrUrl.startsWith("data:image") && qrUrl.length > 1000) {
           qrUrl = `data:image/png;base64,${qrUrl}`;
         }
-        
+
         if (qrUrl.startsWith("data:image")) {
           const a = document.createElement("a");
           a.style.display = "none";
@@ -355,120 +375,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   // automatic redirect to /transactions?paid=success (see useEffect above)
   // which displays a toast on arrival.
 
-  // ========== EXPIRED STATE (Guest users only — registered users are auto-redirected) ==========
-  if (isExpired && !loading && (qrData?.isGuest || !qrData)) {
-    return (
-      <div className="container mx-auto max-w-lg py-12 px-4">
-        <Card className="shadow-2xl border-2 border-amber-200 overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-50 border-b pb-4">
-            <div className="flex justify-between items-center w-full">
-              <CardTitle className="text-xl flex items-center gap-2 text-amber-900">
-                <Clock className="h-5 w-5 text-amber-600" />
-                QR Code Expired
-              </CardTitle>
-              <div className="relative h-8 w-28">
-                <Image src="/logo-final.png" alt="Byiora" fill className="object-contain object-right" />
-              </div>
-            </div>
-            <CardDescription className="text-amber-700 mt-1">
-              Order ID: <span className="font-mono text-sm font-bold text-amber-900 bg-white border border-amber-200 px-2 py-0.5 rounded ml-1 shadow-sm">{transaction_id}</span>
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="pt-6 space-y-6">
-            {!showPhoneVerify ? (
-              <>
-                <div className="text-center space-y-3">
-                  <div className="h-16 w-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
-                    <AlertCircle className="h-8 w-8 text-amber-600" />
-                  </div>
-                  <h3 className="text-lg font-bold text-gray-900">Payment Session Expired</h3>
-                  <p className="text-gray-600 text-sm leading-relaxed">
-                    The QR code for this transaction has expired. Expired QR codes cannot be reused for security reasons.
-                  </p>
-                </div>
-
-                <div className="space-y-3">
-                  <Button
-                    onClick={() => setShowPhoneVerify(true)}
-                    className="w-full h-12 bg-[#7E3AF2] hover:bg-[#6c2bd9] text-white font-semibold"
-                  >
-                    <Phone className="h-4 w-4 mr-2" />
-                    Payment success but order failed?
-                  </Button>
-
-                  <Button
-                    onClick={() => router.push("/")}
-                    variant="outline"
-                    className="w-full h-12 font-semibold"
-                  >
-                    <ArrowLeft className="h-4 w-4 mr-2" />
-                    Return to Store
-                  </Button>
-                </div>
-
-                <p className="text-xs text-gray-400 text-center leading-relaxed">
-                  Expired QR tokens cannot be reused. If you need to purchase again, please start a new order from the store.
-                </p>
-              </>
-            ) : (
-              <>
-                {/* Phone Verification Form */}
-                <div className="space-y-4">
-                  <div className="text-center space-y-2">
-                    <h3 className="text-lg font-bold text-gray-900">Verify Your Payment</h3>
-                    <p className="text-gray-600 text-sm">
-                      Enter the phone number you used to pay. We'll check the bank's transaction records to confirm your payment.
-                    </p>
-                  </div>
-
-                  <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
-                    <p className="text-xs text-blue-700 font-medium">
-                      🔒 This verification is processed entirely on our secure servers. Your phone number is only used for matching against bank records.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">Phone Number Used for Payment</label>
-                    <Input
-                      type="tel"
-                      placeholder="e.g. 9841234567"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      className="h-12 text-lg"
-                      maxLength={15}
-                    />
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={() => setShowPhoneVerify(false)}
-                      variant="outline"
-                      className="flex-1 h-11"
-                    >
-                      Back
-                    </Button>
-                    <Button
-                      onClick={handlePhoneVerification}
-                      disabled={isPhoneVerifying || !phoneNumber.trim()}
-                      className="flex-1 h-11 bg-[#7E3AF2] hover:bg-[#6c2bd9] text-white font-semibold"
-                    >
-                      {isPhoneVerifying ? (
-                        <span className="flex items-center">
-                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                          Verifying...
-                        </span>
-                      ) : "Verify Payment"}
-                    </Button>
-                  </div>
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
 
   // ========== MAIN CHECKOUT STATE ==========
   return (
@@ -491,169 +397,346 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       </div>
 
       <div className="container mx-auto px-4 py-8 md:py-12">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#7E3AF2] border-t-transparent mb-4"></div>
-              <p className="text-gray-500 text-lg">Generating secure QR code...</p>
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-start animate-pulse">
+            {/* LEFT COLUMN SKELETON */}
+            <div className="flex flex-col items-center justify-center w-full">
+              <div className="bg-gray-100 p-4 rounded-2xl w-full max-w-[320px] aspect-square flex flex-col justify-center items-center border border-gray-200">
+                <div className="w-16 h-16 bg-gray-200 rounded-full mb-4"></div>
+                <div className="w-40 h-5 bg-gray-200 rounded-md"></div>
+              </div>
+              {/* Download Button Skeleton */}
+              <div className="mt-4 w-full max-w-[320px] h-11 bg-gray-100 rounded-md"></div>
+              {/* Timer Skeleton */}
+              <div className="mt-6 w-48 h-6 bg-gray-100 rounded-full"></div>
             </div>
-          ) : error ? (
-            <div className="flex flex-col items-center text-center py-16">
-              <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Checkout Error</h3>
-              <p className="text-gray-600 text-lg mb-8">{error}</p>
-              <Button onClick={() => router.push("/")} variant="outline" size="lg">
-                Return to Store
-              </Button>
-            </div>
-          ) : qrData ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-start">
-              {/* LEFT COLUMN: QR CODE */}
-              <div className="flex flex-col items-center justify-center w-full">
-                <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-200 relative w-full max-w-[320px] flex flex-col justify-center items-center">
-                  {timeLeft === 0 && !qrData.isStatic && (
-                    <div className="absolute inset-0 bg-white/90 backdrop-blur-md z-10 flex flex-col items-center justify-center rounded-xl">
-                      <AlertCircle className="h-10 w-10 text-amber-500 mb-3" />
-                      <p className="font-bold text-lg text-gray-800">QR Code Expired</p>
-                      <p className="text-sm text-gray-500 mt-1 mb-3">This session has timed out</p>
-                    </div>
-                  )}
 
-                  {qrData.isStatic ? (
-                    <div className="relative w-full h-full max-w-[300px]">
-                      {qrData.staticQrUrl ? (
-                        <Image
-                          src={qrData.staticQrUrl}
-                          alt="Payment QR"
-                          fill
-                          className="object-contain rounded-lg p-2"
-                          sizes="(max-width: 300px) 100vw, 300px"
-                        />
-                      ) : (
-                        <div className="w-full h-full bg-gray-50 rounded-lg flex items-center justify-center text-gray-500">
-                          No QR available
-                        </div>
-                      )}
-                    </div>
-                  ) : qrData.qrString?.startsWith("data:image") || qrData.qrString?.length > 1000 ? (
-                    <div className="w-full flex flex-col items-center justify-center">
-                      <div className="w-full text-center mb-3">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#7E3AF2]/10 text-[#7E3AF2] font-semibold text-xs tracking-wide uppercase">
-                          {qrData.paymentMethodName || qrData.paymentCategory || "NepalPay"}
-                        </span>
-                      </div>
-                      <div
-                        className="w-full aspect-square rounded-xl shadow-sm border border-gray-100"
-                        style={{
-                          backgroundImage: `url(${qrData.qrString.startsWith("data:") ? qrData.qrString : `data:image/png;base64,${qrData.qrString}`})`,
-                          backgroundPosition: "center 31%",
-                          backgroundSize: "175%",
-                          backgroundRepeat: "no-repeat"
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="p-4">
-                      <QRCodeSVG
-                        value={qrData.qrString || "error"}
-                        size={280}
-                        level="Q"
-                        includeMargin={false}
-                      />
-                    </div>
-                  )}
-                </div>
-                
-                {/* Download QR Button */}
-                <div className="mt-4 flex justify-center w-full max-w-[320px]">
-                  <Button 
-                    onClick={handleDownloadQR} 
-                    variant="outline" 
-                    className="w-full flex items-center justify-center border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 transition-colors"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download QR Code
-                  </Button>
+            {/* RIGHT COLUMN SKELETON */}
+            <div className="flex flex-col w-full">
+              <div className="h-10 w-64 bg-gray-100 rounded-md mb-2"></div>
+              <div className="h-5 w-40 bg-gray-100 rounded-md mb-8"></div>
+
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8">
+                <div className="h-6 w-48 bg-gray-100 rounded-md mb-6"></div>
+                <div className="space-y-4">
+                  <div className="h-14 w-full bg-gray-50 rounded-lg"></div>
+                  <div className="h-14 w-full bg-gray-50 rounded-lg"></div>
                 </div>
               </div>
 
-              {/* RIGHT COLUMN: DETAILS & ACTIONS */}
-              <div className="flex flex-col justify-center space-y-6 h-full py-4 md:pl-8">
-                {qrData.isStatic && qrData.instructions && (
-                  <div className="w-full bg-blue-50 border border-blue-100 rounded-lg p-4 text-blue-800 whitespace-pre-wrap leading-relaxed">
-                    {qrData.instructions}
+              <div className="h-6 w-56 bg-gray-100 rounded-md mb-4"></div>
+              <div className="flex gap-2">
+                <div className="h-12 flex-1 bg-gray-100 rounded-md"></div>
+                <div className="h-12 w-28 bg-gray-200 rounded-md"></div>
+              </div>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center text-center py-16 px-4">
+            <div className="bg-red-50 p-4 rounded-full mb-6 border border-red-100 shadow-sm">
+              <AlertCircle className="h-12 w-12 text-red-500" />
+            </div>
+            <h3 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-4 tracking-tight">Checkout Unavailable</h3>
+            <p className="text-gray-600 text-lg mb-8 max-w-md leading-relaxed">
+              {error.toLowerCase().includes("fetch failed") || error.toLowerCase().includes("failed to fetch") || error.toLowerCase().includes("network")
+                ? "We are currently experiencing a temporary issue connecting to our payment partner's network. Please try again in a few moments."
+                : error === "Failed to load QR code" || error === "An error occurred"
+                  ? "We encountered an unexpected issue while preparing your secure checkout session. Please return to the store and try again."
+                  : error}
+            </p>
+            <Button
+              onClick={() => router.push("/")}
+              className="bg-[#6B3FA0] hover:bg-[#5A3588] text-white px-8 py-6 rounded-xl text-lg font-semibold shadow-lg shadow-purple-500/20 transition-all hover:-translate-y-1"
+            >
+              Return to Store
+            </Button>
+          </div>
+        ) : isExpired && (qrData?.isGuest || !qrData) ? (
+          <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start w-full">
+            {/* LEFT COLUMN: Order Details */}
+            <div className="w-full md:w-5/12 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="bg-gradient-to-br from-gray-900 to-gray-800 p-8 text-white relative overflow-hidden">
+                <div className="absolute -top-4 -right-4 p-4 opacity-10">
+                  <AlertCircle className="w-40 h-40" />
+                </div>
+                <div className="relative z-10">
+                  <span className="inline-flex items-center gap-1.5 bg-red-500/20 text-red-100 px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider mb-4 border border-red-500/30">
+                    <Clock className="w-3.5 h-3.5" />
+                    Expired
+                  </span>
+                  <h2 className="text-3xl font-bold mb-2 text-white tracking-tight">Order Expired</h2>
+                  <p className="text-gray-300 text-sm">Your payment session has timed out.</p>
+                </div>
+              </div>
+
+              <div className="p-6 md:p-8 space-y-6">
+                <div>
+                  <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Order Summary</h3>
+                  <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-gray-600 text-sm">Product</span>
+                      <span className="font-semibold text-gray-900 text-right">{qrData?.product || "Game Top-up"}</span>
+                    </div>
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-gray-600 text-sm">Denomination</span>
+                      <span className="font-semibold text-gray-900 text-right">{qrData?.denomination || "-"}</span>
+                    </div>
+                    <div className="w-full h-px bg-gray-200 my-4"></div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600 text-sm">Total Amount</span>
+                      <span className="font-bold text-xl text-[#6B3FA0]">NPR {qrData?.price || "0"}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* RIGHT COLUMN: Actions */}
+            <div className="w-full md:w-7/12">
+              {!showPhoneVerify ? (
+                <div className="bg-white rounded-2xl shadow-xl shadow-amber-500/5 border border-amber-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-6 md:p-8 border-b border-amber-100 flex flex-col sm:flex-row gap-6 items-center sm:items-start text-center sm:text-left">
+                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm shrink-0">
+                      <AlertCircle className="h-8 w-8 text-amber-500" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-2 tracking-tight">Payment Session Ended</h2>
+                      <p className="text-gray-600 leading-relaxed text-sm">
+                        The QR code for this transaction has expired and is no longer valid. For security reasons, please do not attempt to scan the old code.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-6 md:p-10 space-y-5 bg-white">
+                    <Button
+                      onClick={() => setShowPhoneVerify(true)}
+                      className="w-full h-14 bg-[#6B3FA0] hover:bg-[#5A338A] text-white font-semibold text-base rounded-xl shadow-lg shadow-purple-500/20 transition-all hover:-translate-y-0.5"
+                    >
+                      <ShieldCheck className="h-5 w-5 mr-2" />
+                      I already paid, verify my payment
+                    </Button>
+
+                    <Button
+                      onClick={() => router.push("/")}
+                      variant="outline"
+                      className="w-full h-14 font-semibold text-base rounded-xl border-gray-300 hover:bg-gray-50 text-gray-700"
+                    >
+                      <ArrowLeft className="h-5 w-5 mr-2" />
+                      Return to Store
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl shadow-xl shadow-purple-500/5 border border-purple-100 overflow-hidden">
+                  <div className="bg-gradient-to-r from-[#6B3FA0] to-[#8B5CF6] p-6 md:p-8 text-white flex flex-col sm:flex-row gap-6 items-center sm:items-start text-center sm:text-left">
+                    <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center shrink-0">
+                      <ShieldCheck className="h-8 w-8 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">Verify Your Payment</h2>
+                      <p className="text-purple-100 text-sm leading-relaxed">
+                        Enter the exact phone number you used to make the payment. We will securely check the banking records to fulfill your order.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-6 md:p-10 space-y-6">
+                    <div className="space-y-3">
+                      <label className="text-sm font-bold text-gray-700">Phone Number</label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <Phone className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <Input
+                          type="tel"
+                          placeholder="e.g. 98XXXXXXXX"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          className="pl-12 h-14 text-lg bg-gray-50 border-gray-300 focus:bg-white focus:border-[#6B3FA0] focus:ring-[#6B3FA0] rounded-xl transition-colors placeholder:text-gray-500 text-gray-900"
+                          maxLength={15}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-center py-2">
+                      <TurnstileWidget onToken={setCaptchaToken} />
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                      <Button
+                        onClick={() => { setShowPhoneVerify(false); setCaptchaToken("") }}
+                        variant="outline"
+                        className="flex-1 h-14 rounded-xl font-semibold border-gray-300 text-gray-700 hover:bg-gray-50"
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        onClick={handlePhoneVerification}
+                        disabled={isPhoneVerifying || !phoneNumber.trim() || !captchaToken}
+                        className="flex-[2] h-14 bg-[#6B3FA0] hover:bg-[#5A338A] text-white font-semibold rounded-xl shadow-lg shadow-purple-500/20 transition-all"
+                      >
+                        {isPhoneVerifying ? (
+                          <span className="flex items-center">
+                            <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                            Verifying...
+                          </span>
+                        ) : "Verify Securely"}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : qrData ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-start">
+            {/* LEFT COLUMN: QR CODE */}
+            <div className="flex flex-col items-center justify-center w-full">
+              <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-200 relative w-full max-w-[320px] flex flex-col justify-center items-center">
+                {timeLeft === 0 && !qrData.isStatic && (
+                  <div className="absolute inset-0 bg-white/90 backdrop-blur-md z-10 flex flex-col items-center justify-center rounded-xl">
+                    <AlertCircle className="h-10 w-10 text-amber-500 mb-3" />
+                    <p className="font-bold text-lg text-gray-800">QR Code Expired</p>
+                    <p className="text-sm text-gray-500 mt-1 mb-3">This session has timed out</p>
                   </div>
                 )}
-
-                <div className="w-full bg-gray-50/80 rounded-xl p-6 border border-gray-100 space-y-4">
-                  <div className="flex justify-between items-center pb-3 border-b border-gray-200">
-                    <span className="text-gray-500 font-medium">Product</span>
-                    <div className="text-right flex flex-col">
-                      <span className="font-semibold text-gray-900 max-w-[200px] truncate" title={qrData.product}>{qrData.product}</span>
-                      {qrData.denomination && qrData.denomination !== qrData.product && (
-                        <span className="text-xs text-[#7E3AF2] font-semibold tracking-wide mt-0.5">
-                          {qrData.denomination}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center pb-3 border-b border-gray-200">
-                    <span className="text-gray-500 font-medium">Amount to Pay</span>
-                    <span className="font-bold text-[#7E3AF2] text-xl">Rs. {qrData.amount}</span>
-                  </div>
-                  {!qrData.isStatic && (
-                    <div className="flex justify-between items-center text-amber-700 pt-2">
-                      <span className="flex items-center gap-2 font-medium">
-                        <Clock className="h-5 w-5" /> Expires in
-                      </span>
-                      <span className="font-mono font-bold text-2xl tracking-tight">
-                        {formatTime(timeLeft)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="bg-green-50 text-green-700 p-4 rounded-xl flex items-start gap-3 border border-green-100">
-                  <ShieldCheck className="h-6 w-6 flex-shrink-0 mt-0.5" />
-                  <p className="text-sm font-medium leading-relaxed">
-                    Payments are securely processed. Don't close this tab until you complete the payment on your mobile app.
-                  </p>
-                </div>
 
                 {qrData.isStatic ? (
-                  <div className="w-full h-14 flex items-center justify-center bg-[#EADDFF]/40 text-[#381E72] rounded-xl font-bold shadow-inner border border-[#EADDFF]">
-                    <RefreshCw className="h-5 w-5 mr-3 animate-spin text-[#7E3AF2]" />
-                    Waiting for admin to confirm your payment...
+                  <div className="relative w-full h-full max-w-[300px]">
+                    {qrData.staticQrUrl ? (
+                      <Image
+                        src={qrData.staticQrUrl}
+                        alt="Payment QR"
+                        fill
+                        className="object-contain rounded-lg p-2"
+                        sizes="(max-width: 300px) 100vw, 300px"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gray-50 rounded-lg flex items-center justify-center text-gray-500">
+                        No QR available
+                      </div>
+                    )}
+                  </div>
+                ) : qrData.qrString?.startsWith("data:image") || qrData.qrString?.length > 1000 ? (
+                  <div className="w-full flex flex-col items-center justify-center">
+                    <div className="w-full text-center mb-3">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#7E3AF2]/10 text-[#7E3AF2] font-semibold text-xs tracking-wide uppercase">
+                        {qrData.paymentMethodName || qrData.paymentCategory || "NepalPay"}
+                      </span>
+                    </div>
+                    <div
+                      className="w-full aspect-square rounded-xl shadow-sm border border-gray-100"
+                      style={{
+                        backgroundImage: `url(${qrData.qrString.startsWith("data:") ? qrData.qrString : `data:image/png;base64,${qrData.qrString}`})`,
+                        backgroundPosition: "center 31%",
+                        backgroundSize: "175%",
+                        backgroundRepeat: "no-repeat"
+                      }}
+                    />
                   </div>
                 ) : (
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={handleManualVerify}
-                      disabled={isVerifying || isCancelling}
-                      className="flex-1 h-14 bg-[#7E3AF2] hover:bg-[#6c2bd9] text-white rounded-xl font-bold shadow-md flex items-center justify-center transition-all text-lg"
-                    >
-                      {isVerifying ? (
-                        <><RefreshCw className="h-5 w-5 mr-2 animate-spin" /> Verifying...</>
-                      ) : (
-                        "I have paid"
-                      )}
-                    </Button>
-                    <Button
-                      onClick={handleCancelOrder}
-                      disabled={isVerifying || isCancelling}
-                      variant="outline"
-                      className="flex-1 h-14 border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-bold transition-all text-lg"
-                    >
-                      {isCancelling ? (
-                        <><RefreshCw className="h-5 w-5 mr-2 animate-spin" /> Cancelling...</>
-                      ) : (
-                        "Cancel Order"
-                      )}
-                    </Button>
+                  <div className="p-4">
+                    <QRCodeSVG
+                      value={qrData.qrString || "error"}
+                      size={280}
+                      level="Q"
+                      includeMargin={false}
+                    />
                   </div>
                 )}
               </div>
+
+              {/* Download QR Button */}
+              <div className="mt-4 flex justify-center w-full max-w-[320px]">
+                <Button
+                  onClick={handleDownloadQR}
+                  variant="outline"
+                  className="w-full flex items-center justify-center border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 transition-colors"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download QR Code
+                </Button>
+              </div>
             </div>
-          ) : null}
+
+            {/* RIGHT COLUMN: DETAILS & ACTIONS */}
+            <div className="flex flex-col justify-center space-y-6 h-full py-4 md:pl-8">
+              {qrData.isStatic && qrData.instructions && (
+                <div className="w-full bg-blue-50 border border-blue-100 rounded-lg p-4 text-blue-800 whitespace-pre-wrap leading-relaxed">
+                  {qrData.instructions}
+                </div>
+              )}
+
+              <div className="w-full bg-gray-50/80 rounded-xl p-6 border border-gray-100 space-y-4">
+                <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                  <span className="text-gray-500 font-medium">Product</span>
+                  <div className="text-right flex flex-col">
+                    <span className="font-semibold text-gray-900 max-w-[200px] truncate" title={qrData.product}>{qrData.product}</span>
+                    {qrData.denomination && qrData.denomination !== qrData.product && (
+                      <span className="text-xs text-[#7E3AF2] font-semibold tracking-wide mt-0.5">
+                        {qrData.denomination}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between items-center pb-3 border-b border-gray-200">
+                  <span className="text-gray-500 font-medium">Amount to Pay</span>
+                  <span className="font-bold text-[#7E3AF2] text-xl">Rs. {qrData.amount}</span>
+                </div>
+                {!qrData.isStatic && (
+                  <div className="flex justify-between items-center text-amber-700 pt-2">
+                    <span className="flex items-center gap-2 font-medium">
+                      <Clock className="h-5 w-5" /> Expires in
+                    </span>
+                    <span className="font-mono font-bold text-2xl tracking-tight">
+                      {formatTime(timeLeft)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-green-50 text-green-700 p-4 rounded-xl flex items-start gap-3 border border-green-100">
+                <ShieldCheck className="h-6 w-6 flex-shrink-0 mt-0.5" />
+                <p className="text-sm font-medium leading-relaxed">
+                  Payments are securely processed. Don't close this tab until you complete the payment on your mobile app.
+                </p>
+              </div>
+
+              {qrData.isStatic ? (
+                <div className="w-full h-14 flex items-center justify-center bg-[#EADDFF]/40 text-[#381E72] rounded-xl font-bold shadow-inner border border-[#EADDFF]">
+                  <RefreshCw className="h-5 w-5 mr-3 animate-spin text-[#7E3AF2]" />
+                  Waiting for admin to confirm your payment...
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handleManualVerify}
+                    disabled={isVerifying || isCancelling}
+                    className="flex-1 h-14 bg-[#7E3AF2] hover:bg-[#6c2bd9] text-white rounded-xl font-bold shadow-md flex items-center justify-center transition-all text-lg"
+                  >
+                    {isVerifying ? (
+                      <><RefreshCw className="h-5 w-5 mr-2 animate-spin" /> Verifying...</>
+                    ) : (
+                      "I have paid"
+                    )}
+                  </Button>
+                  <Button
+                    onClick={handleCancelOrder}
+                    disabled={isVerifying || isCancelling}
+                    variant="outline"
+                    className="flex-1 h-14 border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-bold transition-all text-lg"
+                  >
+                    {isCancelling ? (
+                      <><RefreshCw className="h-5 w-5 mr-2 animate-spin" /> Cancelling...</>
+                    ) : (
+                      "Cancel Order"
+                    )}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )

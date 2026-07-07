@@ -234,7 +234,7 @@ export default function AdminUsersPage() {
 
   const handleResetPassword = async (userId: string, userEmail: string) => {
     try {
-      const newPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8) + "!"
+      const newPassword = crypto.randomUUID().replace(/-/g, '').slice(0, 20) + "!"
       
       const result = await resetAdminPasswordAction(userId, newPassword)
 

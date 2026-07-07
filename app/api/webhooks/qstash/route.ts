@@ -42,7 +42,11 @@ async function handler(req: Request) {
     const { transactionId, validationTraceId, provider, bankTxnId, internalTrigger } = body
 
     if (internalTrigger) {
-      const expectedSecret = process.env.INTERNAL_API_SECRET || "dev-secret-key"
+      const expectedSecret = process.env.INTERNAL_API_SECRET
+      if (!expectedSecret) {
+        console.error(`[WEBHOOK] INTERNAL_API_SECRET not configured`)
+        return NextResponse.json({ error: "Server misconfigured" }, { status: 500 })
+      }
       if (internalSecret !== expectedSecret) {
         console.error(`[WEBHOOK] REJECTED: Invalid internal secret for ${transactionId}`)
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -67,18 +71,20 @@ async function handler(req: Request) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 })
     }
 
-    if (txn.status === "Completed" || txn.status === "Payment Done") {
+    if (["Completed", "Paid"].includes(txn.status)) {
       return NextResponse.json({ success: true, message: "Transaction already processed" }, { status: 200 })
+    }
+
+    if (!["Payment Pending", "Processing"].includes(txn.status)) {
+      return NextResponse.json({ success: true, message: `Transaction is in ${txn.status} state. Stopping polling.` }, { status: 200 })
     }
 
     // 2. Verify payment with bank proxy if NOT an internal trigger
     let resolvedBankTxnId = bankTxnId || null
 
     if (!internalTrigger) {
-      const PROXY_URL = provider === "fonepay"
-        ? (process.env.FONEPAY_PROXY_URL || "http://localhost:3002")
-        : (process.env.PAYMENT_PROXY_URL || "http://localhost:3001")
-      const PROXY_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
+      const PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
+      const PROXY_SECRET = process.env.INTERNAL_API_SECRET!
 
       const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", provider).single() as any
       if (!credsRes.data) return NextResponse.json({ error: "Credentials missing" }, { status: 500 })
@@ -109,9 +115,9 @@ async function handler(req: Request) {
       resolvedBankTxnId = proxyData.data.bankTxnId || proxyData.data.txnId || null
     }
 
-    // 3. Payment Confirmed! Mark as Payment Done (Manual Delivery state) + store bank txn ID
+    // 3. Payment Confirmed! Mark as Paid (Manual Delivery state) + store bank txn ID
     // We will upgrade this to "Completed" ONLY if we successfully auto-deliver a code.
-    const updatePayload: any = { status: "Payment Done" }
+    const updatePayload: any = { status: "Paid" }
     if (resolvedBankTxnId) {
       updatePayload.bank_txn_id = resolvedBankTxnId
     }
@@ -200,18 +206,23 @@ async function handler(req: Request) {
       console.error("Failed to send fulfillment email:", emailErr)
     }
 
-    // 6. Discord notification ONLY if manual delivery is required
-    if (process.env.DISCORD_WEBHOOK_URL && !decryptedCode) {
+    // 6. Discord notification for all PAID dynamic QR orders
+    if (process.env.DISCORD_WEBHOOK_URL) {
       try {
+        const title = decryptedCode 
+          ? "✅ AUTO-FULFILLED - PAID ORDER" 
+          : "⚠️ MANUAL DELIVERY REQUIRED - PAID ORDER";
+        const color = decryptedCode ? 0x4CAF50 : 0xFF5722; // Green vs Orange
+
         await fetch(process.env.DISCORD_WEBHOOK_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             embeds: [{
-              title: "⚠️ MANUAL DELIVERY REQUIRED - PAID ORDER",
-              color: 0xFF5722,
+              title,
+              color,
               fields: [
-                { name: "Transaction ID", value: transactionId, inline: true },
+                { name: "Order ID", value: transactionId, inline: true },
                 { name: "Bank Txn ID", value: resolvedBankTxnId || "N/A", inline: true },
                 { name: "Product", value: txn.product_name, inline: false },
                 { name: "Amount", value: `Rs. ${txn.price}`, inline: true },

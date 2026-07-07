@@ -25,12 +25,20 @@ interface TransactionData {
  */
 export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any }> {
   try {
-    // SECURITY: Per-IP rate limiting to prevent order spam (5 orders/min per IP)
+    // SECURITY: Per-IP rate limiting (3 orders per 10 minutes per IP)
     const h = await headers()
     const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
-    const rl = await rateLimit(`order:${ip}`, { windowMs: 60_000, max: 5 })
+    const rl = await rateLimit(`order:${ip}`, { windowMs: 600_000, max: 3 })
     if (!rl.ok) {
-      return { success: false, error: "Too many orders. Please wait a moment and try again." }
+      return { success: false, error: "Too many orders. Please wait a few minutes and try again." }
+    }
+
+    // SECURITY: Per-user daily limit (30 orders per day for logged-in users)
+    if (transactionData.userId) {
+      const userRl = await rateLimit(`order-user:${transactionData.userId}`, { windowMs: 86_400_000, max: 30 })
+      if (!userRl.ok) {
+        return { success: false, error: "You have reached the maximum number of orders for today. Please try again tomorrow." }
+      }
     }
 
     const serviceSupabase = createServiceRoleClient()
@@ -179,7 +187,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
           title: "🚨 NEW ORDER RECEIVED!",
           color: 0x00BCD4, // Match the brand color
           fields: [
-            { name: "Transaction ID", value: transactionId, inline: true },
+            { name: "Order ID", value: transactionId, inline: true },
             { name: "Status", value: "Processing", inline: true },
             { name: "Product", value: transactionData.product, inline: false },
             { name: "Amount", value: transactionData.amount, inline: true },
@@ -270,7 +278,8 @@ export async function reorderTransactionAction(oldTransactionId: string) {
     }
 
     // Send Discord alert
-    if (process.env.DISCORD_WEBHOOK_URL) {
+    const isDynamicReorder = oldTxnAny.payment_category === "nepalpay" || oldTxnAny.payment_category === "fonepay"
+    if (process.env.DISCORD_WEBHOOK_URL && (!isDynamicReorder || oldTxn.product_category === "direct-login")) {
       try {
         const webhookUrl = process.env.DISCORD_WEBHOOK_URL
         const embed = {

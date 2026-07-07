@@ -33,7 +33,7 @@ function decryptInventoryCodeSync(encryptedBlob: string): string | null {
  */
 export async function updateTransactionStatusAction(
   transactionId: string,
-  newStatus: "Completed" | "Failed" | "Processing" | "Expired" | "Archived" | "Refunded" | "Payment Pending" | "Payment Done" | "Payment Failed" | "Cancelled",
+  newStatus: "Completed" | "Failed" | "Processing" | "Archived" | "Refunded" | "Payment Pending" | "Paid" | "Payment Failed" | "Cancelled",
   remarks?: string
 ) {
   if (!(await verifyAdmin())) {
@@ -56,8 +56,8 @@ export async function updateTransactionStatusAction(
       .single()
     const txn = _txn as any;
 
-    // Auto-fulfill if status is Payment Done
-    if (newStatus === "Payment Done" && txn) {
+    // Auto-fulfill if status is Paid
+    if (newStatus === "Paid" && txn) {
       const categoriesWithInventory = ["digital-goods", "games"]
       
       if ((txn as any).product_category && categoriesWithInventory.includes((txn as any).product_category.toLowerCase())) {
@@ -98,7 +98,7 @@ export async function updateTransactionStatusAction(
     }
 
     // Send emails if auto-fulfillment logic triggered
-    if (newStatus === "Payment Done" && txn) {
+    if (newStatus === "Paid" && txn) {
       let userName = undefined
       if (txn.users?.name) {
         userName = txn.users.name
@@ -144,7 +144,7 @@ export async function updateTransactionStatusAction(
                     title: "⚠️ MANUAL DELIVERY REQUIRED - PAID ORDER",
                     color: 0xFF5722,
                     fields: [
-                      { name: "Transaction ID", value: transactionId, inline: true },
+                      { name: "Order ID", value: transactionId, inline: true },
                       { name: "Product", value: txn.product_name, inline: false },
                       { name: "Amount", value: `Rs. ${txn.price}`, inline: true },
                     ],

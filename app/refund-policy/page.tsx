@@ -68,7 +68,7 @@ export default function RefundPolicyPage() {
               <h2 className="text-xl font-bold text-gray-900 mb-3">5. Verification Process & Burden of Proof</h2>
               <p className="mb-2">If you claim a key is defective, you must contact us at <a href="mailto:support@byiora.com.np" className="text-brand-sky-blue hover:underline">support@byiora.com.np</a> within 24 hours of delivery. To process an investigation, you must provide:</p>
               <ul className="list-disc pl-5 space-y-2">
-                <li>Your exact Order ID and Transaction ID.</li>
+                <li>Your exact Order ID and Bank Transaction ID (if applicable).</li>
                 <li>Uncropped, full-screen screenshots showing the error message on the official redemption platform (e.g., Steam, Rockstar Launcher).</li>
                 <li><strong>Publisher Verification:</strong> Byiora will contact the official game publisher or our global distributor to verify the exact date and time the key was redeemed. If the publisher's logs show the key was redeemed AFTER the timestamp our system delivered it to you, your claim will be immediately denied, and no refund will be issued.</li>
               </ul>

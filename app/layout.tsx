@@ -1,10 +1,11 @@
 import type React from "react"
 import "./globals.css"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Nunito } from "next/font/google"
 import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/lib/auth-context"
 import { NotificationProvider } from "@/lib/notification-context"
+import { GlobalAnnouncement } from "@/components/global-announcement"
 
 const nunito = Nunito({
   subsets: ["latin"],
@@ -151,6 +152,7 @@ export default function RootLayout({
       <body className={nunito.className}>
         <AuthProvider>
           <NotificationProvider>
+            <GlobalAnnouncement />
             {children}
             <Toaster richColors position="top-right" />
           </NotificationProvider>

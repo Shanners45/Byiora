@@ -59,7 +59,7 @@ export async function encryptCheckoutData(
 
     // Encrypt the checkout data
     const key = getEncryptionKey()
-    const iv = crypto.randomBytes(16)
+    const iv = crypto.randomBytes(12)
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
 
     let encrypted = cipher.update(JSON.stringify(checkoutData), "utf8", "hex")
@@ -151,7 +151,7 @@ export async function clearCheckoutData(transactionId: string) {
  */
 export async function generateGuestVerificationToken(transactionId: string): Promise<string> {
   const key = getEncryptionKey()
-  const iv = crypto.randomBytes(16)
+  const iv = crypto.randomBytes(12)
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
   
   // Expiry is exactly 24 hours from now

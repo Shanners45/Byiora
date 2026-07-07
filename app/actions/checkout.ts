@@ -7,8 +7,10 @@ import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 import { headers } from "next/headers"
 
-// Rate limit for polling
+// Rate limit for polling (30 req/min)
 let ratelimit: Ratelimit | null = null
+// Strict rate limit for QR generation (3 per 10 min per IP)
+let qrRatelimit: Ratelimit | null = null
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
   const redis = new Redis({
     url: process.env.UPSTASH_REDIS_REST_URL,
@@ -17,18 +19,26 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   ratelimit = new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(30, "1 m"),
+    prefix: "byiora:poll",
+  })
+  qrRatelimit = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(3, "10 m"),
+    prefix: "byiora:qr-gen",
   })
 }
 
-// Proxy Server URLs
-const NEPALPAY_PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
-const FONEPAY_PROXY_URL = process.env.FONEPAY_PROXY_URL || "http://localhost:3002"
-const PROXY_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
+// Unified Payment Proxy URL (serves both NepalPay and Fonepay)
+const PAYMENT_PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
+const PROXY_SECRET = process.env.INTERNAL_API_SECRET!
+if (!PROXY_SECRET) {
+  throw new Error("INTERNAL_API_SECRET environment variable is not set")
+}
 
 const QR_EXPIRY_MINUTES = 5
 
-function getProxyUrl(category: string) {
-  return category === "fonepay" ? FONEPAY_PROXY_URL : NEPALPAY_PROXY_URL
+function getProxyUrl(_category: string) {
+  return PAYMENT_PROXY_URL
 }
 
 function getProxyEndpoints(category: string) {
@@ -44,6 +54,16 @@ function getProxyEndpoints(category: string) {
  */
 export async function getOrGenerateQRAction(transactionId: string) {
   try {
+    // SECURITY: Rate limit QR generation (3 per 10 min per IP)
+    const headersList = await headers()
+    const ip = headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1"
+    if (qrRatelimit) {
+      const { success } = await qrRatelimit.limit(`qr-gen:${ip}`)
+      if (!success) {
+        return { success: false, error: "Too many payment requests. Please wait a few minutes and try again." }
+      }
+    }
+
     const supabase = createServiceRoleClient()
 
     // 1. Fetch transaction
@@ -62,7 +82,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
     }
 
     const currentStatus = txn.status as string;
-    if (currentStatus === "Expired" || currentStatus === "Failed" || currentStatus === "Cancelled" || currentStatus === "Payment Failed") {
+    if (["Failed", "Cancelled", "Payment Failed", "Archived", "Refunded"].includes(currentStatus)) {
       return { success: false, error: `Transaction is ${currentStatus.toLowerCase()}`, status: currentStatus, isGuest: !txn.user_id }
     }
 
@@ -117,6 +137,14 @@ export async function getOrGenerateQRAction(transactionId: string) {
           isGuest: !txn.user_id
         }
       }
+
+      // SECURITY: One-shot QR lock — QR existed but is expired. Lock the order permanently.
+      // This prevents infinite QR regeneration via page refresh.
+      await supabase.from("transactions").update({
+        status: "Payment Failed",
+        failure_remarks: "QR code expired (server-side enforcement)"
+      } as any).eq("transaction_id", transactionId)
+      return { success: false, error: "Payment session expired", status: "Payment Failed", isGuest: !txn.user_id }
     }
 
     // 5. Generate fresh QR via proxy
@@ -217,8 +245,11 @@ export async function getOrGenerateQRAction(transactionId: string) {
 
     // 7. Schedule QStash Webhook if available
     if (process.env.QSTASH_TOKEN && process.env.QSTASH_URL) {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+
+      // 7a. Background payment polling (retries every 15s, up to 10 times)
       try {
-        const webhookUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/webhooks/qstash`
+        const webhookUrl = `${siteUrl}/api/webhooks/qstash`
         await fetch(`${process.env.QSTASH_URL}/v2/publish/${webhookUrl}`, {
           method: "POST",
           headers: {
@@ -235,7 +266,29 @@ export async function getOrGenerateQRAction(transactionId: string) {
         })
         console.log(`[QSTASH] Scheduled background polling for ${transactionId}`)
       } catch (e) {
-        console.error("Failed to schedule QStash:", e)
+        console.error("Failed to schedule QStash polling:", e)
+      }
+
+      // 7b. Guaranteed expiry fallback — fires once after 6 minutes
+      // This ensures stale orders get cleaned up even if the user closes their browser
+      try {
+        const cronUrl = `${siteUrl}/api/cron/expire-stale-orders`
+        const cronSecret = process.env.CRON_SECRET || process.env.INTERNAL_API_SECRET
+        await fetch(`${process.env.QSTASH_URL}/v2/publish/${cronUrl}`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${process.env.QSTASH_TOKEN}`,
+            "Content-Type": "application/json",
+            "Upstash-Delay": "360s",   // 6 minutes — 1 min buffer after the 5-min QR expiry
+            "Upstash-Retries": "2",
+            "Upstash-Method": "GET",
+            "Upstash-Forward-Authorization": `Bearer ${cronSecret}`,
+          },
+          body: JSON.stringify({})
+        })
+        console.log(`[QSTASH] Scheduled expiry fallback for ${transactionId} in 6 minutes`)
+      } catch (e) {
+        console.error("Failed to schedule QStash expiry fallback:", e)
       }
     }
 
@@ -309,7 +362,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
       // Payment found! Call the webhook to fulfill
-      const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
+      const INTERNAL_SECRET = PROXY_SECRET
       const host = headersList.get("host") || "localhost:3000"
       const protocol = host.includes("localhost") ? "http" : "https"
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
@@ -388,12 +441,12 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
       return { success: false, error: "Transaction not found" }
     }
 
-    // Only allow verification on Expired, Processing, Payment Pending, Payment Failed transactions
-    if (txn.status === "Completed") {
+    // Only allow verification on Payment Failed transactions
+    if (txn.status === "Completed" || txn.status === "Paid") {
       return { success: true, alreadyCompleted: true }
     }
-    if (!["Processing", "Expired", "Payment Pending", "Payment Failed"].includes(txn.status as string)) {
-      return { success: false, error: "This transaction cannot be verified" }
+    if ((txn.status as string) !== "Payment Failed") {
+      return { success: false, error: "This transaction is no longer eligible for verification" }
     }
 
     const typedTxn = txn as any
@@ -437,7 +490,7 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
       // Payment found! Fulfill the order
-      const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || "dev-secret-key"
+      const INTERNAL_SECRET = PROXY_SECRET
       const headersList = await headers()
       const host = headersList.get("host") || "localhost:3000"
       const protocol = host.includes("localhost") ? "http" : "https"
