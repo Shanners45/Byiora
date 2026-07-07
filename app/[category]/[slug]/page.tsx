@@ -222,6 +222,7 @@ export default function ProductDetailPage() {
 
       if (isAutomatedGateway) {
         toast.info("Redirecting to secure payment gateway...")
+        localStorage.setItem(`returnUrl_${transactionId}`, window.location.pathname)
         router.push(`/checkout/${transactionId}`)
         return
       }

@@ -4,6 +4,17 @@ import { useEffect, useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { AlertCircle, RefreshCw, Smartphone, Clock, ShieldCheck, Phone, ArrowLeft, Download, ShieldAlert } from "lucide-react"
 import { TurnstileWidget } from "@/components/turnstile-widget"
@@ -35,6 +46,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
   const pollInterval = useRef<NodeJS.Timeout | null>(null)
   const timerInterval = useRef<NodeJS.Timeout | null>(null)
+  const qrRequested = useRef(false)
 
   useEffect(() => {
     document.title = "Checkout | Byiora"
@@ -98,6 +110,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   }
 
   useEffect(() => {
+    if (qrRequested.current) return
+    qrRequested.current = true
+    
     loadQR()
     return () => {
       if (pollInterval.current) clearInterval(pollInterval.current)
@@ -292,28 +307,26 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   }
 
   const handleCancelOrder = async () => {
-    if (confirm("Are you sure you want to cancel this order?")) {
-      setIsCancelling(true)
-      try {
-        const res = await cancelTransactionAction(transaction_id)
-        if (res.success) {
-          localStorage.removeItem(`qr_${transaction_id}`)
-          toast.success("Order cancelled successfully.")
-          setTimeout(() => {
-            if (qrData && !qrData.isGuest) {
-              router.push("/transactions")
-            } else {
-              router.push("/")
-            }
-          }, 1500)
-        } else {
-          toast.error(res.error || "Failed to cancel order")
-          setIsCancelling(false)
-        }
-      } catch (e) {
-        toast.error("An error occurred")
+    setIsCancelling(true)
+    try {
+      const res = await cancelTransactionAction(transaction_id)
+      if (res.success) {
+        localStorage.removeItem(`qr_${transaction_id}`)
+        toast.success("Order cancelled successfully.")
+        setTimeout(() => {
+          if (qrData && !qrData.isGuest) {
+            router.push("/transactions")
+          } else {
+            router.push("/")
+          }
+        }, 1500)
+      } else {
+        toast.error(res.error || "Failed to cancel order")
         setIsCancelling(false)
       }
+    } catch (e) {
+      toast.error("An error occurred")
+      setIsCancelling(false)
     }
   }
 
@@ -445,7 +458,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                   : error}
             </p>
             <Button
-              onClick={() => router.push("/")}
+              onClick={() => {
+                const returnUrl = typeof window !== 'undefined' ? localStorage.getItem(`returnUrl_${transaction_id}`) : null
+                router.push(returnUrl || "/")
+              }}
               className="bg-[#6B3FA0] hover:bg-[#5A3588] text-white px-8 py-6 rounded-xl text-lg font-semibold shadow-lg shadow-purple-500/20 transition-all hover:-translate-y-1"
             >
               Return to Store
@@ -720,18 +736,33 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                       "I have paid"
                     )}
                   </Button>
-                  <Button
-                    onClick={handleCancelOrder}
-                    disabled={isVerifying || isCancelling}
-                    variant="outline"
-                    className="flex-1 h-14 border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-bold transition-all text-lg"
-                  >
-                    {isCancelling ? (
-                      <><RefreshCw className="h-5 w-5 mr-2 animate-spin" /> Cancelling...</>
-                    ) : (
-                      "Cancel Order"
-                    )}
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        disabled={isVerifying || isCancelling}
+                        variant="outline"
+                        className="flex-1 h-14 border-red-200 text-red-600 hover:bg-red-50 rounded-xl font-bold transition-all text-lg"
+                      >
+                        {isCancelling ? (
+                          <><RefreshCw className="h-5 w-5 mr-2 animate-spin" /> Cancelling...</>
+                        ) : (
+                          "Cancel Order"
+                        )}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will cancel the current order. You will need to create a new order to checkout.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>No, keep it</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleCancelOrder} className="bg-red-600 hover:bg-red-700 text-white">Yes, cancel order</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               )}
             </div>

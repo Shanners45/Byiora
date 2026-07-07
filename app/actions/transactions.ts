@@ -28,7 +28,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     // SECURITY: Per-IP rate limiting (3 orders per 10 minutes per IP)
     const h = await headers()
     const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
-    const rl = await rateLimit(`order:${ip}`, { windowMs: 600_000, max: 3 })
+    const rl = await rateLimit(`order:${ip}`, { windowMs: 600_000, max: 6 })
     if (!rl.ok) {
       return { success: false, error: "Too many orders. Please wait a few minutes and try again." }
     }

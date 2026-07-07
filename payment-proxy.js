@@ -461,7 +461,7 @@ async function handleFonepayTriggerQR(body, res) {
         }
 
         // 1. Fetch Terminal ID
-        const terminalData = await makeBankRequest(
+        let terminalData = await makeBankRequest(
             'https://merchantapi.fonepay.com/merchantInfo/fetchSubmerchantTerminalList',
             null,
             accessToken,
@@ -473,9 +473,28 @@ async function handleFonepayTriggerQR(body, res) {
             terminalId = terminalData.subMerchantLists[0].terminalLists[0].id;
         }
 
+        // If it fails, the cached token might be expired! Let's clear cache and retry ONCE.
+        if (!terminalId) {
+            console.log("⚠️ Fonepay token likely expired. Retrying login...");
+            delete sessionCache[`fonepay:${userKey}`];
+            accessToken = await fonepayLogin(userKey, password);
+            
+            if (accessToken) {
+                terminalData = await makeBankRequest(
+                    'https://merchantapi.fonepay.com/merchantInfo/fetchSubmerchantTerminalList',
+                    null,
+                    accessToken,
+                    'GET'
+                );
+                if (terminalData && terminalData.subMerchantLists && terminalData.subMerchantLists[0]) {
+                    terminalId = terminalData.subMerchantLists[0].terminalLists[0].id;
+                }
+            }
+        }
+
         if (!terminalId) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, message: "Terminal ID not found for this merchant." }));
+            res.end(JSON.stringify({ success: false, message: "Terminal ID not found for this merchant. (Token may be invalid)" }));
             return;
         }
 

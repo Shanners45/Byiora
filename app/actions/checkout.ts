@@ -23,7 +23,7 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
   })
   qrRatelimit = new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(3, "10 m"),
+    limiter: Ratelimit.slidingWindow(6, "10 m"),
     prefix: "byiora:qr-gen",
   })
 }
@@ -54,17 +54,19 @@ function getProxyEndpoints(category: string) {
  */
 export async function getOrGenerateQRAction(transactionId: string) {
   try {
-    // SECURITY: Rate limit QR generation (3 per 10 min per IP)
+    const supabase = createServiceRoleClient()
+
+    // SECURITY: Rate limit QR generation (6 per 10 min per IP)
     const headersList = await headers()
     const ip = headersList.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "127.0.0.1"
     if (qrRatelimit) {
       const { success } = await qrRatelimit.limit(`qr-gen:${ip}`)
       if (!success) {
+        // Clean up the abandoned transaction row so it doesn't clutter the DB
+        await supabase.from("transactions").delete().eq("transaction_id", transactionId)
         return { success: false, error: "Too many payment requests. Please wait a few minutes and try again." }
       }
     }
-
-    const supabase = createServiceRoleClient()
 
     // 1. Fetch transaction
     const { data: txn, error: txnError } = await supabase
@@ -155,6 +157,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
       .single() as any
 
     if (credsRes.error || !credsRes.data) {
+      await supabase.from("transactions").delete().eq("transaction_id", transactionId)
       return { success: false, error: `${paymentCategory} credentials not configured by Admin` }
     }
 
@@ -162,6 +165,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
     const password = await decryptBankCredentials(credsRes.data.encrypted_password)
 
     if (!username || !password) {
+      await supabase.from("transactions").delete().eq("transaction_id", transactionId)
       return { success: false, error: "Failed to decrypt bank credentials" }
     }
 
@@ -222,6 +226,8 @@ export async function getOrGenerateQRAction(transactionId: string) {
     }
 
     if (!proxyData.success) {
+      // Clean up the abandoned transaction row so it doesn't clutter the DB
+      await supabase.from("transactions").delete().eq("transaction_id", transactionId)
       return { success: false, error: proxyData.message || "Proxy failed to generate QR" }
     }
 
