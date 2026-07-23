@@ -88,7 +88,66 @@ export async function getAllTransactionsAction() {
       return { error: `Failed to load transactions: ${error.message}` }
     }
 
-    return { success: true, data: data || [] }
+    const transactionsList = data || []
+
+    // Background auto-sync: Check if any Paid/Completed Khalti transactions were refunded via Khalti App/Portal
+    const paidKhaltiTxns = transactionsList.filter(
+      (t: any) =>
+        (t.status === "Paid" || t.status === "Completed") &&
+        (t.payment_category === "khalti" || t.payment_method?.toLowerCase().includes("khalti")) &&
+        (t.validation_trace_id || t.bank_txn_id)
+    )
+
+    if (paidKhaltiTxns.length > 0) {
+      try {
+        const { decryptBankCredentials } = await import("./payment-credentials")
+        const credsRes = await serviceSupabase
+          .from("payment_credentials")
+          .select("encrypted_username")
+          .eq("provider", "khalti")
+          .single() as any
+
+        if (credsRes.data?.encrypted_username) {
+          const secretKey = (await decryptBankCredentials(credsRes.data.encrypted_username))?.trim()
+          if (secretKey) {
+            const isLive = secretKey.toLowerCase().startsWith("live_")
+            const lookupUrl = isLive ? "https://khalti.com/api/v2/epayment/lookup/" : "https://dev.khalti.com/api/v2/epayment/lookup/"
+            const authHeader = secretKey.startsWith("Key ") ? secretKey : `Key ${secretKey}`
+
+            for (const txn of paidKhaltiTxns.slice(0, 5)) {
+              const pidx = txn.validation_trace_id || (txn.bank_txn_id?.startsWith("pidx") ? txn.bank_txn_id : null)
+              if (!pidx) continue
+
+              try {
+                const resp = await fetch(lookupUrl, {
+                  method: "POST",
+                  headers: { "Authorization": authHeader, "Content-Type": "application/json" },
+                  body: JSON.stringify({ pidx })
+                })
+                const resData = await resp.json().catch(() => ({}))
+
+                if (resData && (resData.status === "Refunded" || resData.status === "REFUNDED" || resData.refunded || resData.status === "Partial Refunded")) {
+                  const refundNote = resData.refund_amount ? `Khalti Refunded (Portal): Rs. ${resData.refund_amount / 100}` : "Khalti Refunded (Portal)"
+                  await serviceSupabase
+                    .from("transactions")
+                    .update({ status: "Refunded", failure_remarks: refundNote, updated_at: new Date().toISOString() } as any)
+                    .eq("transaction_id", txn.transaction_id)
+
+                  txn.status = "Refunded"
+                  txn.failure_remarks = refundNote
+                }
+              } catch (lookupErr) {
+                // Ignore individual fetch errors
+              }
+            }
+          }
+        }
+      } catch (syncErr) {
+        console.error("Khalti refund sync error:", syncErr)
+      }
+    }
+
+    return { success: true, data: transactionsList }
   } catch (error: any) {
     console.error("Error in getAllTransactionsAction:", error)
     return { error: error.message || "An unexpected error occurred" }

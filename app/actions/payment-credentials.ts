@@ -100,6 +100,7 @@ export async function savePaymentCredentialsAction(provider: string, username: s
     const providerLower = provider.toLowerCase();
     const isNepalPay = providerLower === "nepalpay" || providerLower.includes("nepal pay");
     const isFonepay = providerLower === "fonepay";
+    const isKhalti = providerLower === "khalti";
 
     if (isNepalPay || isFonepay) {
       const PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
@@ -128,6 +129,45 @@ export async function savePaymentCredentialsAction(provider: string, username: s
         merchantCode = verifyData.merchantCode || null;
       } catch (e) {
         return { error: "Failed to connect to bank proxy for verification." }
+      }
+    } else if (isKhalti) {
+      try {
+        const cleanUser = username.trim()
+        const authHeader = cleanUser.startsWith("Key ") ? cleanUser : `Key ${cleanUser}`
+        const isLive = cleanUser.toLowerCase().startsWith("live_")
+        const url = isLive 
+          ? "https://khalti.com/api/v2/epayment/lookup/" 
+          : "https://dev.khalti.com/api/v2/epayment/lookup/";
+          
+        let verifyRes = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ pidx: "dummy_pidx_to_verify_key" })
+        });
+
+        if (verifyRes.status === 401 || verifyRes.status === 403) {
+          const alternateUrl = url.includes("dev.khalti.com")
+            ? "https://khalti.com/api/v2/epayment/lookup/"
+            : "https://dev.khalti.com/api/v2/epayment/lookup/"
+          verifyRes = await fetch(alternateUrl, {
+            method: "POST",
+            headers: {
+              "Authorization": authHeader,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ pidx: "dummy_pidx_to_verify_key" })
+          })
+        }
+        
+        if (verifyRes.status === 401 || verifyRes.status === 403) {
+          return { error: "Khalti Verification Failed: Invalid Secret Key (401). Please ensure you enter the Secret Key (starts with 5e777...), NOT the Public Key (starts with 6d06a...)." }
+        }
+        merchantCode = "Verified";
+      } catch (e) {
+        return { error: "Failed to connect to Khalti for verification." }
       }
     }
 

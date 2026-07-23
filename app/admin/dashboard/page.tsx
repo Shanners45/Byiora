@@ -43,13 +43,28 @@ export default function AdminDashboardPage() {
     })()
 
     loadDashboardStats()
+
+    const channel = supabase
+      .channel("admin_dashboard_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "transactions" },
+        () => {
+          loadDashboardStats(true)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
 
 
-  const loadDashboardStats = async () => {
+  const loadDashboardStats = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
 
       // Use Server Action with Service Role to bypass RLS
       const result = await getDashboardStatsAction()
@@ -65,22 +80,28 @@ export default function AdminDashboardPage() {
     } catch (error) {
       console.error("Error loading dashboard stats:", error)
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "Completed":
-        return "bg-green-100 text-green-800"
+      case "Paid":
+        return "bg-green-100 text-green-800 border-green-200"
       case "Processing":
-        return "bg-blue-100 text-blue-800"
+        return "bg-blue-100 text-blue-800 border-blue-200"
+      case "Payment Pending":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200"
       case "Failed":
-        return "bg-red-100 text-red-800"
+      case "Payment Failed":
+        return "bg-red-100 text-red-800 border-red-200"
       case "Cancelled":
-        return "bg-gray-100 text-gray-800"
+        return "bg-orange-100 text-orange-800 border-orange-200"
+      case "Refunded":
+        return "bg-purple-100 text-purple-800 border-purple-200"
       default:
-        return "bg-gray-100 text-gray-800"
+        return "bg-gray-100 text-gray-800 border-gray-200"
     }
   }
 
@@ -106,7 +127,7 @@ export default function AdminDashboardPage() {
           <p className="text-[#4B5563]">Here's what's happening with your store today.</p>
         </div>
         <Button
-          onClick={loadDashboardStats}
+          onClick={() => loadDashboardStats(false)}
           variant="outline"
           className="flex items-center gap-2 border-[#F59E0B] text-[#92400E] hover:bg-[#FEF7E0]"
         >
@@ -215,7 +236,7 @@ export default function AdminDashboardPage() {
                   </div>
                   <div className="text-right">
                     <p className="font-medium text-[#1F2937]">Rs. {order.price}</p>
-                    <Badge className={getStatusColor(order.status)}>{order.status}</Badge>
+                    <Badge variant="outline" className={getStatusColor(order.status)}>{order.status}</Badge>
                   </div>
                 </div>
               ))}

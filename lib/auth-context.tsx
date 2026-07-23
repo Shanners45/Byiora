@@ -44,7 +44,7 @@ interface AuthContextType {
       productCategory?: string
       guestData?: any
     },
-  ) => Promise<string>
+  ) => Promise<{ transactionId: string, paymentUrl?: string }>
   refreshTransactions: () => Promise<void>
   isLoading: boolean
 }
@@ -258,7 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       productCategory?: string
       guestData?: any
     },
-  ): Promise<string> => {
+  ): Promise<{ transactionId: string, paymentUrl?: string }> => {
     try {
       // Use Server Action with Service Role to bypass RLS
       const result = await addTransactionAction({
@@ -291,7 +291,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setTransactions((prev) => [newTransaction, ...prev])
       }
 
-      return result.transactionId!
+      return { transactionId: result.transactionId!, paymentUrl: (result as any).paymentUrl }
     } catch (error) {
       console.error("Add transaction error:", error)
       throw error

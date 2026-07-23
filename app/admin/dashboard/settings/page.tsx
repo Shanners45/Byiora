@@ -27,7 +27,7 @@ interface PaymentMethod {
   instructions: string | null
   is_enabled: boolean
   sort_order: number
-  category: "static" | "nepalpay" | "fonepay"
+  category: "static" | "nepalpay" | "fonepay" | "khalti"
 }
 
 export default function AdminSettingsPage() {
@@ -62,6 +62,8 @@ export default function AdminSettingsPage() {
   const [nepalpayPass, setNepalpayPass] = useState("")
   const [fonepayUser, setFonepayUser] = useState("")
   const [fonepayPass, setFonepayPass] = useState("")
+  const [khaltiUser, setKhaltiUser] = useState("")
+  const [khaltiPass, setKhaltiPass] = useState("")
   const [isSavingGateways, setIsSavingGateways] = useState(false)
 
   useEffect(() => {
@@ -86,6 +88,7 @@ export default function AdminSettingsPage() {
         setGatewayCreds(result.data)
         if (result.data.nepalpay) setNepalpayUser(result.data.nepalpay.username)
         if (result.data.fonepay) setFonepayUser(result.data.fonepay.username)
+        if (result.data.khalti) setKhaltiUser(result.data.khalti.username)
       }
     } catch (error) {
       console.error("Error loading gateway creds:", error)
@@ -115,6 +118,7 @@ export default function AdminSettingsPage() {
 
         if (provider === "nepalpay") setNepalpayPass("")
         if (provider === "fonepay") setFonepayPass("")
+        if (provider === "khalti") setKhaltiPass("")
       } else {
         toast.error(result.error || "Failed to save credentials")
       }
@@ -135,6 +139,7 @@ export default function AdminSettingsPage() {
         const methods = (result.data || []) as PaymentMethod[]
         const hasNepalPay = methods.some(m => m.name.toLowerCase().includes("nepalpay"))
         const hasFonepay = methods.some(m => m.name.toLowerCase().includes("fonepay"))
+        const hasKhalti = methods.some(m => m.name.toLowerCase().includes("khalti"))
         
         let shouldReload = false
         if (!hasNepalPay) {
@@ -143,6 +148,10 @@ export default function AdminSettingsPage() {
         }
         if (!hasFonepay) {
           await createPaymentMethodAction({ name: "Fonepay", is_enabled: false, logo_url: null, qr_url: null, instructions: "Pay securely via Fonepay App.", sort_order: 99, category: "fonepay" })
+          shouldReload = true
+        }
+        if (!hasKhalti) {
+          await createPaymentMethodAction({ name: "Khalti", is_enabled: false, logo_url: null, qr_url: null, instructions: "Pay securely via Khalti App.", sort_order: 100, category: "khalti" })
           shouldReload = true
         }
 
@@ -628,7 +637,7 @@ export default function AdminSettingsPage() {
                                 <Select
                                   value={editForm.category || "static"}
                                   onValueChange={(val) => {
-                                    setEditForm((f) => ({ ...f, category: val as any, name: val !== "static" ? (val === "nepalpay" ? "NepalPay" : "Fonepay") : f.name }))
+                                    setEditForm((f) => ({ ...f, category: val as any, name: val !== "static" ? (val === "nepalpay" ? "NepalPay" : val === "fonepay" ? "Fonepay" : "Khalti") : f.name }))
                                   }}
                                 >
                                   <SelectTrigger className="w-32 border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]">
@@ -638,6 +647,7 @@ export default function AdminSettingsPage() {
                                     <SelectItem value="static">Static</SelectItem>
                                     <SelectItem value="nepalpay">NepalPay</SelectItem>
                                     <SelectItem value="fonepay">Fonepay</SelectItem>
+                                    <SelectItem value="khalti">Khalti</SelectItem>
                                   </SelectContent>
                                 </Select>
                                 {(editForm.category || "static") === "static" && (
@@ -748,40 +758,44 @@ export default function AdminSettingsPage() {
                             <div className="flex items-center justify-between mb-3">
                               <h4 className="font-semibold text-sm text-slate-800 flex items-center gap-2">
                                 <Lock className="h-4 w-4 text-green-600" />
-                                Automated Gateway Credentials ({(editForm.category || "static") === "nepalpay" ? "NepalPay" : "Fonepay"})
+                                Automated Gateway Credentials ({(editForm.category || "static") === "nepalpay" ? "NepalPay" : (editForm.category === "fonepay" ? "Fonepay" : "Khalti")})
                               </h4>
-                              {((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : gatewayCreds.fonepay?.isPasswordSet) && (
+                              {((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : ((editForm.category === "fonepay" ? gatewayCreds.fonepay?.isPasswordSet : gatewayCreds.khalti?.isPasswordSet))) && (
                                 <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full font-medium flex items-center">
                                   <Check className="w-3 h-3 mr-1" />
                                   Logged In 
                                   {(editForm.category || "static") === "nepalpay" && gatewayCreds.nepalpay?.merchantCode && ` (Merchant: ${gatewayCreds.nepalpay.merchantCode})`}
                                   {(editForm.category || "static") === "fonepay" && gatewayCreds.fonepay?.merchantCode && ` (Merchant: ${gatewayCreds.fonepay.merchantCode})`}
+                                  {(editForm.category || "static") === "khalti" && gatewayCreds.khalti?.merchantCode && ` (Verified)`}
                                 </span>
                               )}
                             </div>
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="space-y-2">
-                                <Label className="text-xs">Username (Merchant Code)</Label>
+                                <Label className="text-xs">{(editForm.category || "static") === "khalti" ? "Secret Key (Username)" : "Username (Merchant Code)"}</Label>
                                 <Input 
-                                  value={(editForm.category || "static") === "nepalpay" ? nepalpayUser : fonepayUser}
+                                  value={(editForm.category || "static") === "nepalpay" ? nepalpayUser : ((editForm.category === "fonepay" ? fonepayUser : khaltiUser))}
                                   onChange={(e) => {
                                     if ((editForm.category || "static") === "nepalpay") setNepalpayUser(e.target.value)
-                                    else setFonepayUser(e.target.value)
+                                    else if (editForm.category === "fonepay") setFonepayUser(e.target.value)
+                                    else setKhaltiUser(e.target.value)
                                   }}
+                                  placeholder={(editForm.category || "static") === "khalti" ? "Secret key (e.g. 5e7779be...)" : "Username"}
                                   className="bg-white border-slate-300 h-9 text-sm"
                                 />
                               </div>
                               <div className="space-y-2">
                                 <Label className="text-xs">
-                                  Password {((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : gatewayCreds.fonepay?.isPasswordSet) && <span className="text-green-600">(Saved)</span>}
+                                  {(editForm.category || "static") === "khalti" ? "Public Key (Password)" : "Password"} {((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : ((editForm.category === "fonepay" ? gatewayCreds.fonepay?.isPasswordSet : gatewayCreds.khalti?.isPasswordSet))) && <span className="text-green-600">(Saved)</span>}
                                 </Label>
                                 <Input 
                                   type="password"
-                                  value={(editForm.category || "static") === "nepalpay" ? nepalpayPass : fonepayPass}
+                                  value={(editForm.category || "static") === "nepalpay" ? nepalpayPass : ((editForm.category === "fonepay" ? fonepayPass : khaltiPass))}
                                   onChange={(e) => {
                                     if ((editForm.category || "static") === "nepalpay") setNepalpayPass(e.target.value)
-                                    else setFonepayPass(e.target.value)
+                                    else if (editForm.category === "fonepay") setFonepayPass(e.target.value)
+                                    else setKhaltiPass(e.target.value)
                                   }}
                                   placeholder="Enter to update"
                                   className="bg-white border-slate-300 h-9 text-sm"
@@ -792,15 +806,16 @@ export default function AdminSettingsPage() {
                               size="sm"
                               onClick={async () => {
                                 const isNepal = (editForm.category || "static") === "nepalpay"
-                                const provider = isNepal ? "nepalpay" : "fonepay"
-                                const u = isNepal ? nepalpayUser : fonepayUser
-                                const p = isNepal ? nepalpayPass : fonepayPass
+                                const isFonepay = editForm.category === "fonepay"
+                                const provider = isNepal ? "nepalpay" : (isFonepay ? "fonepay" : "khalti")
+                                const u = isNepal ? nepalpayUser : (isFonepay ? fonepayUser : khaltiUser)
+                                const p = isNepal ? nepalpayPass : (isFonepay ? fonepayPass : khaltiPass)
                                 await handleSaveGateway(provider, u, p)
                               }}
                               disabled={isSavingGateways}
                               className="mt-3 bg-green-600 hover:bg-green-700 text-white w-full"
                             >
-                              {isSavingGateways ? "Saving..." : (((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : gatewayCreds.fonepay?.isPasswordSet) ? "Update Credentials" : "Save Credentials Securely")}
+                              {isSavingGateways ? "Saving..." : (((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : ((editForm.category === "fonepay" ? gatewayCreds.fonepay?.isPasswordSet : gatewayCreds.khalti?.isPasswordSet))) ? "Update Credentials" : "Save Credentials Securely")}
                             </Button>
                           </div>
                           )}
@@ -900,7 +915,7 @@ export default function AdminSettingsPage() {
                         <div className="flex gap-2">
                           <Select
                             value={newMethod.category || "static"}
-                            onValueChange={(val) => setNewMethod((n: any) => ({ ...n, category: val, name: val !== "static" ? (val === "nepalpay" ? "NepalPay" : "Fonepay") : n.name }))}
+                            onValueChange={(val) => setNewMethod((n: any) => ({ ...n, category: val, name: val !== "static" ? (val === "nepalpay" ? "NepalPay" : val === "fonepay" ? "Fonepay" : "Khalti") : n.name }))}
                           >
                             <SelectTrigger className="w-32 border-2 border-[#7E3AF2]/30 focus:border-[#7E3AF2]">
                               <SelectValue />
@@ -909,6 +924,7 @@ export default function AdminSettingsPage() {
                               <SelectItem value="static">Static</SelectItem>
                               <SelectItem value="nepalpay">NepalPay</SelectItem>
                               <SelectItem value="fonepay">Fonepay</SelectItem>
+                              <SelectItem value="khalti">Khalti</SelectItem>
                             </SelectContent>
                           </Select>
                           {(newMethod.category || "static") === "static" && (
@@ -998,32 +1014,36 @@ export default function AdminSettingsPage() {
                     ) : (
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
                         <p className="text-sm text-blue-800 font-medium">
-                          🔗 Automated Gateway: {newMethod.category === "nepalpay" ? "NepalPay" : "Fonepay"}
+                          🔗 Automated Gateway: {newMethod.category === "nepalpay" ? "NepalPay" : (newMethod.category === "fonepay" ? "Fonepay" : "Khalti")}
                         </p>
                         <p className="text-xs text-blue-600">
-                          QR codes are generated dynamically. Please enter your merchant credentials below to authenticate with the bank.
+                          {newMethod.category === "khalti" 
+                            ? "Khalti integrates via redirect. Please enter your API keys below."
+                            : "QR codes are generated dynamically. Please enter your merchant credentials below to authenticate with the bank."}
                         </p>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                           <div className="space-y-2">
-                            <Label className="text-xs text-blue-900">Username (Merchant Code)</Label>
+                            <Label className="text-xs text-blue-900">{newMethod.category === "khalti" ? "Secret Key (Username)" : "Username (Merchant Code)"}</Label>
                             <Input 
-                              value={newMethod.category === "nepalpay" ? nepalpayUser : fonepayUser}
+                              value={newMethod.category === "nepalpay" ? nepalpayUser : (newMethod.category === "fonepay" ? fonepayUser : khaltiUser)}
                               onChange={(e) => {
                                 if (newMethod.category === "nepalpay") setNepalpayUser(e.target.value)
-                                else setFonepayUser(e.target.value)
+                                else if (newMethod.category === "fonepay") setFonepayUser(e.target.value)
+                                else setKhaltiUser(e.target.value)
                               }}
                               className="bg-white border-blue-200 h-9 text-sm"
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label className="text-xs text-blue-900">Password</Label>
+                            <Label className="text-xs text-blue-900">{newMethod.category === "khalti" ? "Public Key (Password)" : "Password"}</Label>
                             <Input 
                               type="password"
-                              value={newMethod.category === "nepalpay" ? nepalpayPass : fonepayPass}
+                              value={newMethod.category === "nepalpay" ? nepalpayPass : (newMethod.category === "fonepay" ? fonepayPass : khaltiPass)}
                               onChange={(e) => {
                                 if (newMethod.category === "nepalpay") setNepalpayPass(e.target.value)
-                                else setFonepayPass(e.target.value)
+                                else if (newMethod.category === "fonepay") setFonepayPass(e.target.value)
+                                else setKhaltiPass(e.target.value)
                               }}
                               className="bg-white border-blue-200 h-9 text-sm"
                             />

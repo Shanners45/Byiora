@@ -116,6 +116,104 @@ function extractBearerToken(rawResponse) {
 
 const sessionCache = {};
 
+// Active Fonepay WebSocket connections: Map<transactionId, WebSocket>
+const activeFonepayWS = new Map();
+
+// Callback URL for Fonepay WS events (set via env or default)
+const CALLBACK_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
+/**
+ * Start a Fonepay WebSocket listener for a specific transaction.
+ * Connects to the websocketId URL returned by Fonepay's receivePayment API.
+ * When a VERIFIED message is received, calls the Next.js webhook to fulfill the order.
+ */
+function startFonepayWebSocket(websocketUrl, transactionId, validationTraceId) {
+    if (!websocketUrl || !transactionId) return;
+
+    // Close existing WS for this transaction if any
+    if (activeFonepayWS.has(transactionId)) {
+        try { activeFonepayWS.get(transactionId).close(); } catch (e) {}
+        activeFonepayWS.delete(transactionId);
+    }
+
+    console.log(`[WS] Opening Fonepay WebSocket for ${transactionId}`);
+    console.log(`[WS] URL: ${websocketUrl}`);
+
+    try {
+        const ws = new WebSocket(websocketUrl);
+
+        // Auto-close after 6 minutes (safety timeout)
+        const timeout = setTimeout(() => {
+            console.log(`[WS] Timeout reached for ${transactionId}, closing`);
+            try { ws.close(); } catch (e) {}
+            activeFonepayWS.delete(transactionId);
+        }, 6 * 60 * 1000);
+
+        ws.addEventListener('open', () => {
+            console.log(`[WS] ✅ Connected to Fonepay WS for ${transactionId}`);
+        });
+
+        ws.addEventListener('message', async (event) => {
+            try {
+                const raw = typeof event.data === 'string' ? event.data : event.data.toString();
+                console.log(`[WS] 📩 Message for ${transactionId}:`, raw);
+
+                const msg = JSON.parse(raw);
+                let txStatus = msg.transactionStatus;
+                if (typeof txStatus === 'string') {
+                    try { txStatus = JSON.parse(txStatus); } catch (e) {}
+                }
+
+                // Call the fulfillment webhook for EVERY message so the backend can update status
+                try {
+                    const webhookUrl = `${CALLBACK_SITE_URL}/api/webhooks/fonepay-ws`;
+                    const resp = await fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-internal-secret': INTERNAL_SECRET
+                        },
+                        body: JSON.stringify({
+                            transactionId,
+                            validationTraceId,
+                            provider: 'fonepay',
+                            fonepayData: msg
+                        })
+                    });
+                    const result = await resp.json().catch(() => ({}));
+                    console.log(`[WS] Webhook response for ${transactionId}:`, resp.status, result);
+                } catch (e) {
+                    console.error(`[WS] Webhook call failed for ${transactionId}:`, e.message);
+                }
+
+                if (txStatus && txStatus.success && txStatus.qrVerified) {
+                    console.log(`[WS] 🎉 PAYMENT VERIFIED for ${transactionId}!`);
+                    // Close the WebSocket
+                    clearTimeout(timeout);
+                    try { ws.close(); } catch (e) {}
+                    activeFonepayWS.delete(transactionId);
+                }
+            } catch (e) {
+                console.error(`[WS] Error parsing message for ${transactionId}:`, e.message);
+            }
+        });
+
+        ws.addEventListener('error', (err) => {
+            console.error(`[WS] ❌ Error for ${transactionId}:`, err.message || 'Unknown error');
+        });
+
+        ws.addEventListener('close', () => {
+            console.log(`[WS] Connection closed for ${transactionId}`);
+            clearTimeout(timeout);
+            activeFonepayWS.delete(transactionId);
+        });
+
+        activeFonepayWS.set(transactionId, ws);
+    } catch (e) {
+        console.error(`[WS] Failed to open WebSocket for ${transactionId}:`, e.message);
+    }
+}
+
 // ── Security ─────────────────────────────────────────────────────────────────
 
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
@@ -520,6 +618,17 @@ async function handleFonepayTriggerQR(body, res) {
 
         if (qrData && qrData.qrMessage) {
             console.log("✅ FONEPAY QR GENERATED!");
+
+            // Start WebSocket listener for real-time payment notification
+            // This is fire-and-forget — does NOT block QR response
+            const wsUrl = qrData.websocketId;
+            // The transactionId from the request body (our internal ID from `remarks`)
+            const parsed = JSON.parse(body);
+            const internalTxnId = parsed.transactionId || safeRemarks;
+            if (wsUrl) {
+                startFonepayWebSocket(wsUrl, internalTxnId, safeRemarks);
+            }
+
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
                 success: true,
@@ -671,7 +780,7 @@ const server = http.createServer(async (req, res) => {
     // Health check
     if (req.method === 'GET' && url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', providers: ['nepalpay', 'fonepay'] }));
+        res.end(JSON.stringify({ status: 'ok', providers: ['nepalpay', 'fonepay'], activeWebSockets: activeFonepayWS.size }));
         return;
     }
 

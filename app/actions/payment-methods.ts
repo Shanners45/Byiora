@@ -11,7 +11,7 @@ export type PaymentMethodRow = {
   instructions: string | null
   is_enabled: boolean
   sort_order: number
-  category: "static" | "nepalpay" | "fonepay"
+  category: "static" | "nepalpay" | "fonepay" | "khalti"
 }
 
 export async function getPaymentMethodsAction() {
@@ -84,7 +84,7 @@ export async function toggleExclusiveAction(id: string, category: string, enable
 
   const serviceSupabase = createServiceRoleClient()
 
-  if (enable && (category === "nepalpay" || category === "fonepay")) {
+  if (enable && (category === "nepalpay" || category === "fonepay" || category === "khalti")) {
     // Disable all other methods of the same category
     await serviceSupabase
       .from("payment_methods")

@@ -5,6 +5,7 @@ import type React from "react"
 import { Menu, Search, User, Bell, LogOut, Settings, History, Home, Headset, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet"
+import { Skeleton } from "@/components/ui/skeleton"
 
 import { Badge } from "@/components/ui/badge"
 import { NotificationPanel } from "./notification-panel"
@@ -80,16 +81,8 @@ export function Header() {
       <header className="sticky top-0 z-50 w-full border-b border-gray-200 bg-brand-white/95 backdrop-blur-lg shadow-sm">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex items-center cursor-pointer" onClick={() => router.push("/")}>
-              <div className="h-10 relative" suppressHydrationWarning>
-                <Image
-                  src="/byiora-logo-full.png"
-                  alt="Byiora Logo"
-                  width={120}
-                  height={40}
-                  className="object-contain"
-                />
-              </div>
+            <div className="flex items-center">
+              <div className="h-10 w-[120px] bg-gray-200 animate-pulse rounded-md"></div>
             </div>
           </div>
 
@@ -170,13 +163,14 @@ export function Header() {
                 <SheetDescription className="sr-only">Main navigation and account options</SheetDescription>
                 <div className="py-6 flex flex-col flex-1">
                   <div className="flex items-center mb-6">
-                    <div className="h-10 relative" suppressHydrationWarning>
+                    <div className="h-10 w-[120px] relative" suppressHydrationWarning>
                       <Image
                         src="/logo-final.png"
                         alt="Byiora Logo"
                         width={120}
                         height={40}
                         className="object-contain"
+                        priority
                       />
                     </div>
                   </div>
@@ -304,13 +298,14 @@ export function Header() {
 
             {/* Logo */}
             <div className="flex items-center cursor-pointer" onClick={() => router.push("/")}>
-              <div className="h-10 relative" suppressHydrationWarning>
+              <div className="h-10 w-[120px] relative" suppressHydrationWarning>
                 <Image
                   src="/logo-final.png"
                   alt="Byiora Logo"
                   width={120}
                   height={40}
                   className="object-contain"
+                  priority
                 />
               </div>
             </div>

@@ -56,6 +56,7 @@ export async function sendOrderPlacedEmail(input: {
   isGuest?: boolean
   status?: string
   customMessage?: string
+  subjectOverride?: string
 }) {
   const resend = getResend()
 
@@ -129,7 +130,7 @@ export async function sendOrderPlacedEmail(input: {
     from: "Byiora <order-status@byiora.com.np>",
     replyTo: "support@byiora.com.np",
     to: [email],
-    subject: `Order Placed: ${productName}`,
+    subject: input.subjectOverride || `Order Placed: ${productName}`,
     html: htmlContent,
   })
 }

@@ -23,7 +23,7 @@ interface TransactionData {
  * Adds a new transaction (for both guest and authenticated users)
  * Uses Service Role to bypass RLS and allow returning inserted data
  */
-export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any }> {
+export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any; paymentUrl?: string }> {
   try {
     // SECURITY: Per-IP rate limiting (3 orders per 10 minutes per IP)
     const h = await headers()
@@ -69,15 +69,21 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     }
     
     // Find matching denomination and set verified price
-    const matchedDenom = denominations?.find(
-      (d: any) => d.label === transactionData.amount
+    let matchedDenom = denominations?.find(
+      (d: any) =>
+        (d.label && transactionData.amount && d.label.toLowerCase() === transactionData.amount.toLowerCase()) ||
+        (d.id && d.id === transactionData.amount) ||
+        (d.price !== undefined && String(d.price) === String(transactionData.price))
     )
-    
-    if (!matchedDenom) {
-      return { success: false, error: "Invalid product denomination." }
+
+    let verifiedPrice = "0"
+    if (matchedDenom && matchedDenom.price !== undefined && matchedDenom.price !== null) {
+      verifiedPrice = matchedDenom.price.toString()
+    } else if (transactionData.price && !isNaN(parseFloat(transactionData.price))) {
+      verifiedPrice = transactionData.price.toString()
+    } else {
+      return { success: false, error: "Invalid product denomination or price." }
     }
-    
-    const verifiedPrice = matchedDenom.price.toString()
     const now = new Date()
     const yy = String(now.getFullYear()).slice(-2)
     const mm = String(now.getMonth() + 1).padStart(2, '0')
@@ -120,7 +126,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       paymentCategory = (pmData as any).category
     }
 
-    const isDynamic = paymentCategory === "nepalpay" || paymentCategory === "fonepay"
+    const isDynamic = paymentCategory === "nepalpay" || paymentCategory === "fonepay" || paymentCategory === "khalti"
 
     // Static payments start as Processing, Dynamic as Payment Pending
     const initialStatus = isDynamic ? "Payment Pending" : "Processing"
@@ -214,7 +220,94 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       }
     }
 
-    return { success: true, transactionId, data }
+    let paymentUrl: string | undefined = undefined
+    
+    // For Khalti, we need to initiate the payment immediately and get the redirect URL
+    if (paymentCategory === "khalti") {
+      try {
+        const { decryptBankCredentials } = await import("./payment-credentials")
+        const credsRes = await serviceSupabase.from("payment_credentials").select("encrypted_username").eq("provider", "khalti").single() as any
+        
+        if (credsRes.data && credsRes.data.encrypted_username) {
+          const secretKey = (await decryptBankCredentials(credsRes.data.encrypted_username))?.trim()
+          if (secretKey) {
+            const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+            const isLive = secretKey.toLowerCase().startsWith("live_")
+            const url = isLive 
+              ? "https://khalti.com/api/v2/epayment/initiate/" 
+              : "https://dev.khalti.com/api/v2/epayment/initiate/";
+            
+            // Amount must be in paisa (1 Rs = 100 paisa)
+            const amountInPaisa = Math.round(parseFloat(verifiedPrice) * 100);
+            
+            const payload = {
+              return_url: `${siteUrl}/api/webhooks/khalti`,
+              website_url: siteUrl,
+              amount: amountInPaisa,
+              purchase_order_id: transactionId,
+              purchase_order_name: transactionData.product || "Byiora Order",
+              customer_info: {
+                name: actualUserName || transactionData.email.split('@')[0],
+                email: transactionData.email,
+                phone: "9800000000"
+              }
+            }
+
+            console.log(`[KHALTI INITIATE] Key length: ${secretKey.length}, Prefix: "${secretKey.substring(0, 12)}...", URL: ${url}`)
+
+            const authHeader = secretKey.startsWith("Key ") ? secretKey : `Key ${secretKey}`
+
+            const makeKhaltiCall = async (targetUrl: string) => {
+              const resp = await fetch(targetUrl, {
+                method: "POST",
+                headers: {
+                  "Authorization": authHeader,
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+              })
+              const text = await resp.text()
+              let parsed: any = {}
+              try { parsed = JSON.parse(text) } catch {}
+              return { status: resp.status, ok: resp.ok, data: parsed, text }
+            }
+
+            let khaltiRes = await makeKhaltiCall(url)
+
+            // Fallback: If sandbox failed with 401/404, try production (or vice-versa)
+            if (!khaltiRes.ok && (khaltiRes.status === 401 || khaltiRes.status === 404)) {
+              const alternateUrl = url.includes("dev.khalti.com")
+                ? "https://khalti.com/api/v2/epayment/initiate/"
+                : "https://dev.khalti.com/api/v2/epayment/initiate/"
+              console.log(`[KHALTI INITIATE] Initial endpoint failed (${khaltiRes.status}). Retrying with alternate URL: ${alternateUrl}`)
+              khaltiRes = await makeKhaltiCall(alternateUrl)
+            }
+
+            console.log(`[KHALTI INITIATE RESPONSE] Status: ${khaltiRes.status}, Body:`, khaltiRes.data)
+
+            if (khaltiRes.ok && khaltiRes.data.payment_url) {
+              paymentUrl = khaltiRes.data.payment_url
+              
+              // Store pidx
+              await serviceSupabase.from("transactions").update({
+                validation_trace_id: khaltiRes.data.pidx
+              } as any).eq("transaction_id", transactionId)
+              
+            } else {
+              console.error("Khalti initiate failed:", khaltiRes.data)
+              return { success: false, error: khaltiRes.data?.detail || "Khalti payment initiation failed" }
+            }
+          }
+        } else {
+          return { success: false, error: "Khalti credentials not configured" }
+        }
+      } catch (err: any) {
+        console.error("Khalti setup error:", err)
+        return { success: false, error: "Failed to connect to Khalti" }
+      }
+    }
+
+    return { success: true, transactionId, data, paymentUrl }
   } catch (error: any) {
     console.error("Add transaction error:", error)
     return { success: false, error: error.message || "An unexpected error occurred" }
@@ -246,7 +339,7 @@ export async function reorderTransactionAction(oldTransactionId: string) {
 
     // Create new payload based on the old transaction
     const oldTxnAny = oldTxn as any;
-    const newStatus = oldTxnAny.payment_category === "nepalpay" || oldTxnAny.payment_category === "fonepay" 
+    const newStatus = oldTxnAny.payment_category === "nepalpay" || oldTxnAny.payment_category === "fonepay" || oldTxnAny.payment_category === "khalti"
       ? "Payment Pending" 
       : "Processing"
 
@@ -278,7 +371,7 @@ export async function reorderTransactionAction(oldTransactionId: string) {
     }
 
     // Send Discord alert
-    const isDynamicReorder = oldTxnAny.payment_category === "nepalpay" || oldTxnAny.payment_category === "fonepay"
+    const isDynamicReorder = oldTxnAny.payment_category === "nepalpay" || oldTxnAny.payment_category === "fonepay" || oldTxnAny.payment_category === "khalti"
     if (process.env.DISCORD_WEBHOOK_URL && (!isDynamicReorder || oldTxn.product_category === "direct-login")) {
       try {
         const webhookUrl = process.env.DISCORD_WEBHOOK_URL
@@ -304,6 +397,117 @@ export async function reorderTransactionAction(oldTransactionId: string) {
     return { success: true, transactionId: newTransactionId }
   } catch (error: any) {
     console.error("Reorder transaction error:", error)
+    return { success: false, error: error.message || "An unexpected error occurred" }
+  }
+}
+
+/**
+ * Retries/Re-initiates payment for an existing Khalti transaction within 1800 seconds (30 minutes).
+ */
+export async function retryKhaltiPaymentAction(transactionId: string): Promise<{ success: boolean; paymentUrl?: string; error?: string }> {
+  try {
+    const serviceSupabase = createServiceRoleClient()
+
+    // 1. Fetch transaction
+    const { data: _txn, error: txnError } = await serviceSupabase
+      .from("transactions")
+      .select("*")
+      .eq("transaction_id", transactionId)
+      .single()
+
+    if (txnError || !_txn) {
+      return { success: false, error: "Transaction not found" }
+    }
+    const txn = _txn as any
+
+    // 2. Validate time limit (7200 seconds / 2 hours)
+    const createdAt = new Date(txn.created_at).getTime()
+    const now = Date.now()
+    const secondsElapsed = (now - createdAt) / 1000
+
+    if (secondsElapsed > 7200) {
+      return { success: false, error: "Payment window expired (2 hours limit exceeded). Please create a new order." }
+    }
+
+    if (txn.status === "Paid" || txn.status === "Completed") {
+      return { success: false, error: "Transaction is already paid/completed." }
+    }
+
+    // 3. Initiate Khalti payment session
+    const { decryptBankCredentials } = await import("./payment-credentials")
+    const credsRes = await serviceSupabase.from("payment_credentials").select("encrypted_username").eq("provider", "khalti").single() as any
+
+    if (!credsRes.data || !credsRes.data.encrypted_username) {
+      return { success: false, error: "Khalti credentials not configured by Admin" }
+    }
+
+    const secretKey = (await decryptBankCredentials(credsRes.data.encrypted_username))?.trim()
+    if (!secretKey) {
+      return { success: false, error: "Failed to decrypt Khalti credentials" }
+    }
+
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+    const isLive = secretKey.toLowerCase().startsWith("live_")
+    const url = isLive 
+      ? "https://khalti.com/api/v2/epayment/initiate/" 
+      : "https://dev.khalti.com/api/v2/epayment/initiate/";
+
+    const amountInPaisa = Math.round(parseFloat(txn.price) * 100)
+
+    const payload = {
+      return_url: `${siteUrl}/api/webhooks/khalti`,
+      website_url: siteUrl,
+      amount: amountInPaisa,
+      purchase_order_id: transactionId,
+      purchase_order_name: txn.product_name || "Byiora Order",
+      customer_info: {
+        name: txn.user_email.split('@')[0],
+        email: txn.user_email,
+        phone: "9800000000"
+      }
+    }
+
+    const authHeader = secretKey.startsWith("Key ") ? secretKey : `Key ${secretKey}`
+
+    const makeKhaltiCall = async (targetUrl: string) => {
+      const resp = await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": authHeader,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      })
+      const text = await resp.text()
+      let parsed: any = {}
+      try { parsed = JSON.parse(text) } catch {}
+      return { status: resp.status, ok: resp.ok, data: parsed, text }
+    }
+
+    let khaltiRes = await makeKhaltiCall(url)
+
+    if (!khaltiRes.ok && (khaltiRes.status === 401 || khaltiRes.status === 404)) {
+      const alternateUrl = url.includes("dev.khalti.com")
+        ? "https://khalti.com/api/v2/epayment/initiate/"
+        : "https://dev.khalti.com/api/v2/epayment/initiate/"
+      khaltiRes = await makeKhaltiCall(alternateUrl)
+    }
+
+    if (khaltiRes.ok && khaltiRes.data.payment_url) {
+      // Update pidx and reset status to Payment Pending if it was Failed
+      await serviceSupabase.from("transactions").update({
+        validation_trace_id: khaltiRes.data.pidx,
+        status: "Payment Pending",
+        updated_at: new Date().toISOString()
+      } as any).eq("transaction_id", transactionId)
+
+      return { success: true, paymentUrl: khaltiRes.data.payment_url }
+    } else {
+      return { success: false, error: khaltiRes.data?.detail || "Failed to initiate Khalti payment." }
+    }
+
+  } catch (error: any) {
+    console.error("Error in retryKhaltiPaymentAction:", error)
     return { success: false, error: error.message || "An unexpected error occurred" }
   }
 }

@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Search, Filter, RefreshCw, Download, Send, ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { updateTransactionStatusAction, sendGiftcardCodeAction, insertNotificationAction } from "@/app/actions/orders"
+import { updateTransactionStatusAction, sendGiftcardCodeAction, insertNotificationAction, refundKhaltiTransactionAction } from "@/app/actions/orders"
 import { getAllTransactionsAction } from "@/app/actions/dashboard"
 import { decryptCheckoutData, clearCheckoutData } from "@/app/actions/checkout-encryption"
 import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
@@ -35,6 +35,7 @@ interface Transaction {
   giftcard_code?: string
   failure_remarks?: string
   bank_txn_id?: string
+  validation_trace_id?: string
   payment_category?: string
   users?: {
     id: string
@@ -122,6 +123,36 @@ export default function OrdersPage() {
   // Remarks dialog state
   const [remarksDialog, setRemarksDialog] = useState<{ open: boolean; transactionId: string; status: Transaction["status"] } | null>(null)
   const [remarksText, setRemarksText] = useState("")
+
+  // Khalti Refund dialog state
+  const [refundModal, setRefundModal] = useState<{ open: boolean; transaction: Transaction | null }>({ open: false, transaction: null })
+  const [refundAmount, setRefundAmount] = useState("")
+  const [refundMobile, setRefundMobile] = useState("")
+  const [isRefunding, setIsRefunding] = useState(false)
+
+  const handleProcessKhaltiRefund = async () => {
+    if (!refundModal.transaction) return
+    setIsRefunding(true)
+    try {
+      const parsedAmount = refundAmount.trim() ? parseFloat(refundAmount) : undefined
+      const res = await refundKhaltiTransactionAction(
+        refundModal.transaction.transaction_id,
+        parsedAmount,
+        refundMobile.trim() || undefined
+      )
+      if (res.error) {
+        toast.error(res.error)
+      } else {
+        toast.success(res.message || "Khalti refund processed successfully!")
+        setRefundModal({ open: false, transaction: null })
+        await loadTransactions(true)
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Refund failed")
+    } finally {
+      setIsRefunding(false)
+    }
+  }
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -137,9 +168,9 @@ export default function OrdersPage() {
     })()
   }, [])
 
-  const loadTransactions = async () => {
+  const loadTransactions = async (silent = false) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
 
       // Use Server Action with Service Role to bypass RLS
       const result = await getAllTransactionsAction()
@@ -161,12 +192,28 @@ export default function OrdersPage() {
       console.error("Error loading transactions:", error)
       toast.error("Failed to load transactions")
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }
 
   useEffect(() => {
     loadTransactions()
+
+    const channel = supabase
+      .channel("admin_orders_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "transactions" },
+        () => {
+          // Silent reload to get full joined data without flashing the loading state
+          loadTransactions(true)
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
   useEffect(() => {
@@ -254,6 +301,16 @@ export default function OrdersPage() {
   }
 
   const updateTransactionStatus = async (transactionId: string, newStatus: Transaction["status"], remarks?: string) => {
+    const transaction = transactions.find((t) => t.transaction_id === transactionId)
+    const isKhalti = transaction?.payment_category === "khalti" || transaction?.payment_method?.toLowerCase().includes("khalti")
+
+    // If marking as Refunded for Khalti, open the refund modal
+    if (newStatus === "Refunded" && isKhalti && !refundModal.open) {
+      setRefundAmount("")
+      setRefundMobile(transaction?.guest_user_data?.phoneNumber || "")
+      setRefundModal({ open: true, transaction: transaction || null })
+      return
+    }
 
     // If marking as failed, prompt for remarks (optional)
     if (newStatus === "Failed" && !remarks && !remarksDialog) {
@@ -263,7 +320,6 @@ export default function OrdersPage() {
     }
 
     try {
-      const transaction = transactions.find((t) => t.transaction_id === transactionId)
       const oldStatus = transaction?.status
 
       // Use Server Action with Service Role to bypass RLS
@@ -476,7 +532,7 @@ export default function OrdersPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={loadTransactions}
+            onClick={() => loadTransactions()}
             disabled={loading}
             className="border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
           >
@@ -617,38 +673,61 @@ export default function OrdersPage() {
                         const isDynamic =
                           transaction.payment_category === "nepalpay" ||
                           transaction.payment_category === "fonepay" ||
+                          transaction.payment_category === "khalti" ||
                           transaction.payment_method?.toLowerCase().includes("nepalpay") ||
-                          transaction.payment_method?.toLowerCase().includes("fonepay")
+                          transaction.payment_method?.toLowerCase().includes("fonepay") ||
+                          transaction.payment_method?.toLowerCase().includes("khalti")
 
-                        if (isDynamic && transaction.status !== "Paid") {
-                          return <Badge className={`${getStatusColor(transaction.status)} whitespace-nowrap w-fit`}>{transaction.status}</Badge>
+                        const refundSubtext = transaction.status === "Refunded" && transaction.failure_remarks
+                          ? transaction.failure_remarks.replace("Khalti Refunded", "Refunded").replace("Refunded (Portal)", "Refunded")
+                          : null
+
+                        if (isDynamic && transaction.status !== "Paid" && transaction.status !== "Completed") {
+                          return (
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge className={`${getStatusColor(transaction.status)} whitespace-nowrap w-fit`}>{transaction.status}</Badge>
+                              {refundSubtext && (
+                                <span className="text-[11px] font-semibold text-purple-700 leading-tight bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+                                  {refundSubtext}
+                                </span>
+                              )}
+                            </div>
+                          )
                         }
 
                         return (
-                          <Select
-                            value={transaction.status}
-                            onValueChange={(value) =>
-                              updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
-                            }
-                          >
-                            <SelectTrigger className="w-[140px] h-9 p-1 flex justify-between items-center">
-                              <Badge className={`${getStatusColor(transaction.status)} whitespace-nowrap w-full justify-center`}>{transaction.status}</Badge>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {isDynamic ? (
-                                <>
-                                  <SelectItem value={transaction.status}>{transaction.status}</SelectItem>
-                                  <SelectItem value="Refunded">Refunded</SelectItem>
-                                </>
-                              ) : (
-                                <>
-                                  <SelectItem value="Processing">Processing</SelectItem>
-                                  <SelectItem value="Completed">Completed</SelectItem>
-                                  <SelectItem value="Failed">Failed</SelectItem>
-                                </>
-                              )}
-                            </SelectContent>
-                          </Select>
+                          <div className="flex flex-col gap-1 items-start">
+                            <Select
+                              value={transaction.status}
+                              onValueChange={(value) =>
+                                updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
+                              }
+                            >
+                              <SelectTrigger className="w-[140px] h-9 p-1 flex justify-between items-center">
+                                <Badge className={`${getStatusColor(transaction.status)} whitespace-nowrap w-full justify-center`}>{transaction.status}</Badge>
+                              </SelectTrigger>
+                              <SelectContent>
+                                {isDynamic ? (
+                                  <>
+                                    <SelectItem value={transaction.status}>{transaction.status}</SelectItem>
+                                    <SelectItem value="Refunded">Refunded</SelectItem>
+                                  </>
+                                ) : (
+                                  <>
+                                    <SelectItem value="Processing">Processing</SelectItem>
+                                    <SelectItem value="Completed">Completed</SelectItem>
+                                    <SelectItem value="Failed">Failed</SelectItem>
+                                    <SelectItem value="Refunded">Refunded</SelectItem>
+                                  </>
+                                )}
+                              </SelectContent>
+                            </Select>
+                            {refundSubtext && (
+                              <span className="text-[11px] font-semibold text-purple-700 leading-tight bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+                                {refundSubtext}
+                              </span>
+                            )}
+                          </div>
                         )
                       })()}
                     </TableCell>
@@ -792,6 +871,98 @@ export default function OrdersPage() {
                 }}
               >
                 Confirm & Notify Customer
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Khalti Refund Dialog (Compact & Lightweight) */}
+      {refundModal.open && refundModal.transaction && (
+        <Dialog open={refundModal.open} onOpenChange={(open) => { if (!open) setRefundModal({ open: false, transaction: null }) }}>
+          <DialogContent className="sm:max-w-md p-0 overflow-hidden border border-purple-100 shadow-xl rounded-2xl bg-white" aria-describedby={undefined}>
+            {/* Header */}
+            <div className="bg-[#5E2E87] px-5 py-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <RefreshCw className="h-4 w-4 text-purple-200" />
+                <DialogTitle className="text-base font-semibold text-white">
+                  Khalti Refund
+                </DialogTitle>
+              </div>
+              <Badge className="bg-purple-700/60 text-purple-100 text-[10px] border-none font-mono">
+                {refundModal.transaction.transaction_id}
+              </Badge>
+            </div>
+
+            <div className="p-5 space-y-4 text-sm">
+              {/* Essential Summary Strip */}
+              <div className="flex items-center justify-between bg-purple-50/70 p-3 rounded-xl border border-purple-100 text-xs">
+                <div>
+                  <p className="font-semibold text-gray-800">{refundModal.transaction.product_name}</p>
+                  <p className="text-gray-500">{refundModal.transaction.amount}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-gray-400 block text-[10px]">Paid</span>
+                  <span className="font-bold text-[#7E3AF2] text-sm">Rs. {refundModal.transaction.price}</span>
+                </div>
+              </div>
+
+              {/* Form Input: Refund Amount */}
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-xs">
+                  <Label className="font-medium text-gray-700">Refund Amount (NPR)</Label>
+                  <span className="text-[10px] text-gray-400">Blank = Full Refund (Rs. {refundModal.transaction.price})</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400 text-xs font-semibold">Rs.</span>
+                  <Input
+                    type="number"
+                    placeholder={`Full Refund (Rs. ${refundModal.transaction.price})`}
+                    value={refundAmount}
+                    onChange={(e) => setRefundAmount(e.target.value)}
+                    className="pl-9 h-9 text-xs border-gray-200 focus:border-[#7E3AF2] focus:ring-1 focus:ring-[#7E3AF2] rounded-lg"
+                  />
+                </div>
+              </div>
+
+              {/* Form Input: Customer Mobile */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-gray-700">Customer Mobile (Optional)</Label>
+                <Input
+                  type="tel"
+                  placeholder="e.g. 98XXXXXXXX"
+                  value={refundMobile}
+                  onChange={(e) => setRefundMobile(e.target.value)}
+                  className="h-9 text-xs border-gray-200 focus:border-[#7E3AF2] focus:ring-1 focus:ring-[#7E3AF2] rounded-lg"
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <DialogFooter className="bg-gray-50 px-5 py-3 border-t border-gray-100 flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={isRefunding}
+                onClick={() => setRefundModal({ open: false, transaction: null })}
+                className="h-8 text-xs text-gray-600 hover:bg-gray-200/60"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                disabled={isRefunding}
+                className="h-8 px-4 text-xs rounded-lg bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white font-medium shadow-sm transition-all"
+                onClick={handleProcessKhaltiRefund}
+              >
+                {isRefunding ? (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  "Process Refund"
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>

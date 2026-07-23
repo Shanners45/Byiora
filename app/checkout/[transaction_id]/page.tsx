@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,8 @@ import { QRCodeSVG } from "qrcode.react"
 import { getOrGenerateQRAction, verifyPaymentAction, verifyPaymentByPhoneAction, expireTransactionAction, cancelTransactionAction } from "@/app/actions/checkout"
 import { toast } from "sonner"
 import Image from "next/image"
+import CheckoutOverlay from "@/components/checkout-overlay"
+import { createClient } from "@/lib/supabase/client"
 
 import { use } from "react"
 
@@ -37,6 +39,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   const [isCancelling, setIsCancelling] = useState(false)
   const [isCompleted, setIsCompleted] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
+  const [isCancelled, setIsCancelled] = useState(false)
+  const [isNewlyExpired, setIsNewlyExpired] = useState(false)
+  const [overlayType, setOverlayType] = useState<"success" | "cancelled" | "failed" | null>(null)
 
   // Phone verification state
   const [showPhoneVerify, setShowPhoneVerify] = useState(false)
@@ -99,11 +104,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
           setIsExpired(true)
           setQrData(res)
         } else {
-          setError(res.error || "This order is no longer active.")
+          setError("Checkout unavailable")
         }
       }
     } catch (err: any) {
-      setError(err.message || "An error occurred")
+      setError("Checkout unavailable")
     } finally {
       setLoading(false)
     }
@@ -128,6 +133,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
           if (prev <= 1) {
             clearInterval(timerInterval.current!)
             setIsExpired(true)
+            setIsNewlyExpired(true)
             localStorage.removeItem(`qr_${transaction_id}`)
             return 0
           }
@@ -140,94 +146,75 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
     }
   }, [timeLeft, isCompleted, error])
 
-  // Auto-redirect on completion — replaces the old "Payment Confirmed!" full-page UI.
-  // The /transactions page will fire a toast based on the ?paid=success query param.
+  // Show success overlay on completion — will redirect after animation finishes.
   useEffect(() => {
     if (!isCompleted) return
     localStorage.removeItem(`qr_${transaction_id}`)
-    if (qrData?.isGuest) {
-      router.push("/?paid=success")
-    } else {
-      router.push("/transactions?paid=success")
-    }
-  }, [isCompleted, qrData, router, transaction_id])
+    setOverlayType("success")
+  }, [isCompleted, transaction_id])
 
-  // Auto-redirect registered users on expiry
+  // Handle expiry actions (DB update + email)
   useEffect(() => {
-    let isMounted = true;
+    if (!isExpired || !qrData || isCancelled) return
 
-    const handleExpiry = () => {
-      if (isExpired && qrData) {
-        // Fire-and-forget: don't block redirect on server action (DB update + email)
-        expireTransactionAction(transaction_id).catch(() => { })
+    if (isNewlyExpired) {
+      // Fire-and-forget: don't block on server action (DB update + email)
+      expireTransactionAction(transaction_id).catch(() => { })
 
-        if (!qrData.isGuest && isMounted) {
-          toast.info("Session expired. Redirecting to your orders...")
-          router.push("/transactions")
-        }
+      if (!qrData.isGuest) {
+        setOverlayType("failed")
       }
     }
+  }, [isExpired, qrData, transaction_id, isCancelled, isNewlyExpired])
 
-    handleExpiry()
-
-    return () => { isMounted = false }
-  }, [isExpired, qrData, router, transaction_id])
-
-  // Background Polling - Flat 5s for 5 minutes (DYNAMIC: NepalPay/Fonepay)
+  // Background Polling replaced by Supabase Realtime
   useEffect(() => {
-    if (!qrData || isCompleted || isExpired || error || qrData.isStatic) return
+    if (!qrData || isCompleted || isExpired || error || qrData.isStatic || isCancelled) return
 
-    const pollDelay = 5000 // 5 seconds
-    let isRequesting = false
-
-    const poll = async () => {
-      if (isRequesting || isCompleted) return
-      isRequesting = true
-
-      try {
-        const provider = qrData.paymentCategory || "nepalpay"
-        const res = await verifyPaymentAction(transaction_id, qrData.validationTraceId, provider)
-
-        if (res.success && res.completed) {
+    const supabase = createClient()
+    const channel = supabase
+      .channel(`checkout-${transaction_id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'transactions',
+        filter: `transaction_id=eq.${transaction_id}`
+      }, (payload) => {
+        const newStatus = payload.new.status
+        if (newStatus === 'Completed' || newStatus === 'Paid') {
           setIsCompleted(true)
+        } else if (newStatus === 'Payment Failed') {
+          setIsNewlyExpired(true)
+          setIsExpired(true)
         }
-      } catch (e) {
-        console.error("Poll error", e)
-      } finally {
-        isRequesting = false
-        if (!isCompleted) {
-          pollInterval.current = setTimeout(poll, pollDelay)
-        }
-      }
-    }
+      })
+      .subscribe()
 
-    pollInterval.current = setTimeout(poll, pollDelay)
-
-    return () => {
-      if (pollInterval.current) clearTimeout(pollInterval.current)
-    }
-  }, [qrData, isCompleted, isExpired, error, transaction_id, router])
+    return () => { supabase.removeChannel(channel) }
+  }, [qrData, isCompleted, isExpired, error, transaction_id, isCancelled])
 
   // Static-QR polling — checks DB status every 5s for up to 5 minutes
   // (admin manually flips status from Processing -> Completed/Failed).
   useEffect(() => {
-    if (!qrData?.isStatic || isCompleted || isExpired || error) return
+    if (!qrData?.isStatic || isCompleted || isExpired || error || isCancelled) return
 
     let elapsed = 0
+    let isMounted = true
     const max = 5 * 60 * 1000 // 5 minutes
     const interval = setInterval(async () => {
+      if (!isMounted) return
       elapsed += 5000
       try {
         const res = await fetch(`/api/transaction-status?id=${transaction_id}`, { cache: "no-store" })
         if (res.ok) {
           const data = await res.json()
           if (data.status === "Completed" || data.status === "Paid") {
-            setIsCompleted(true)
+            if (isMounted) setIsCompleted(true)
             clearInterval(interval)
             return
           }
           if (data.status === "Failed" || data.status === "Payment Failed") {
-            setIsExpired(true)
+            if (isMounted) setIsExpired(true)
             clearInterval(interval)
             return
           }
@@ -238,8 +225,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       if (elapsed >= max) clearInterval(interval)
     }, 5000)
 
-    return () => clearInterval(interval)
-  }, [qrData, isCompleted, isExpired, error, transaction_id])
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [qrData, isCompleted, isExpired, error, transaction_id, isCancelled])
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
@@ -248,8 +238,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   }
 
   const handlePhoneVerification = async () => {
-    if (!phoneNumber.trim()) {
-      toast.error("Please enter the phone number used for payment")
+    const cleanPhone = phoneNumber.replace(/\D/g, "")
+    if (cleanPhone.length !== 10 || !cleanPhone.startsWith("9")) {
+      toast.error("Please enter a valid 10-digit phone number starting with 9")
       return
     }
 
@@ -260,7 +251,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
         setIsPhoneVerifying(false)
         return
       }
-      const res = await verifyPaymentByPhoneAction(transaction_id, phoneNumber, captchaToken)
+      const res = await verifyPaymentByPhoneAction(transaction_id, cleanPhone, captchaToken)
       if (res.success && (res.verified || res.alreadyCompleted)) {
         setIsCompleted(true)
         toast.success("Payment verified successfully! Your order is being fulfilled.")
@@ -312,14 +303,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       const res = await cancelTransactionAction(transaction_id)
       if (res.success) {
         localStorage.removeItem(`qr_${transaction_id}`)
-        toast.success("Order cancelled successfully.")
-        setTimeout(() => {
-          if (qrData && !qrData.isGuest) {
-            router.push("/transactions")
-          } else {
-            router.push("/")
-          }
-        }, 1500)
+        setIsCancelled(true)
+        setOverlayType("cancelled")
       } else {
         toast.error(res.error || "Failed to cancel order")
         setIsCancelling(false)
@@ -390,8 +375,44 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
 
   // ========== MAIN CHECKOUT STATE ==========
+  // Handle overlay redirect
+  const handleOverlayComplete = useCallback(() => {
+    const returnUrl = typeof window !== "undefined" ? localStorage.getItem("byiora_checkout_return") : null
+    if (typeof window !== "undefined") localStorage.removeItem("byiora_checkout_return")
+
+    if (overlayType === "success") {
+      if (qrData?.isGuest) {
+        router.push("/?paid=success")
+      } else {
+        router.push("/transactions?paid=success")
+      }
+    } else if (overlayType === "cancelled") {
+      // Guest: homepage | Registered: products page (returnUrl)
+      if (qrData?.isGuest) {
+        router.push("/")
+      } else {
+        router.push(returnUrl || "/")
+      }
+    } else if (overlayType === "failed") {
+      // Guest: products page (returnUrl) | Registered: transaction history
+      if (qrData?.isGuest) {
+        router.push(returnUrl || "/")
+      } else {
+        router.push("/transactions")
+      }
+    }
+  }, [overlayType, qrData, router])
+
   return (
     <div className="min-h-screen bg-white">
+      {/* Premium Animated Overlays */}
+      {overlayType && (
+        <CheckoutOverlay
+          type={overlayType}
+          onComplete={handleOverlayComplete}
+          delayMs={overlayType === "success" ? 3000 : 2500}
+        />
+      )}
       <div className="w-full border-b bg-gray-50/50">
         <div className="container mx-auto px-4 py-4 md:py-6 flex justify-between items-center w-full">
           <div>
@@ -451,11 +472,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
             </div>
             <h3 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-4 tracking-tight">Checkout Unavailable</h3>
             <p className="text-gray-600 text-lg mb-8 max-w-md leading-relaxed">
-              {error.toLowerCase().includes("fetch failed") || error.toLowerCase().includes("failed to fetch") || error.toLowerCase().includes("network")
-                ? "We are currently experiencing a temporary issue connecting to our payment partner's network. Please try again in a few moments."
-                : error === "Failed to load QR code" || error === "An error occurred"
-                  ? "We encountered an unexpected issue while preparing your secure checkout session. Please return to the store and try again."
-                  : error}
+              {["This order is no longer active", "Transaction not found", "Transaction is already completed", "Transaction is", "Payment session expired"].some(e => error.includes(e)) 
+                ? error 
+                : "Checkout unavailable"}
             </p>
             <Button
               onClick={() => {
@@ -567,7 +586,15 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                           type="tel"
                           placeholder="e.g. 98XXXXXXXX"
                           value={phoneNumber}
-                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          onChange={(e) => {
+                            let val = e.target.value.replace(/\D/g, "")
+                            if (val.length > 0 && val[0] !== "9") {
+                              val = "" // Force starting with 9
+                            }
+                            if (val.length <= 10) {
+                              setPhoneNumber(val)
+                            }
+                          }}
                           className="pl-12 h-14 text-lg bg-gray-50 border-gray-300 focus:bg-white focus:border-[#6B3FA0] focus:ring-[#6B3FA0] rounded-xl transition-colors placeholder:text-gray-500 text-gray-900"
                           maxLength={15}
                         />
@@ -750,16 +777,16 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                         )}
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
+                    <AlertDialogContent className="bg-white border-gray-200 shadow-xl sm:rounded-2xl p-6 sm:max-w-md">
+                      <AlertDialogHeader className="space-y-3">
+                        <AlertDialogTitle className="text-2xl font-bold text-gray-900">Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription className="text-gray-500 text-base">
                           This will cancel the current order. You will need to create a new order to checkout.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>No, keep it</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleCancelOrder} className="bg-red-600 hover:bg-red-700 text-white">Yes, cancel order</AlertDialogAction>
+                      <AlertDialogFooter className="mt-6 gap-3 sm:space-x-0">
+                        <AlertDialogCancel className="mt-0 h-12 sm:rounded-xl text-gray-700 bg-gray-100 hover:bg-gray-200 hover:text-gray-900 border-none font-semibold transition-colors">No, keep it</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleCancelOrder} className="h-12 sm:rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold transition-all shadow-md">Yes, cancel order</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>

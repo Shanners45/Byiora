@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ArrowLeft, Filter, Download, Lock, Eye, EyeOff, Gift, RefreshCw, RefreshCcw, Phone, CheckCircle2 } from "lucide-react";
+import { useState, useEffect, Suspense } from "react";
+import { ArrowLeft, Filter, Download, Lock, Eye, EyeOff, Gift, RefreshCw, RefreshCcw, Phone, CheckCircle2, ExternalLink } from "lucide-react";
+import TransactionsLoading from "./loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +14,7 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { reorderTransactionAction } from "@/app/actions/transactions";
+import { reorderTransactionAction, retryKhaltiPaymentAction } from "@/app/actions/transactions";
 import { verifyPaymentByPhoneAction } from "@/app/actions/checkout";
 import { TurnstileWidget } from "@/components/turnstile-widget";
 
@@ -89,7 +90,7 @@ export default function TransactionsPage() {
       case "processing":
         return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">{label}</Badge>;
       case "payment pending":
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200 animate-pulse">{label}</Badge>;
+        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">{label}</Badge>;
       case "paid":
         return <Badge className="bg-green-100 text-green-800 border-green-200">{label}</Badge>;
       case "completed":
@@ -105,6 +106,8 @@ export default function TransactionsPage() {
         return <Badge variant="secondary">{label}</Badge>;
     }
   };
+
+  const [retryingKhaltiId, setRetryingKhaltiId] = useState<string | null>(null);
 
   const handleReorder = async (oldTransactionId: string) => {
     setReorderingId(oldTransactionId);
@@ -123,11 +126,29 @@ export default function TransactionsPage() {
     }
   };
 
+  const handleRetryKhalti = async (transactionId: string) => {
+    setRetryingKhaltiId(transactionId);
+    try {
+      const res = await retryKhaltiPaymentAction(transactionId);
+      if (res.success && res.paymentUrl) {
+        toast.info("Redirecting to Khalti payment gateway...");
+        window.location.href = res.paymentUrl;
+      } else {
+        toast.error(res.error || "Failed to initiate Khalti payment");
+      }
+    } catch (e: any) {
+      toast.error(e.message || "An unexpected error occurred");
+    } finally {
+      setRetryingKhaltiId(null);
+    }
+  };
+
   const [captchaToken, setCaptchaToken] = useState("");
 
   const handleVerifyPhone = async (transactionId: string) => {
-    if (!phoneNumber || phoneNumber.length < 10) {
-      toast.error("Please enter a valid phone number");
+    const cleanPhone = phoneNumber.replace(/\D/g, "");
+    if (cleanPhone.length !== 10 || !cleanPhone.startsWith("9")) {
+      toast.error("Please enter a valid 10-digit phone number starting with 9");
       return;
     }
     if (!captchaToken) {
@@ -137,7 +158,7 @@ export default function TransactionsPage() {
 
     setIsPhoneVerifying(true);
     try {
-      const res = await verifyPaymentByPhoneAction(transactionId, phoneNumber, captchaToken);
+      const res = await verifyPaymentByPhoneAction(transactionId, cleanPhone, captchaToken);
       if (res.success) {
         toast.success("Payment verified successfully! Your order is being fulfilled.");
         setVerifyingPhoneId(null);
@@ -334,15 +355,7 @@ export default function TransactionsPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen">
-        <Header />
-        <div className="container mx-auto px-4 py-8 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand-charcoal border-t-transparent mx-auto"></div>
-        </div>
-        <Footer />
-      </div>
-    );
+    return <TransactionsLoading />;
   }
 
   if (!isLoggedIn) {
@@ -404,12 +417,18 @@ export default function TransactionsPage() {
         </div>
 
         <div className="grid gap-6">
-          {filteredTransactions.map((transaction) => (
+          {filteredTransactions.map((transaction) => {
+            const isKhalti = transaction.paymentMethod?.toLowerCase().includes("khalti");
+            const secondsElapsed = (new Date().getTime() - new Date(transaction.date).getTime()) / 1000;
+            const isKhaltiExpired = isKhalti && (transaction.status === "Payment Pending" || transaction.status === "Processing") && secondsElapsed > 7200;
+            const displayStatus = isKhaltiExpired ? "Payment Failed" : transaction.status;
+
+            return (
             <Card key={transaction.id} className="bg-brand-white border-gray-200 shadow-lg">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-brand-charcoal text-lg">{transaction.product}</CardTitle>
-                  {getStatusBadge(transaction.status)}
+                  {getStatusBadge(displayStatus)}
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -484,74 +503,143 @@ export default function TransactionsPage() {
                   </p>
 
                   <div className="flex gap-2">
-                    {transaction.status === "Payment Failed" && transaction.failure_remarks !== "Cancelled by user" && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setVerifyingPhoneId(transaction.transactionId);
-                            setPhoneNumber("");
-                          }}
-                          className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 font-semibold"
-                        >
-                          <Phone className="h-4 w-4 mr-2" />
-                          Verify Payment
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleReorder(transaction.transactionId)}
-                          disabled={reorderingId === transaction.transactionId}
-                          className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
-                        >
-                          {reorderingId === transaction.transactionId ? (
-                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <RefreshCcw className="h-4 w-4 mr-2" />
+                    {(() => {
+                      const isKhalti = transaction.paymentMethod?.toLowerCase().includes("khalti");
+                      const secondsElapsed = (new Date().getTime() - new Date(transaction.date).getTime()) / 1000;
+                      const isWithin7200s = secondsElapsed <= 7200; // 2 hours (7200s)
+                      const isUnpaidState = ["Payment Failed", "Payment Pending", "Processing", "Cancelled", "Failed"].includes(transaction.status);
+
+                      if (isKhalti) {
+                        return (
+                          <>
+                            {isUnpaidState && isWithin7200s && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRetryKhalti(transaction.transactionId)}
+                                disabled={retryingKhaltiId === transaction.transactionId}
+                                className="border-[#5E2E87] text-[#5E2E87] hover:bg-[#5E2E87]/10 font-semibold"
+                              >
+                                {retryingKhaltiId === transaction.transactionId ? (
+                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                )}
+                                Pay with Khalti
+                              </Button>
+                            )}
+
+                            {isUnpaidState && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleReorder(transaction.transactionId)}
+                                disabled={reorderingId === transaction.transactionId}
+                                className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
+                              >
+                                {reorderingId === transaction.transactionId ? (
+                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <RefreshCcw className="h-4 w-4 mr-2" />
+                                )}
+                                Buy Again
+                              </Button>
+                            )}
+
+                            {transaction.status === "Completed" && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownloadReceipt(transaction.transactionId)}
+                                className="border-brand-sky-blue text-brand-sky-blue hover:bg-brand-sky-blue/10"
+                              >
+                                <Download className="h-4 w-4 mr-2" />
+                                Download Receipt
+                              </Button>
+                            )}
+                          </>
+                        )
+                      }
+
+                      // Non-Khalti payment methods (NepalPay, Fonepay, Static QR)
+                      return (
+                        <>
+                          {transaction.status === "Payment Failed" && transaction.failure_remarks !== "Cancelled by user" && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setVerifyingPhoneId(transaction.transactionId);
+                                  setPhoneNumber("");
+                                }}
+                                className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 font-semibold"
+                              >
+                                <Phone className="h-4 w-4 mr-2" />
+                                Verify Payment
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleReorder(transaction.transactionId)}
+                                disabled={reorderingId === transaction.transactionId}
+                                className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
+                              >
+                                {reorderingId === transaction.transactionId ? (
+                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                ) : (
+                                  <RefreshCcw className="h-4 w-4 mr-2" />
+                                )}
+                                Buy Again
+                              </Button>
+                            </>
                           )}
-                          Buy Again
-                        </Button>
-                      </>
-                    )}
 
-                    {transaction.status === "Payment Pending" && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setVerifyingPhoneId(transaction.transactionId);
-                            setPhoneNumber("");
-                          }}
-                          className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 font-semibold"
-                        >
-                          Verify Payment
-                        </Button>
-                        {new Date().getTime() - new Date(transaction.date).getTime() < 5 * 60 * 1000 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => router.push(`/checkout/${transaction.transactionId}`)}
-                            className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
-                          >
-                            Return to Payment
-                          </Button>
-                        )}
-                      </>
-                    )}
+                          {transaction.status === "Payment Pending" && (
+                            <>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setVerifyingPhoneId(transaction.transactionId);
+                                  setPhoneNumber("");
+                                }}
+                                className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 font-semibold"
+                              >
+                                Verify Payment
+                              </Button>
+                              {secondsElapsed < 300 && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => router.push(`/checkout/${transaction.transactionId}`)}
+                                  className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
+                                >
+                                  Return to Payment
+                                </Button>
+                              )}
+                            </>
+                          )}
 
-                    {transaction.status === "Completed" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownloadReceipt(transaction.transactionId)}
-                        className="border-brand-sky-blue text-brand-sky-blue hover:bg-brand-sky-blue/10"
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download Receipt
-                      </Button>
-                    )}
+                          {transaction.status === "Completed" && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownloadReceipt(transaction.transactionId)}
+                              className="border-brand-sky-blue text-brand-sky-blue hover:bg-brand-sky-blue/10"
+                            >
+                              <Download className="h-4 w-4 mr-2" />
+                              Download Receipt
+                            </Button>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
                 </div>
 
@@ -573,10 +661,19 @@ export default function TransactionsPage() {
                           type="tel"
                           placeholder="e.g. 98XXXXXXXX"
                           value={phoneNumber}
-                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          onChange={(e) => {
+                            let val = e.target.value.replace(/\D/g, "");
+                            if (val.length > 0 && val[0] !== "9") {
+                              val = ""; // Force starting with 9
+                            }
+                            if (val.length <= 10) {
+                              setPhoneNumber(val);
+                            }
+                          }}
                           className="flex-1 border-gray-300 focus:border-[#0ea5e9] bg-white/70 placeholder:text-gray-400"
                         />
                         <Button
+                          type="button"
                           onClick={() => handleVerifyPhone(transaction.transactionId)}
                           disabled={isPhoneVerifying || !phoneNumber || !captchaToken}
                           className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white shadow-md"
@@ -597,7 +694,8 @@ export default function TransactionsPage() {
                 </Dialog>
               </CardContent>
             </Card>
-          ))}
+          );
+        })}
         </div>
 
         {filteredTransactions.length === 0 && (
@@ -610,6 +708,7 @@ export default function TransactionsPage() {
                 : `No ${filterStatus} transactions found.`}
             </p>
             <Button
+              type="button"
               onClick={() => router.push("/")}
               className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white rounded-full px-8"
             >

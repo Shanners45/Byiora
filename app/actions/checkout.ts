@@ -80,12 +80,28 @@ export async function getOrGenerateQRAction(transactionId: string) {
     }
 
     if (txn.status === "Completed") {
-      return { success: false, error: "Transaction is already completed", status: "Completed", isGuest: !txn.user_id }
+      return { 
+        success: false, 
+        error: "Transaction is already completed", 
+        status: "Completed", 
+        isGuest: !txn.user_id,
+        productName: txn.product_name,
+        amount: txn.amount,
+        price: txn.price
+      }
     }
 
     const currentStatus = txn.status as string;
     if (["Failed", "Cancelled", "Payment Failed", "Archived", "Refunded"].includes(currentStatus)) {
-      return { success: false, error: `Transaction is ${currentStatus.toLowerCase()}`, status: currentStatus, isGuest: !txn.user_id }
+      return { 
+        success: false, 
+        error: `Transaction is ${currentStatus.toLowerCase()}`, 
+        status: currentStatus, 
+        isGuest: !txn.user_id,
+        productName: txn.product_name,
+        amount: txn.amount,
+        price: txn.price
+      }
     }
 
     const typedTxn = txn as any;
@@ -122,6 +138,18 @@ export async function getOrGenerateQRAction(transactionId: string) {
       }
     }
 
+    // 3b. Khalti uses redirect-based payment, not QR — shouldn't be on checkout page
+    if (paymentCategory === "khalti") {
+      if ((txn.status as string) === "Paid" || (txn.status as string) === "Completed") {
+        return { success: false, error: "Transaction is already completed", status: "Completed", isGuest: !txn.user_id }
+      }
+      return { 
+        success: false, 
+        error: "This order is no longer active", 
+        isGuest: !txn.user_id 
+      }
+    }
+
     // 4. Dynamic payment — check cached QR (less than 5 mins old)
     if (typedTxn.qr_payload && typedTxn.validation_trace_id) {
       const qrAge = (new Date().getTime() - new Date(typedTxn.updated_at).getTime()) / 1000 / 60
@@ -146,7 +174,15 @@ export async function getOrGenerateQRAction(transactionId: string) {
         status: "Payment Failed",
         failure_remarks: "QR code expired (server-side enforcement)"
       } as any).eq("transaction_id", transactionId)
-      return { success: false, error: "Payment session expired", status: "Payment Failed", isGuest: !txn.user_id }
+      return { 
+        success: false, 
+        error: "Payment session expired", 
+        status: "Payment Failed", 
+        isGuest: !txn.user_id,
+        productName: txn.product_name,
+        amount: txn.amount,
+        price: txn.price
+      }
     }
 
     // 5. Generate fresh QR via proxy
@@ -176,7 +212,8 @@ export async function getOrGenerateQRAction(transactionId: string) {
       username,
       password,
       amount: parseInt(txn.price),
-      remarks: transactionId
+      remarks: transactionId,
+      transactionId: transactionId // Pass our internal ID so the proxy can identify the WS callback
     }
 
     // Use globally cached token from Redis if available
@@ -254,25 +291,30 @@ export async function getOrGenerateQRAction(transactionId: string) {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
 
       // 7a. Background payment polling (retries every 15s, up to 10 times)
-      try {
-        const webhookUrl = `${siteUrl}/api/webhooks/qstash`
-        await fetch(`${process.env.QSTASH_URL}/v2/publish/${webhookUrl}`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${process.env.QSTASH_TOKEN}`,
-            "Content-Type": "application/json",
-            "Upstash-Retries": "10",
-            "Upstash-Delay": "15s",
-          },
-          body: JSON.stringify({
-            transactionId,
-            validationTraceId: proxyData.validationTraceId,
-            provider: paymentCategory
+      // Skip for Fonepay — the proxy's WebSocket handles real-time verification
+      if (paymentCategory !== "fonepay") {
+        try {
+          const webhookUrl = `${siteUrl}/api/webhooks/qstash`
+          await fetch(`${process.env.QSTASH_URL}/v2/publish/${webhookUrl}`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${process.env.QSTASH_TOKEN}`,
+              "Content-Type": "application/json",
+              "Upstash-Retries": "10",
+              "Upstash-Delay": "15s",
+            },
+            body: JSON.stringify({
+              transactionId,
+              validationTraceId: proxyData.validationTraceId,
+              provider: paymentCategory
+            })
           })
-        })
-        console.log(`[QSTASH] Scheduled background polling for ${transactionId}`)
-      } catch (e) {
-        console.error("Failed to schedule QStash polling:", e)
+          console.log(`[QSTASH] Scheduled background polling for ${transactionId}`)
+        } catch (e) {
+          console.error("Failed to schedule QStash polling:", e)
+        }
+      } else {
+        console.log(`[FONEPAY] Skipping QStash polling for ${transactionId} — WebSocket handles verification`)
       }
 
       // 7b. Guaranteed expiry fallback — fires once after 6 minutes
@@ -610,13 +652,15 @@ export async function expireTransactionAction(transactionId: string) {
 }
 
 /**
- * Explicitly cancel a transaction by the user
+ * Explicitly cancel a transaction by the user.
+ * Sends a "Your order was cancelled" email that still includes a magic-link
+ * safety net so users who paid before cancelling can recover.
  */
 export async function cancelTransactionAction(transactionId: string) {
   try {
     const supabase = createServiceRoleClient()
 
-    const { data: txn } = await supabase.from("transactions").select("status").eq("transaction_id", transactionId).single()
+    const { data: txn } = await supabase.from("transactions").select("*").eq("transaction_id", transactionId).single()
     if (!txn || !["Payment Pending", "Processing"].includes(txn.status as string)) {
       return { success: false, error: "Cannot cancel this transaction" }
     }
@@ -625,6 +669,54 @@ export async function cancelTransactionAction(transactionId: string) {
       status: "Payment Failed",
       failure_remarks: "Cancelled by user"
     } as any).eq("transaction_id", transactionId)
+
+    // --- Send Cancellation Email ---
+    const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
+    const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
+
+    let userName = undefined
+    if (txn.user_id) {
+      const { data: userData } = await supabase.from("users").select("name").eq("id", txn.user_id).single()
+      if (userData) userName = userData.name
+    } else if ((txn as any).guest_user_data && (txn as any).guest_user_data.name) {
+      userName = (txn as any).guest_user_data.name
+    }
+
+    let customMsg = "You have cancelled your order for <strong>" + txn.product_name + "</strong>."
+
+    // Add safety-net verification link for dynamic QR payments
+    const isDynamic = (txn as any).payment_category === "nepalpay" || (txn as any).payment_category === "fonepay"
+    if (isDynamic) {
+      customMsg += "<br/><br/><strong>Already paid before cancelling?</strong> Don't worry — you can still verify your payment."
+      if (txn.user_id) {
+        customMsg += ` <a href="https://www.byiora.com.np/transactions" style="color: #6B3FA0; font-weight: 600;">Go to your Transaction History</a> and click the <strong>Verify Payment</strong> button.`
+      } else {
+        // Guest user — generate magic link
+        const rawToken = await generateGuestVerificationToken(transactionId)
+        const token = encodeURIComponent(rawToken)
+        customMsg += `<br/><br/>`
+        customMsg += `<div style="text-align: center;"><a href="https://www.byiora.com.np/verify-guest?token=${token}" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Verify Payment Securely</a></div>`
+        customMsg += `<p style="color: #9ca3af; font-size: 13px; text-align: center; margin-top: 8px;">This link expires in 24 hours.</p>`
+      }
+    }
+
+    try {
+      await sendOrderPlacedEmail({
+        email: txn.user_email,
+        userName: userName,
+        productName: txn.product_name,
+        denomination: txn.amount,
+        transactionId: transactionId,
+        price: txn.price,
+        paymentMethod: txn.payment_method,
+        isGuest: !txn.user_id,
+        status: "Order Cancelled",
+        customMessage: customMsg,
+        subjectOverride: `Order Cancelled: ${txn.product_name}`
+      })
+    } catch (e) {
+      console.error("Failed to send cancellation email:", e)
+    }
 
     return { success: true }
   } catch (error) {

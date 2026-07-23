@@ -51,6 +51,17 @@ export async function GET(req: Request) {
       // Skip if it already has a bank_txn_id (payment was received)
       if (typedTxn.bank_txn_id) continue
 
+      // Khalti secure link stays active for 2 hours (120 minutes)
+      const isKhaltiTxn = typedTxn.payment_category === "khalti" || typedTxn.payment_method?.toLowerCase().includes("khalti")
+      if (isKhaltiTxn) {
+        const twoHoursAgo = new Date(Date.now() - 120 * 60 * 1000).getTime()
+        const createdAtTime = new Date(typedTxn.created_at).getTime()
+        if (createdAtTime > twoHoursAgo) {
+          // Still active within 2 hour window — do not expire yet
+          continue
+        }
+      }
+
       let recovered = false
 
       // If it has a validation_trace_id, do ONE FINAL verification

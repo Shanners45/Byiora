@@ -304,3 +304,210 @@ export async function insertNotificationAction(
     return { error: error.message || "An unexpected error occurred" }
   }
 }
+
+/**
+ * Refunds a Khalti transaction via API (admin only)
+ * @param transactionId - Internal Byiora order ID (e.g. BYI-XXXXX)
+ * @param amountInRs - Optional custom refund amount in NPR (e.g. 50). If empty/undefined, full price is refunded.
+ * @param mobile - Optional mobile number for bank refund
+ */
+export async function refundKhaltiTransactionAction(
+  transactionId: string,
+  amountInRs?: number,
+  mobile?: string
+) {
+  if (!(await verifyAdmin())) {
+    return { error: "Unauthorized: Admin access required" }
+  }
+
+  try {
+    const serviceSupabase = createServiceRoleClient()
+
+    // 1. Fetch transaction details
+    const { data: _txn, error: txnError } = await serviceSupabase
+      .from("transactions")
+      .select("*")
+      .eq("transaction_id", transactionId)
+      .single()
+
+    if (txnError || !_txn) {
+      return { error: "Transaction not found" }
+    }
+    const txn = _txn as any
+
+    let pidx = txn.validation_trace_id
+    let bankTxnId = txn.bank_txn_id
+
+    // 2. Fetch Khalti credentials
+    const { decryptBankCredentials } = await import("./payment-credentials")
+    const credsRes = await serviceSupabase
+      .from("payment_credentials")
+      .select("encrypted_username")
+      .eq("provider", "khalti")
+      .single() as any
+
+    if (!credsRes.data || !credsRes.data.encrypted_username) {
+      return { error: "Khalti credentials not configured by Admin" }
+    }
+
+    const secretKey = (await decryptBankCredentials(credsRes.data.encrypted_username))?.trim()
+    if (!secretKey) {
+      return { error: "Failed to decrypt Khalti credentials" }
+    }
+
+    const isLive = secretKey.toLowerCase().startsWith("live_")
+    const baseUrl = isLive ? "https://khalti.com" : "https://dev.khalti.com"
+    const authHeader = secretKey.startsWith("Key ") ? secretKey : `Key ${secretKey}`
+
+    // Perform lookup to resolve real bank_txn_id if missing or if it equals pidx
+    if (!bankTxnId || bankTxnId === pidx || bankTxnId.length > 20) {
+      const lookupPidx = pidx || bankTxnId
+      if (lookupPidx) {
+        try {
+          console.log(`[KHALTI REFUND LOOKUP] Performing lookup for pidx: ${lookupPidx}...`)
+          const lookupResp = await fetch(`${baseUrl}/api/v2/epayment/lookup/`, {
+            method: "POST",
+            headers: {
+              "Authorization": authHeader,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ pidx: lookupPidx })
+          })
+          const lookupData = await lookupResp.json().catch(() => ({}))
+          console.log(`[KHALTI REFUND LOOKUP RESULT]`, lookupData)
+
+          const resolvedTxnId = lookupData.transaction_id || lookupData.tidx || lookupData.bank_txn_id
+          if (resolvedTxnId) {
+            bankTxnId = resolvedTxnId
+            // Update DB with true bank_txn_id for future reference
+            await serviceSupabase
+              .from("transactions")
+              .update({ bank_txn_id: resolvedTxnId } as any)
+              .eq("transaction_id", transactionId)
+          }
+        } catch (lookupErr) {
+          console.error(`[KHALTI REFUND LOOKUP ERROR]`, lookupErr)
+        }
+      }
+    }
+
+    if (!bankTxnId && !pidx) {
+      return { error: "Transaction lacks Khalti transaction ID (bank_txn_id or pidx) required for refund." }
+    }
+
+    const amountInPaisa = (amountInRs !== undefined && amountInRs > 0)
+      ? Math.round(amountInRs * 100)
+      : Math.round(parseFloat(txn.price) * 100)
+
+    let refundSuccess = false
+    let refundResponseData: any = {}
+    let lastError = ""
+
+    // Strategy 1: Try Merchant Transaction Refund endpoint with real bankTxnId
+    const targetId = bankTxnId || pidx
+    if (targetId) {
+      const merchantUrl = `${baseUrl}/api/merchant-transaction/${targetId}/refund/`
+      const merchantPayload: any = {}
+      if (amountInRs !== undefined && amountInRs > 0) {
+        merchantPayload.amount = amountInPaisa
+      }
+      if (mobile?.trim()) {
+        merchantPayload.mobile = mobile.trim()
+      }
+
+      console.log(`[KHALTI REFUND] Attempting merchant transaction refund for ${transactionId}, Target ID: ${targetId}, URL: ${merchantUrl}, Payload:`, merchantPayload)
+
+      try {
+        const resp = await fetch(merchantUrl, {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(merchantPayload)
+        })
+        const text = await resp.text()
+        try { refundResponseData = JSON.parse(text) } catch {}
+
+        if (resp.ok && (resp.status === 200 || resp.status === 201 || refundResponseData.status === "Completed" || refundResponseData.refund_id)) {
+          refundSuccess = true
+        } else {
+          lastError = refundResponseData.detail || refundResponseData.message || text || `API status ${resp.status}`
+        }
+      } catch (e: any) {
+        lastError = e.message
+      }
+    }
+
+    // Strategy 2: Try v2 ePayment Refund endpoint if Strategy 1 failed and pidx exists
+    if (!refundSuccess && pidx) {
+      const v2Url = `${baseUrl}/api/v2/epayment/refund/`
+      const v2Payload: any = { pidx }
+      if (amountInRs !== undefined && amountInRs > 0) {
+        v2Payload.amount = amountInPaisa
+      }
+
+      console.log(`[KHALTI REFUND] Attempting v2 epayment refund for ${transactionId}, URL: ${v2Url}, Payload:`, v2Payload)
+
+      try {
+        const resp = await fetch(v2Url, {
+          method: "POST",
+          headers: {
+            "Authorization": authHeader,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(v2Payload)
+        })
+        const text = await resp.text()
+        try { refundResponseData = JSON.parse(text) } catch {}
+
+        if (resp.ok && (resp.status === 200 || resp.status === 201 || refundResponseData.status === "Completed" || refundResponseData.refund_id)) {
+          refundSuccess = true
+        } else {
+          lastError = refundResponseData.detail || refundResponseData.message || text || `API status ${resp.status}`
+        }
+      } catch (e: any) {
+        lastError = e.message
+      }
+    }
+
+    console.log(`[KHALTI REFUND RESULT] Success: ${refundSuccess}, Body:`, refundResponseData)
+
+    if (!refundSuccess) {
+      return { 
+        error: refundResponseData.detail || refundResponseData.message || lastError || "Khalti Refund failed" 
+      }
+    }
+
+    // 4. Refund Succeeded! Update Database
+    const refundRemark = amountInRs
+      ? `Khalti Refunded (Partial): Rs. ${amountInRs}`
+      : `Khalti Refunded (Full): Rs. ${txn.price}`
+
+    await serviceSupabase
+      .from("transactions")
+      .update({
+        status: "Refunded",
+        failure_remarks: refundRemark,
+        updated_at: new Date().toISOString()
+      } as any)
+      .eq("transaction_id", transactionId)
+
+    // Notify user if registered
+    if (txn.user_id) {
+      await insertNotificationAction(
+        "Order Refunded 🟣",
+        `Your order ${transactionId} for ${txn.product_name} has been refunded via Khalti (${refundRemark}).`,
+        "info",
+        txn.user_id
+      ).catch(() => {})
+    }
+
+    revalidatePath("/admin/dashboard/orders")
+    return { success: true, message: `Refund processed successfully: ${refundRemark}` }
+
+  } catch (error: any) {
+    console.error("Error in refundKhaltiTransactionAction:", error)
+    return { error: error.message || "An unexpected error occurred during refund" }
+  }
+}

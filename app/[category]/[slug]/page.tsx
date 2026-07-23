@@ -36,7 +36,7 @@ interface PaymentMethod {
   qr_url: string | null
   instructions: string | null
   is_enabled: boolean
-  category?: "static" | "nepalpay" | "fonepay"
+  category?: "static" | "nepalpay" | "fonepay" | "khalti"
 }
 
 
@@ -192,7 +192,7 @@ export default function ProductDetailPage() {
 
     try {
       // Add transaction and keep it as "Processing" - no status updates
-      const transactionId = await addTransaction({
+      const { transactionId, paymentUrl } = await addTransaction({
         product: `${giftCard.name}`,
         amount: selectedDenom?.label || selectedDenomination,
         price: `${selectedDenom?.price}`,
@@ -217,6 +217,18 @@ export default function ProductDetailPage() {
       }
 
       // Order placed email is sent server-side (non-blocking) during transaction creation.
+
+      // Khalti uses redirect-based flow (not QR) — handle it first
+      if (selectedPaymentMethod?.category === "khalti") {
+        if (paymentUrl) {
+          toast.info("Redirecting to Khalti...")
+          window.location.href = paymentUrl
+        } else {
+          toast.error("Failed to initiate Khalti payment. Please try again.")
+          setIsProcessing(false)
+        }
+        return
+      }
 
       const isAutomatedGateway = selectedPaymentMethod?.category === "nepalpay" || selectedPaymentMethod?.category === "fonepay"
 
@@ -843,7 +855,7 @@ export default function ProductDetailPage() {
 
               <Button
                 onClick={() => {
-                  const isAutomatedGateway = selectedPaymentMethod?.category === "nepalpay" || selectedPaymentMethod?.category === "fonepay"
+                  const isAutomatedGateway = selectedPaymentMethod?.category === "nepalpay" || selectedPaymentMethod?.category === "fonepay" || selectedPaymentMethod?.category === "khalti"
                   if (isAutomatedGateway) {
                     handlePurchase()
                   } else {
