@@ -55,13 +55,14 @@ export async function POST(req: Request) {
 
     const supabase = createServiceRoleClient()
 
-    if (event === "QR_SCANNED") {
-      console.log(`[FONEPAY-WS] Marking ${transactionId} as Processing (QR Scanned)...`)
+    // Handle intermediate QR_SCANNED event from WebSocket
+    if (event === "QR_SCANNED" || event === "SCANNED") {
+      console.log(`[FONEPAY-WS] 📷 QR SCANNED event for ${transactionId}`)
       await supabase.from("transactions").update({
         status: "Processing",
-        failure_remarks: "QR Scanned (Payment Verifying...)"
+        failure_remarks: "QR Scanned"
       } as any).eq("transaction_id", transactionId)
-      return NextResponse.json({ success: true, message: "Marked as Processing" }, { status: 200 })
+      return NextResponse.json({ success: true, message: "QR Scanned status updated" }, { status: 200 })
     }
 
     console.log(`[FONEPAY-WS] Received VERIFIED for ${transactionId}`)

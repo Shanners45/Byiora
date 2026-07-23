@@ -4,7 +4,6 @@ import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +40,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   const [isCompleted, setIsCompleted] = useState(false)
   const [isExpired, setIsExpired] = useState(false)
   const [isCancelled, setIsCancelled] = useState(false)
+  const [isQrScanned, setIsQrScanned] = useState(false)
   const [isNewlyExpired, setIsNewlyExpired] = useState(false)
   const [overlayType, setOverlayType] = useState<"success" | "cancelled" | "failed" | null>(null)
 
@@ -49,7 +49,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   const [phoneNumber, setPhoneNumber] = useState("")
   const [isPhoneVerifying, setIsPhoneVerifying] = useState(false)
   const [captchaToken, setCaptchaToken] = useState("")
-  const [isScanned, setIsScanned] = useState(false)
 
   const pollInterval = useRef<NodeJS.Timeout | null>(null)
   const timerInterval = useRef<NodeJS.Timeout | null>(null)
@@ -86,32 +85,32 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       }
 
       const res = await getOrGenerateQRAction(transaction_id)
-      if (res.price || res.product || res.productName) {
-        setQrData(res)
-      }
       if (res.success) {
+        setQrData(res)
         setTimeLeft(res.expiresIn || 0)
 
-        // Save to localStorage for persistence (covers static & dynamic so users
-        // returning to the same /checkout/[transaction_id] URL during the active
-        // 5-minute window get the original QR + remaining time restored).
         const expiresAt = Math.floor(Date.now() / 1000) + (res.expiresIn || 5 * 60)
         localStorage.setItem(`qr_${transaction_id}`, JSON.stringify({ ...res, expiresAt }))
 
-        if (res.status === "Completed") {
+        if (res.status === "Completed" || res.status === "Paid") {
           setIsCompleted(true)
+        } else if (res.status === "Cancelled") {
+          setIsCancelled(true)
+          setOverlayType("cancelled")
+        } else if (res.status === "Processing" || (res as any).failureRemarks === "QR Scanned") {
+          setIsQrScanned(true)
         }
       } else {
         if (res.status === "Completed" || res.status === "Paid") {
           setIsCompleted(true)
-        } else if (res.status === "Cancelled" || res.error?.includes("cancelled")) {
+        } else if (res.status === "Cancelled") {
           setIsCancelled(true)
           setOverlayType("cancelled")
-        } else if (res.status === "Payment Failed" || res.error?.includes("expired")) {
+        } else if (res.status === "Payment Failed") {
           setIsExpired(true)
           setQrData(res)
         } else {
-          setError(res.error || "Checkout unavailable")
+          setError("Checkout unavailable")
         }
       }
     } catch (err: any) {
@@ -175,9 +174,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   }, [isExpired, qrData, transaction_id, isCancelled, isNewlyExpired])
 
   // Background Polling replaced by Supabase Realtime
-  // Real-time status listener via Supabase WebSocket channel (Pure WebSocket - No HTTP Polling)
   useEffect(() => {
-    if (isCompleted || isExpired || error || isCancelled) return
+    if (!qrData || isCompleted || isExpired || error || qrData.isStatic || isCancelled) return
 
     const supabase = createClient()
     const channel = supabase
@@ -192,8 +190,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
         const remarks = payload.new.failure_remarks
         if (newStatus === 'Completed' || newStatus === 'Paid') {
           setIsCompleted(true)
-        } else if (newStatus === 'Processing' || (remarks && remarks.includes("Scanned"))) {
-          setIsScanned(true)
+        } else if (newStatus === 'Processing' || remarks === 'QR Scanned') {
+          setIsQrScanned(true)
+        } else if (newStatus === 'Cancelled') {
+          setIsCancelled(true)
+          setOverlayType("cancelled")
         } else if (newStatus === 'Payment Failed') {
           setIsNewlyExpired(true)
           setIsExpired(true)
@@ -202,7 +203,45 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [isCompleted, isExpired, error, transaction_id, isCancelled])
+  }, [qrData, isCompleted, isExpired, error, transaction_id, isCancelled])
+
+  // Static-QR polling — checks DB status every 5s for up to 5 minutes
+  // (admin manually flips status from Processing -> Completed/Failed).
+  useEffect(() => {
+    if (!qrData?.isStatic || isCompleted || isExpired || error || isCancelled) return
+
+    let elapsed = 0
+    let isMounted = true
+    const max = 5 * 60 * 1000 // 5 minutes
+    const interval = setInterval(async () => {
+      if (!isMounted) return
+      elapsed += 5000
+      try {
+        const res = await fetch(`/api/transaction-status?id=${transaction_id}`, { cache: "no-store" })
+        if (res.ok) {
+          const data = await res.json()
+          if (data.status === "Completed" || data.status === "Paid") {
+            if (isMounted) setIsCompleted(true)
+            clearInterval(interval)
+            return
+          }
+          if (data.status === "Failed" || data.status === "Payment Failed") {
+            if (isMounted) setIsExpired(true)
+            clearInterval(interval)
+            return
+          }
+        }
+      } catch (e) {
+        // Swallow transient network errors; keep polling until elapsed >= max.
+      }
+      if (elapsed >= max) clearInterval(interval)
+    }, 5000)
+
+    return () => {
+      isMounted = false
+      clearInterval(interval)
+    }
+  }, [qrData, isCompleted, isExpired, error, transaction_id, isCancelled])
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
@@ -483,16 +522,16 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                   <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-gray-600 text-sm">Product</span>
-                      <span className="font-semibold text-gray-900 text-right">{qrData?.product || qrData?.productName || "Game Top-up"}</span>
+                      <span className="font-semibold text-gray-900 text-right">{qrData?.product || "Game Top-up"}</span>
                     </div>
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-gray-600 text-sm">Denomination</span>
-                      <span className="font-semibold text-gray-900 text-right">{qrData?.denomination || qrData?.amount || "-"}</span>
+                      <span className="font-semibold text-gray-900 text-right">{qrData?.denomination || "-"}</span>
                     </div>
                     <div className="w-full h-px bg-gray-200 my-4"></div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600 text-sm">Total Amount</span>
-                      <span className="font-bold text-xl text-[#6B3FA0]">NPR {qrData?.price || qrData?.amountToPay || "0"}</span>
+                      <span className="font-bold text-xl text-[#6B3FA0]">NPR {qrData?.price || "0"}</span>
                     </div>
                   </div>
                 </div>
@@ -609,18 +648,17 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
             {/* LEFT COLUMN: QR CODE */}
             <div className="flex flex-col items-center justify-center w-full">
               <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-200 relative w-full max-w-[320px] flex flex-col justify-center items-center overflow-hidden">
-                {isScanned && (
-                  <div className="absolute inset-0 bg-white/90 backdrop-blur-md z-20 flex flex-col items-center justify-center rounded-2xl p-6 text-center animate-in fade-in duration-200">
-                    <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">
+                {/* QR Scanned Blur Overlay */}
+                {isQrScanned && !isCompleted && (
+                  <div className="absolute inset-0 bg-white/85 backdrop-blur-md z-20 flex flex-col items-center justify-center rounded-2xl p-6 text-center shadow-lg border border-purple-100 animate-in fade-in duration-300">
+                    <span className="text-xl font-bold text-gray-900 tracking-tight mb-3">
                       QR Scanned
-                    </h3>
-                    <p className="text-xs text-gray-500 font-medium mt-1 mb-3">
-                      Verifying payment...
-                    </p>
-                    <RefreshCw className="h-8 w-8 text-[#7E3AF2] animate-spin" />
+                    </span>
+                    <div className="relative flex items-center justify-center mt-1">
+                      <RefreshCw className="h-7 w-7 text-[#7E3AF2] animate-spin" />
+                    </div>
                   </div>
                 )}
-
                 {timeLeft === 0 && !qrData.isStatic && (
                   <div className="absolute inset-0 bg-white/90 backdrop-blur-md z-10 flex flex-col items-center justify-center rounded-xl">
                     <AlertCircle className="h-10 w-10 text-amber-500 mb-3" />

@@ -85,9 +85,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
         error: "Transaction is already completed", 
         status: "Completed", 
         isGuest: !txn.user_id,
-        product: txn.product_name,
         productName: txn.product_name,
-        denomination: txn.amount,
         amount: txn.amount,
         price: txn.price
       }
@@ -100,9 +98,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
         error: `Transaction is ${currentStatus.toLowerCase()}`, 
         status: currentStatus, 
         isGuest: !txn.user_id,
-        product: txn.product_name,
         productName: txn.product_name,
-        denomination: txn.amount,
         amount: txn.amount,
         price: txn.price
       }
@@ -183,9 +179,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
         error: "Payment session expired", 
         status: "Payment Failed", 
         isGuest: !txn.user_id,
-        product: txn.product_name,
         productName: txn.product_name,
-        denomination: txn.amount,
         amount: txn.amount,
         price: txn.price
       }

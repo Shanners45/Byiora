@@ -752,49 +752,32 @@ function startFonepayWebSocket(wsUrl, transactionId, traceId) {
             console.log(`[FONEPAY WS MESSAGE] ${transactionId}:`, event.data);
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                const txnStatus = data?.transactionStatus || {};
-
-                const isScanned = data && (
-                    txnStatus.qrVerified === true ||
-                    txnStatus.message === "VERIFIED" ||
-                    data.event === "QR_SCANNED"
-                );
-
-                const isPaid = data && (
-                    data.status === "SUCCESS" || 
-                    data.event === "PAID" || 
-                    data.event === "SUCCESS" || 
-                    data.statusCode === "200" ||
-                    data.paymentStatus === "SUCCESS" ||
-                    data.responseCode === "0" ||
-                    txnStatus.status === "SUCCESS"
-                );
-
-                const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-                const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-                // 1. If QR is scanned, update Supabase DB directly so Supabase Realtime notifies frontend instantly
-                if (isScanned && !isPaid && supabaseUrl && supabaseKey) {
-                    console.log(`📱 [SUPABASE REALTIME PUSH] QR Scanned for ${transactionId}! Updating DB...`);
-                    const patchUrl = `${supabaseUrl}/rest/v1/transactions?transaction_id=eq.${transactionId}`;
-                    const patchArgs = [
-                        '-s', '-X', 'PATCH', patchUrl,
-                        '-H', `apikey: ${supabaseKey}`,
-                        '-H', `Authorization: Bearer ${supabaseKey}`,
-                        '-H', 'Content-Type: application/json',
-                        '-H', 'Prefer: return=minimal',
-                        '-d', JSON.stringify({ status: "Processing", failure_remarks: "QR Scanned (Payment Verifying...)" })
-                    ];
-                    execFilePromise('curl', patchArgs).catch(err => console.error("[SUPABASE PUSH ERR]", err.message));
+                
+                let innerStatus = {};
+                if (data.transactionStatus) {
+                    try {
+                        innerStatus = typeof data.transactionStatus === 'string' ? JSON.parse(data.transactionStatus) : data.transactionStatus;
+                    } catch (e) {}
                 }
 
-                // 2. If payment is completed, notify webhook
-                if (isPaid) {
+                const isQrVerified = innerStatus.qrVerified === true || innerStatus.message === "VERIFIED" || data.event === "QR_SCANNED";
+                const isPaid = (innerStatus.success === true && (innerStatus.message === "SUCCESS" || innerStatus.message === "PAID")) || data.status === "SUCCESS" || data.event === "PAID";
+
+                const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+                const targetUrl = `${siteUrl}/api/webhooks/fonepay-ws`;
+                const secret = process.env.INTERNAL_API_SECRET || "byiora-internal-secret-2026-key";
+
+                if (isQrVerified && !isPaid) {
+                    console.log(`📷 [FONEPAY WS] QR SCANNED DETECTED for ${transactionId}!`);
+                    const args = [
+                        '-s', '-X', 'POST', targetUrl,
+                        '-H', 'Content-Type: application/json',
+                        '-H', `x-internal-secret: ${secret}`,
+                        '-d', JSON.stringify({ transactionId, validationTraceId: traceId, provider: "fonepay", event: "QR_SCANNED" })
+                    ];
+                    execFilePromise('curl', args).catch(err => console.error("[FONEPAY WS HOOK ERR]", err.message));
+                } else if (isPaid) {
                     console.log(`🎉 [FONEPAY WS] PAYMENT CONFIRMED for ${transactionId}! Notifying web app...`);
-                    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-                    const targetUrl = `${siteUrl}/api/webhooks/fonepay-ws`;
-                    const secret = process.env.INTERNAL_API_SECRET || "byiora-internal-secret-2026-key";
-                    
                     const args = [
                         '-s', '-X', 'POST', targetUrl,
                         '-H', 'Content-Type: application/json',
