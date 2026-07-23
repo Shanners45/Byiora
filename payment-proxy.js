@@ -752,15 +752,43 @@ function startFonepayWebSocket(wsUrl, transactionId, traceId) {
             console.log(`[FONEPAY WS MESSAGE] ${transactionId}:`, event.data);
             try {
                 const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                const txnStatus = data?.transactionStatus || {};
+
+                const isScanned = data && (
+                    txnStatus.qrVerified === true ||
+                    txnStatus.message === "VERIFIED" ||
+                    data.event === "QR_SCANNED"
+                );
+
                 const isPaid = data && (
                     data.status === "SUCCESS" || 
                     data.event === "PAID" || 
                     data.event === "SUCCESS" || 
                     data.statusCode === "200" ||
                     data.paymentStatus === "SUCCESS" ||
-                    data.responseCode === "0"
+                    data.responseCode === "0" ||
+                    txnStatus.status === "SUCCESS"
                 );
 
+                const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+                const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+                // 1. If QR is scanned, update Supabase DB directly so Supabase Realtime notifies frontend instantly
+                if (isScanned && !isPaid && supabaseUrl && supabaseKey) {
+                    console.log(`📱 [SUPABASE REALTIME PUSH] QR Scanned for ${transactionId}! Updating DB...`);
+                    const patchUrl = `${supabaseUrl}/rest/v1/transactions?transaction_id=eq.${transactionId}`;
+                    const patchArgs = [
+                        '-s', '-X', 'PATCH', patchUrl,
+                        '-H', `apikey: ${supabaseKey}`,
+                        '-H', `Authorization: Bearer ${supabaseKey}`,
+                        '-H', 'Content-Type: application/json',
+                        '-H', 'Prefer: return=minimal',
+                        '-d', JSON.stringify({ status: "Processing", failure_remarks: "QR Scanned (Payment Verifying...)" })
+                    ];
+                    execFilePromise('curl', patchArgs).catch(err => console.error("[SUPABASE PUSH ERR]", err.message));
+                }
+
+                // 2. If payment is completed, notify webhook
                 if (isPaid) {
                     console.log(`🎉 [FONEPAY WS] PAYMENT CONFIRMED for ${transactionId}! Notifying web app...`);
                     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';

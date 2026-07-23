@@ -57,7 +57,7 @@ export default function CheckoutOverlay({ type, onComplete, delayMs = 2800 }: Ch
         .then(r => r.json())
         .then(setAnimData)
         .catch(() => {})
-    } else if (type === "failed") {
+    } else if (type === "failed" || type === "cancelled") {
       fetch("/animations/payment-failed.json")
         .then(r => r.json())
         .then(setAnimData)

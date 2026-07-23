@@ -104,11 +104,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       } else {
         if (res.status === "Completed" || res.status === "Paid") {
           setIsCompleted(true)
-        } else if (res.status === "Payment Failed") {
+        } else if (res.status === "Cancelled" || res.error?.includes("cancelled")) {
+          setIsCancelled(true)
+          setOverlayType("cancelled")
+        } else if (res.status === "Payment Failed" || res.error?.includes("expired")) {
           setIsExpired(true)
           setQrData(res)
         } else {
-          setError("Checkout unavailable")
+          setError(res.error || "Checkout unavailable")
         }
       }
     } catch (err: any) {
@@ -172,7 +175,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   }, [isExpired, qrData, transaction_id, isCancelled, isNewlyExpired])
 
   // Background Polling replaced by Supabase Realtime
-  // Real-time status listener via Supabase WebSocket channel
+  // Real-time status listener via Supabase WebSocket channel (Pure WebSocket - No HTTP Polling)
   useEffect(() => {
     if (isCompleted || isExpired || error || isCancelled) return
 
@@ -200,46 +203,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
     return () => { supabase.removeChannel(channel) }
   }, [isCompleted, isExpired, error, transaction_id, isCancelled])
-
-  // Polling fallback — secondary safety net checking DB status every 10s
-  useEffect(() => {
-    if (isCompleted || isExpired || error || isCancelled) return
-
-    let elapsed = 0
-    let isMounted = true
-    const max = 5 * 60 * 1000 // 5 minutes
-    const interval = setInterval(async () => {
-      if (!isMounted) return
-      elapsed += 10000
-      try {
-        const res = await fetch(`/api/transaction-status?id=${transaction_id}`, { cache: "no-store" })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.status === "Completed" || data.status === "Paid") {
-            if (isMounted) setIsCompleted(true)
-            clearInterval(interval)
-            return
-          }
-          if (data.status === "Processing" || (data.failure_remarks && data.failure_remarks.includes("Scanned"))) {
-            if (isMounted) setIsScanned(true)
-          }
-          if (data.status === "Failed" || data.status === "Payment Failed") {
-            if (isMounted) setIsExpired(true)
-            clearInterval(interval)
-            return
-          }
-        }
-      } catch (e) {
-        // Swallow transient network errors
-      }
-      if (elapsed >= max) clearInterval(interval)
-    }, 10000)
-
-    return () => {
-      isMounted = false
-      clearInterval(interval)
-    }
-  }, [qrData, isCompleted, isExpired, error, transaction_id, isCancelled])
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60)
