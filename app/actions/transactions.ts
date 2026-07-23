@@ -69,18 +69,19 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     }
     
     // Find matching denomination and set verified price
-    let matchedDenom = denominations?.find(
-      (d: any) =>
-        (d.label && transactionData.amount && d.label.toLowerCase() === transactionData.amount.toLowerCase()) ||
-        (d.id && d.id === transactionData.amount) ||
-        (d.price !== undefined && String(d.price) === String(transactionData.price))
+    let matchedDenom = denominations?.find((d: any) =>
+      d.label && transactionData.amount && d.label.trim().toLowerCase() === transactionData.amount.trim().toLowerCase()
+    ) || denominations?.find((d: any) =>
+      d.id && transactionData.amount && String(d.id) === String(transactionData.amount)
+    ) || denominations?.find((d: any) =>
+      d.price !== undefined && transactionData.price && String(d.price).replace(/,/g, '') === String(transactionData.price).replace(/,/g, '')
     )
 
     let verifiedPrice = "0"
     if (matchedDenom && matchedDenom.price !== undefined && matchedDenom.price !== null) {
-      verifiedPrice = matchedDenom.price.toString()
-    } else if (transactionData.price && !isNaN(parseFloat(transactionData.price))) {
-      verifiedPrice = transactionData.price.toString()
+      verifiedPrice = String(matchedDenom.price).replace(/,/g, '')
+    } else if (transactionData.price && !isNaN(parseFloat(String(transactionData.price).replace(/,/g, '')))) {
+      verifiedPrice = String(transactionData.price).replace(/,/g, '')
     } else {
       return { success: false, error: "Invalid product denomination or price." }
     }

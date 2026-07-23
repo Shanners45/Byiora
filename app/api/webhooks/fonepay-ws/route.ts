@@ -47,15 +47,24 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { transactionId, validationTraceId, provider } = body
+    const { transactionId, validationTraceId, provider, event } = body
 
     if (!transactionId) {
       return NextResponse.json({ error: "Missing transactionId" }, { status: 400 })
     }
 
-    console.log(`[FONEPAY-WS] Received VERIFIED for ${transactionId}`)
-
     const supabase = createServiceRoleClient()
+
+    if (event === "QR_SCANNED") {
+      console.log(`[FONEPAY-WS] Marking ${transactionId} as Processing (QR Scanned)...`)
+      await supabase.from("transactions").update({
+        status: "Processing",
+        failure_remarks: "QR Scanned (Payment Verifying...)"
+      } as any).eq("transaction_id", transactionId)
+      return NextResponse.json({ success: true, message: "Marked as Processing" }, { status: 200 })
+    }
+
+    console.log(`[FONEPAY-WS] Received VERIFIED for ${transactionId}`)
 
     // 1. Fetch transaction
     const { data: _txn, error: txnError } = await supabase

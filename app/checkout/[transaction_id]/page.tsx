@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,6 +49,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   const [phoneNumber, setPhoneNumber] = useState("")
   const [isPhoneVerifying, setIsPhoneVerifying] = useState(false)
   const [captchaToken, setCaptchaToken] = useState("")
+  const [isScanned, setIsScanned] = useState(false)
 
   const pollInterval = useRef<NodeJS.Timeout | null>(null)
   const timerInterval = useRef<NodeJS.Timeout | null>(null)
@@ -84,8 +86,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       }
 
       const res = await getOrGenerateQRAction(transaction_id)
-      if (res.success) {
+      if (res.price || res.product || res.productName) {
         setQrData(res)
+      }
+      if (res.success) {
         setTimeLeft(res.expiresIn || 0)
 
         // Save to localStorage for persistence (covers static & dynamic so users
@@ -168,8 +172,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   }, [isExpired, qrData, transaction_id, isCancelled, isNewlyExpired])
 
   // Background Polling replaced by Supabase Realtime
+  // Real-time status listener via Supabase WebSocket channel
   useEffect(() => {
-    if (!qrData || isCompleted || isExpired || error || qrData.isStatic || isCancelled) return
+    if (isCompleted || isExpired || error || isCancelled) return
 
     const supabase = createClient()
     const channel = supabase
@@ -181,8 +186,11 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
         filter: `transaction_id=eq.${transaction_id}`
       }, (payload) => {
         const newStatus = payload.new.status
+        const remarks = payload.new.failure_remarks
         if (newStatus === 'Completed' || newStatus === 'Paid') {
           setIsCompleted(true)
+        } else if (newStatus === 'Processing' || (remarks && remarks.includes("Scanned"))) {
+          setIsScanned(true)
         } else if (newStatus === 'Payment Failed') {
           setIsNewlyExpired(true)
           setIsExpired(true)
@@ -191,19 +199,18 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [qrData, isCompleted, isExpired, error, transaction_id, isCancelled])
+  }, [isCompleted, isExpired, error, transaction_id, isCancelled])
 
-  // Static-QR polling — checks DB status every 5s for up to 5 minutes
-  // (admin manually flips status from Processing -> Completed/Failed).
+  // Polling fallback — secondary safety net checking DB status every 10s
   useEffect(() => {
-    if (!qrData?.isStatic || isCompleted || isExpired || error || isCancelled) return
+    if (isCompleted || isExpired || error || isCancelled) return
 
     let elapsed = 0
     let isMounted = true
     const max = 5 * 60 * 1000 // 5 minutes
     const interval = setInterval(async () => {
       if (!isMounted) return
-      elapsed += 5000
+      elapsed += 10000
       try {
         const res = await fetch(`/api/transaction-status?id=${transaction_id}`, { cache: "no-store" })
         if (res.ok) {
@@ -213,6 +220,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
             clearInterval(interval)
             return
           }
+          if (data.status === "Processing" || (data.failure_remarks && data.failure_remarks.includes("Scanned"))) {
+            if (isMounted) setIsScanned(true)
+          }
           if (data.status === "Failed" || data.status === "Payment Failed") {
             if (isMounted) setIsExpired(true)
             clearInterval(interval)
@@ -220,10 +230,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
           }
         }
       } catch (e) {
-        // Swallow transient network errors; keep polling until elapsed >= max.
+        // Swallow transient network errors
       }
       if (elapsed >= max) clearInterval(interval)
-    }, 5000)
+    }, 10000)
 
     return () => {
       isMounted = false
@@ -510,16 +520,16 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                   <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-gray-600 text-sm">Product</span>
-                      <span className="font-semibold text-gray-900 text-right">{qrData?.product || "Game Top-up"}</span>
+                      <span className="font-semibold text-gray-900 text-right">{qrData?.product || qrData?.productName || "Game Top-up"}</span>
                     </div>
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-gray-600 text-sm">Denomination</span>
-                      <span className="font-semibold text-gray-900 text-right">{qrData?.denomination || "-"}</span>
+                      <span className="font-semibold text-gray-900 text-right">{qrData?.denomination || qrData?.amount || "-"}</span>
                     </div>
                     <div className="w-full h-px bg-gray-200 my-4"></div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600 text-sm">Total Amount</span>
-                      <span className="font-bold text-xl text-[#6B3FA0]">NPR {qrData?.price || "0"}</span>
+                      <span className="font-bold text-xl text-[#6B3FA0]">NPR {qrData?.price || qrData?.amountToPay || "0"}</span>
                     </div>
                   </div>
                 </div>
@@ -635,7 +645,21 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-start">
             {/* LEFT COLUMN: QR CODE */}
             <div className="flex flex-col items-center justify-center w-full">
-              <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-200 relative w-full max-w-[320px] flex flex-col justify-center items-center">
+              <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-200 relative w-full max-w-[320px] flex flex-col justify-center items-center overflow-hidden">
+                {isScanned && (
+                  <div className="absolute inset-0 bg-white/85 backdrop-blur-md z-20 flex flex-col items-center justify-center rounded-2xl p-4 text-center animate-in fade-in duration-300">
+                    <div className="w-14 h-14 bg-purple-50 rounded-full flex items-center justify-center mb-3 border border-purple-100 shadow-md">
+                      <RefreshCw className="h-7 w-7 text-[#7E3AF2] animate-spin" />
+                    </div>
+                    <Badge className="bg-[#7E3AF2] text-white border-none font-semibold text-xs mb-1.5 px-3 py-1 shadow-sm">
+                      QR Code Scanned!
+                    </Badge>
+                    <p className="text-xs text-gray-600 font-medium max-w-[210px] mt-1 leading-relaxed">
+                      Payment detected. Verifying transaction with your bank...
+                    </p>
+                  </div>
+                )}
+
                 {timeLeft === 0 && !qrData.isStatic && (
                   <div className="absolute inset-0 bg-white/90 backdrop-blur-md z-10 flex flex-col items-center justify-center rounded-xl">
                     <AlertCircle className="h-10 w-10 text-amber-500 mb-3" />
