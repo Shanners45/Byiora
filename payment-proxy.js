@@ -732,6 +732,67 @@ async function handleFonepayVerifyTransaction(body, res) {
     }
 }
 
+/**
+ * Start WebSocket listener for Fonepay QR code scanning/payment events.
+ * Listens to Fonepay's WebSocket and posts to Byiora's fonepay-ws webhook upon payment.
+ */
+function startFonepayWebSocket(wsUrl, transactionId, traceId) {
+    if (!wsUrl) return;
+
+    try {
+        console.log(`[FONEPAY WS] Connecting to ${wsUrl} for transaction ${transactionId}...`);
+        const WebSocketClient = globalThis.WebSocket || require('ws');
+        const ws = new WebSocketClient(wsUrl);
+
+        ws.onopen = () => {
+            console.log(`[FONEPAY WS] Connected for ${transactionId}`);
+        };
+
+        ws.onmessage = async (event) => {
+            console.log(`[FONEPAY WS MESSAGE] ${transactionId}:`, event.data);
+            try {
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                const isPaid = data && (
+                    data.status === "SUCCESS" || 
+                    data.event === "PAID" || 
+                    data.event === "SUCCESS" || 
+                    data.statusCode === "200" ||
+                    data.paymentStatus === "SUCCESS" ||
+                    data.responseCode === "0"
+                );
+
+                if (isPaid) {
+                    console.log(`🎉 [FONEPAY WS] PAYMENT CONFIRMED for ${transactionId}! Notifying web app...`);
+                    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+                    const targetUrl = `${siteUrl}/api/webhooks/fonepay-ws`;
+                    const secret = process.env.INTERNAL_API_SECRET || "byiora-internal-secret-2026-key";
+                    
+                    const args = [
+                        '-s', '-X', 'POST', targetUrl,
+                        '-H', 'Content-Type: application/json',
+                        '-H', `x-internal-secret: ${secret}`,
+                        '-d', JSON.stringify({ transactionId, validationTraceId: traceId, provider: "fonepay" })
+                    ];
+                    execFilePromise('curl', args).catch(err => console.error("[FONEPAY WS HOOK ERR]", err.message));
+                    ws.close();
+                }
+            } catch (err) {
+                console.error(`[FONEPAY WS PARSE ERROR]`, err.message);
+            }
+        };
+
+        ws.onerror = (err) => {
+            console.error(`[FONEPAY WS ERROR] ${transactionId}:`, err.message || err);
+        };
+
+        ws.onclose = () => {
+            console.log(`[FONEPAY WS CLOSED] ${transactionId}`);
+        };
+    } catch (e) {
+        console.error(`[FONEPAY WS INIT ERROR]`, e.message);
+    }
+}
+
 // ── Route Table ──────────────────────────────────────────────────────────────
 // Maps URL paths to handler functions. Includes both new clean routes and
 // backward-compatible aliases so existing consumers keep working.

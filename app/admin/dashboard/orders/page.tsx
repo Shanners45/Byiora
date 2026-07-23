@@ -677,8 +677,11 @@ export default function OrdersPage() {
                           transaction.payment_method?.toLowerCase().includes("nepalpay") ||
                           transaction.payment_method?.toLowerCase().includes("fonepay") ||
                           transaction.payment_method?.toLowerCase().includes("khalti")
-
-                        const refundSubtext = transaction.status === "Refunded" && transaction.failure_remarks
+                        
+                        const isPartialRefund = transaction.status === "Refunded" && transaction.failure_remarks && (
+                          transaction.failure_remarks.toLowerCase().includes("partial")
+                        )
+                        const refundSubtext = isPartialRefund && transaction.failure_remarks
                           ? transaction.failure_remarks.replace("Khalti Refunded", "Refunded").replace("Refunded (Portal)", "Refunded")
                           : null
 
@@ -763,11 +766,28 @@ export default function OrdersPage() {
                         <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{getUIDForDisplay(transaction)}</span>
                       )}
                     </TableCell>
+                    <TableCell>
+                      {transaction.status === "Paid" && !transaction.giftcard_code && (
+                        <Button
+                          size="sm"
+                          onClick={() => handleSendGiftcardCode(transaction)}
+                          disabled={sendingCodeIds[transaction.id]}
+                          className="bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white h-8 text-xs font-semibold"
+                        >
+                          {sendingCodeIds[transaction.id] ? (
+                            <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          ) : (
+                            <Send className="h-3.5 w-3.5 mr-1" />
+                          )}
+                          Send Code
+                        </Button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {paginatedTransactions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={6} className="h-24 text-center text-[#4B5563]">
+                    <TableCell colSpan={8} className="h-24 text-center text-[#4B5563]">
                       {searchQuery || statusFilter !== "all"
                         ? "No transactions found matching your filters."
                         : "No transactions available."}
@@ -780,56 +800,30 @@ export default function OrdersPage() {
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6 pt-4 border-t border-gray-200">
-              <div className="text-sm text-[#4B5563]">
+            <div className="flex items-center justify-between pt-4 border-t border-gray-200 mt-4">
+              <p className="text-xs text-gray-500">
                 Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredTransactions.length)} of {filteredTransactions.length} orders
-              </div>
+              </p>
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                   disabled={currentPage === 1}
-                  className="border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
+                  className="h-8 text-xs border-gray-300"
                 >
                   <ChevronLeft className="h-4 w-4 mr-1" />
                   Previous
                 </Button>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter(page => page === 1 || page === totalPages || Math.abs(currentPage - page) <= 1)
-                    .reduce((acc: (number | string)[], page) => {
-                      if (acc.length > 0 && typeof acc[acc.length - 1] === "number" && (acc[acc.length - 1] as number) < page - 1) {
-                        acc.push("...");
-                      }
-                      acc.push(page);
-                      return acc;
-                    }, [])
-                    .map((page, index) => (
-                      page === "..." ? (
-                        <span key={`ellipsis-${index}`} className="px-2 text-gray-500 text-sm">...</span>
-                      ) : (
-                        <Button
-                          key={page}
-                          variant={currentPage === page ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => setCurrentPage(page as number)}
-                          className={currentPage === page
-                            ? "bg-[#6B3FA0] hover:bg-[#5A3586] text-white"
-                            : "border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
-                          }
-                        >
-                          {page}
-                        </Button>
-                      )
-                  ))}
-                </div>
+                <span className="text-xs text-gray-600 px-2 font-medium">
+                  Page {currentPage} of {totalPages}
+                </span>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                   disabled={currentPage === totalPages}
-                  className="border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
+                  className="h-8 text-xs border-gray-300"
                 >
                   Next
                   <ChevronRight className="h-4 w-4 ml-1" />
@@ -877,10 +871,10 @@ export default function OrdersPage() {
         </Dialog>
       )}
 
-      {/* Khalti Refund Dialog (Compact & Lightweight) */}
+      {/* Khalti Refund Dialog (Compact, Clean, White inputs, Hidden X button) */}
       {refundModal.open && refundModal.transaction && (
         <Dialog open={refundModal.open} onOpenChange={(open) => { if (!open) setRefundModal({ open: false, transaction: null }) }}>
-          <DialogContent className="sm:max-w-md p-0 overflow-hidden border border-purple-100 shadow-xl rounded-2xl bg-white" aria-describedby={undefined}>
+          <DialogContent className="sm:max-w-md p-0 overflow-hidden border border-purple-100 shadow-xl rounded-2xl bg-white [&>button]:hidden" aria-describedby={undefined}>
             {/* Header */}
             <div className="bg-[#5E2E87] px-5 py-4 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -894,7 +888,7 @@ export default function OrdersPage() {
               </Badge>
             </div>
 
-            <div className="p-5 space-y-4 text-sm">
+            <div className="p-5 space-y-4 text-sm bg-white">
               {/* Essential Summary Strip */}
               <div className="flex items-center justify-between bg-purple-50/70 p-3 rounded-xl border border-purple-100 text-xs">
                 <div>
@@ -920,7 +914,7 @@ export default function OrdersPage() {
                     placeholder={`Full Refund (Rs. ${refundModal.transaction.price})`}
                     value={refundAmount}
                     onChange={(e) => setRefundAmount(e.target.value)}
-                    className="pl-9 h-9 text-xs border-gray-200 focus:border-[#7E3AF2] focus:ring-1 focus:ring-[#7E3AF2] rounded-lg"
+                    className="pl-9 h-9 text-xs border-gray-200 bg-white text-gray-900 focus:border-[#7E3AF2] focus:ring-1 focus:ring-[#7E3AF2] rounded-lg shadow-none"
                   />
                 </div>
               </div>
@@ -933,7 +927,7 @@ export default function OrdersPage() {
                   placeholder="e.g. 98XXXXXXXX"
                   value={refundMobile}
                   onChange={(e) => setRefundMobile(e.target.value)}
-                  className="h-9 text-xs border-gray-200 focus:border-[#7E3AF2] focus:ring-1 focus:ring-[#7E3AF2] rounded-lg"
+                  className="h-9 text-xs border-gray-200 bg-white text-gray-900 focus:border-[#7E3AF2] focus:ring-1 focus:ring-[#7E3AF2] rounded-lg shadow-none"
                 />
               </div>
             </div>

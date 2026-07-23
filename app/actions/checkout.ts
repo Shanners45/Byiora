@@ -211,7 +211,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
     const proxyPayload: any = {
       username,
       password,
-      amount: parseInt(txn.price),
+      amount: Math.round(parseFloat(txn.price)),
       remarks: transactionId,
       transactionId: transactionId // Pass our internal ID so the proxy can identify the WS callback
     }

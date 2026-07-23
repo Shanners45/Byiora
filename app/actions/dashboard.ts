@@ -88,7 +88,7 @@ export async function getAllTransactionsAction() {
       return { error: `Failed to load transactions: ${error.message}` }
     }
 
-    const transactionsList = data || []
+    const transactionsList: any[] = data || []
 
     // Background auto-sync: Check if any Paid/Completed Khalti transactions were refunded via Khalti App/Portal
     const paidKhaltiTxns = transactionsList.filter(
