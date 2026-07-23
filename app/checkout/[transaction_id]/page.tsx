@@ -610,16 +610,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
             <div className="flex flex-col items-center justify-center w-full">
               <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-200 relative w-full max-w-[320px] flex flex-col justify-center items-center overflow-hidden">
                 {isScanned && (
-                  <div className="absolute inset-0 bg-white/85 backdrop-blur-md z-20 flex flex-col items-center justify-center rounded-2xl p-4 text-center animate-in fade-in duration-300">
-                    <div className="w-14 h-14 bg-purple-50 rounded-full flex items-center justify-center mb-3 border border-purple-100 shadow-md">
-                      <RefreshCw className="h-7 w-7 text-[#7E3AF2] animate-spin" />
-                    </div>
-                    <Badge className="bg-[#7E3AF2] text-white border-none font-semibold text-xs mb-1.5 px-3 py-1 shadow-sm">
-                      QR Code Scanned!
-                    </Badge>
-                    <p className="text-xs text-gray-600 font-medium max-w-[210px] mt-1 leading-relaxed">
-                      Payment detected. Verifying transaction with your bank...
+                  <div className="absolute inset-0 bg-white/90 backdrop-blur-md z-20 flex flex-col items-center justify-center rounded-2xl p-6 text-center animate-in fade-in duration-200">
+                    <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">
+                      QR Scanned
+                    </h3>
+                    <p className="text-xs text-gray-500 font-medium mt-1 mb-3">
+                      Verifying payment...
                     </p>
+                    <RefreshCw className="h-8 w-8 text-[#7E3AF2] animate-spin" />
                   </div>
                 )}
 
