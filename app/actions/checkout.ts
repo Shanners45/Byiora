@@ -88,7 +88,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
     }
 
     const currentStatus = txn.status as string;
-    if (["Failed", "Cancelled", "Payment Failed", "Archived", "Refunded"].includes(currentStatus)) {
+    if (["Failed", "Cancelled", "Payment Failed", "Refunded"].includes(currentStatus)) {
       return { 
         success: false, 
         error: `Transaction is ${currentStatus.toLowerCase()}`, 
@@ -289,8 +289,8 @@ export async function getOrGenerateQRAction(transactionId: string) {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
 
       // 7a. Background payment polling (retries every 15s, up to 10 times)
-      // Skip for Fonepay — the proxy's WebSocket handles real-time verification
-      if (paymentCategory !== "fonepay") {
+      // Runs for all dynamic QR payments (NepalPay & Fonepay) as a reliable polling fallback
+      if (paymentCategory !== "static" && proxyData.validationTraceId) {
         try {
           const webhookUrl = `${siteUrl}/api/webhooks/qstash`
           await fetch(`${process.env.QSTASH_URL}/v2/publish/${webhookUrl}`, {
@@ -307,12 +307,10 @@ export async function getOrGenerateQRAction(transactionId: string) {
               provider: paymentCategory
             })
           })
-          console.log(`[QSTASH] Scheduled background polling for ${transactionId}`)
+          console.log(`[QSTASH] Scheduled background polling for ${transactionId} (${paymentCategory})`)
         } catch (e) {
           console.error("Failed to schedule QStash polling:", e)
         }
-      } else {
-        console.log(`[FONEPAY] Skipping QStash polling for ${transactionId} — WebSocket handles verification`)
       }
 
       // 7b. Guaranteed expiry fallback — fires once after 6 minutes
@@ -487,11 +485,16 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
       return { success: false, error: "Transaction not found" }
     }
 
-    // Only allow verification on Payment Failed transactions
+    // Only allow verification on unpaid/pending/failed transactions within 24 hours
     if (txn.status === "Completed" || txn.status === "Paid") {
       return { success: true, alreadyCompleted: true }
     }
-    if ((txn.status as string) !== "Payment Failed") {
+    const createdAtTime = new Date(txn.created_at).getTime()
+    const isWithin24Hours = Date.now() - createdAtTime <= 24 * 60 * 60 * 1000
+    if (!isWithin24Hours) {
+      return { success: false, error: "Payment verification window (24 hours) has expired for this transaction." }
+    }
+    if (!["Payment Failed", "Payment Pending", "Processing"].includes(txn.status as string)) {
       return { success: false, error: "This transaction is no longer eligible for verification" }
     }
 
@@ -583,9 +586,9 @@ export async function expireTransactionAction(transactionId: string) {
   try {
     const supabase = createServiceRoleClient()
 
-    // Verify it is still pending before expiring
+    // Verify it is still in an unpaid state (Payment Pending or Processing for dynamic QR) before expiring
     const { data: txn } = await supabase.from("transactions").select("*").eq("transaction_id", transactionId).single()
-    if (!txn || (txn.status as string) !== "Payment Pending") {
+    if (!txn || !["Payment Pending", "Processing"].includes(txn.status as string) || (txn as any).payment_category === "static") {
       return { success: false }
     }
 

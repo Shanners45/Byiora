@@ -33,7 +33,7 @@ function decryptInventoryCodeSync(encryptedBlob: string): string | null {
  */
 export async function updateTransactionStatusAction(
   transactionId: string,
-  newStatus: "Completed" | "Failed" | "Processing" | "Archived" | "Refunded" | "Payment Pending" | "Paid" | "Payment Failed" | "Cancelled",
+  newStatus: "Completed" | "Failed" | "Processing" | "Refunded" | "Payment Pending" | "Paid" | "Payment Failed" | "Cancelled",
   remarks?: string
 ) {
   if (!(await verifyAdmin())) {

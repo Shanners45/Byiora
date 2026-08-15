@@ -10,7 +10,7 @@ type OverlayType = "success" | "cancelled" | "failed"
 interface CheckoutOverlayProps {
   type: OverlayType
   onComplete?: () => void
-  /** Delay in ms before calling onComplete. Default 2800ms. */
+  /** Delay in ms before calling onComplete. Default 3600ms. */
   delayMs?: number
 }
 
@@ -24,41 +24,36 @@ const OVERLAY_CONFIG: Record<OverlayType, {
 }> = {
   success: {
     title: "Payment Successful",
-    subtitle: "Redirecting you shortly…",
+    subtitle: "Fulfilling your order and redirecting…",
     accentColor: "#10b981",
-    bgGradient: "radial-gradient(ellipse at center, rgba(16, 185, 129, 0.08) 0%, transparent 70%)",
+    bgGradient: "radial-gradient(ellipse at center, rgba(16, 185, 129, 0.1) 0%, transparent 70%)",
     ringColor: "rgba(16, 185, 129, 0.15)",
   },
   cancelled: {
     title: "Order Cancelled",
-    subtitle: "Redirecting you shortly…",
+    subtitle: "Returning to store…",
     accentColor: "#7E3AF2",
-    bgGradient: "radial-gradient(ellipse at center, rgba(126, 58, 242, 0.08) 0%, transparent 70%)",
+    bgGradient: "radial-gradient(ellipse at center, rgba(126, 58, 242, 0.1) 0%, transparent 70%)",
     ringColor: "rgba(126, 58, 242, 0.15)",
   },
   failed: {
-    title: "Payment Failed",
-    subtitle: "Your session has expired",
+    title: "Payment Session Expired",
+    subtitle: "Taking you to transactions to verify or reorder…",
     accentColor: "#ef4444",
-    bgGradient: "radial-gradient(ellipse at center, rgba(239, 68, 68, 0.08) 0%, transparent 70%)",
+    bgGradient: "radial-gradient(ellipse at center, rgba(239, 68, 68, 0.1) 0%, transparent 70%)",
     ringColor: "rgba(239, 68, 68, 0.15)",
   },
 }
 
-export default function CheckoutOverlay({ type, onComplete, delayMs = 2800 }: CheckoutOverlayProps) {
+export default function CheckoutOverlay({ type, onComplete, delayMs = 3600 }: CheckoutOverlayProps) {
   const [animData, setAnimData] = useState<any>(null)
   const [showText, setShowText] = useState(false)
   const config = OVERLAY_CONFIG[type]
 
-  // Load lottie data
+  // Load lottie data for success
   useEffect(() => {
     if (type === "success") {
       fetch("/animations/payment-success.json")
-        .then(r => r.json())
-        .then(setAnimData)
-        .catch(() => {})
-    } else if (type === "failed") {
-      fetch("/animations/payment-failed.json")
         .then(r => r.json())
         .then(setAnimData)
         .catch(() => {})
@@ -67,7 +62,7 @@ export default function CheckoutOverlay({ type, onComplete, delayMs = 2800 }: Ch
 
   // Show text slightly after mount
   useEffect(() => {
-    const t = setTimeout(() => setShowText(true), 400)
+    const t = setTimeout(() => setShowText(true), 350)
     return () => clearTimeout(t)
   }, [])
 
@@ -80,11 +75,11 @@ export default function CheckoutOverlay({ type, onComplete, delayMs = 2800 }: Ch
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center px-4"
       style={{
-        background: "rgba(255,255,255,0.97)",
-        backdropFilter: "blur(20px)",
-        animation: "overlayFadeIn 0.4s ease-out",
+        background: "rgba(255,255,255,0.98)",
+        backdropFilter: "blur(24px)",
+        animation: "overlayFadeIn 0.35s ease-out",
       }}
     >
       {/* Subtle radial glow */}
@@ -98,29 +93,29 @@ export default function CheckoutOverlay({ type, onComplete, delayMs = 2800 }: Ch
         <div
           className="absolute rounded-full"
           style={{
-            width: 200,
-            height: 200,
+            width: 170,
+            height: 170,
             background: config.ringColor,
-            animation: "pulseRing 2s ease-out infinite",
+            animation: "pulseRing 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite",
           }}
         />
         <div
           className="absolute rounded-full"
           style={{
-            width: 160,
-            height: 160,
+            width: 130,
+            height: 130,
             background: config.ringColor,
-            animation: "pulseRing 2s ease-out 0.4s infinite",
+            animation: "pulseRing 2.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.5s infinite",
           }}
         />
 
         {/* Icon/Animation */}
-        <div className="relative z-10" style={{ width: 120, height: 120 }}>
-          {(type === "success" || type === "failed") && animData ? (
+        <div className="relative z-10 flex items-center justify-center" style={{ width: 100, height: 100 }}>
+          {type === "success" && animData ? (
             <Lottie
               animationData={animData}
               loop={false}
-              style={{ width: 120, height: 120, transform: "scale(2.2)" }}
+              style={{ width: 100, height: 100 }}
             />
           ) : type === "cancelled" ? (
             <CancelledIcon color={config.accentColor} />
@@ -132,11 +127,11 @@ export default function CheckoutOverlay({ type, onComplete, delayMs = 2800 }: Ch
 
       {/* Text */}
       <div
-        className="text-center relative z-10"
+        className="text-center relative z-10 max-w-sm"
         style={{
           opacity: showText ? 1 : 0,
-          transform: showText ? "translateY(0)" : "translateY(12px)",
-          transition: "all 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+          transform: showText ? "translateY(0)" : "translateY(10px)",
+          transition: "all 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
         <h2

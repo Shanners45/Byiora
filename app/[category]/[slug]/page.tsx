@@ -3,12 +3,11 @@
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Shield, HelpCircle, QrCode, Download } from "lucide-react"
+import { ArrowLeft, HelpCircle, QrCode, Download } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { toast } from "sonner"
 import {
@@ -58,8 +57,6 @@ export default function ProductDetailPage() {
   const [userId, setUserId] = useState("")
   const [selectedServer, setSelectedServer] = useState("")
   const [checkoutFieldValues, setCheckoutFieldValues] = useState<Record<string, string>>({})
-  const [marketingConsent, setMarketingConsent] = useState(false)
-  const [smsConsent, setSmsConsent] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
   const supabase = createClient()
   const [product, setProduct] = useState<any>(null)
@@ -270,8 +267,6 @@ export default function ProductDetailPage() {
         setSelectedServer("")
         if (!user) setEmail("") // Only reset email if not logged in
         setCheckoutFieldValues({})
-        setMarketingConsent(false)
-        setSmsConsent(false)
       }, 2000)
     } catch (error: any) {
       console.error("Error adding transaction:", error)

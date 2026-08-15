@@ -14,31 +14,42 @@ if (!PROXY_SECRET) {
  *    - If payment found → mark Completed, fulfill, send email.
  *    - If not found → mark Payment Failed.
  * 3. Discord alert for any suspicious expirations (had a validation_trace_id).
- * 
- * Also handles archiving: Move "Failed" orders older than 24h to "Archived".
  */
 export async function GET(req: Request) {
-  // Verify cron secret
+  // Verify cron secret (supports Authorization header, custom headers, or ?secret= URL param)
   const authHeader = req.headers.get("authorization")
-  const cronSecret = process.env.CRON_SECRET || process.env.INTERNAL_API_SECRET
+  const customHeader = req.headers.get("x-cron-secret") || req.headers.get("x-internal-secret")
+  const url = new URL(req.url)
+  const querySecret = url.searchParams.get("secret") || url.searchParams.get("key")
   
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  const cronSecret = process.env.CRON_SECRET || process.env.INTERNAL_API_SECRET
+  const internalSecret = process.env.INTERNAL_API_SECRET
+
+  const isAuthorized = 
+    (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
+    (internalSecret && authHeader === `Bearer ${internalSecret}`) ||
+    (cronSecret && customHeader === cronSecret) ||
+    (internalSecret && customHeader === internalSecret) ||
+    (cronSecret && querySecret === cronSecret) ||
+    (internalSecret && querySecret === internalSecret)
+  
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   const supabase = createServiceRoleClient()
-  const results = { expired: 0, recovered: 0, archived: 0, errors: 0 }
+  const results = { expired: 0, recovered: 0, errors: 0 }
 
   try {
     // ============================================
-    // PART 1: Expire stale "Payment Pending" orders (>5 min old)
+    // PART 1: Expire stale "Payment Pending" and dynamic "Processing" orders (>5 min old)
     // ============================================
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
 
     const { data: staleOrders, error: staleError } = await supabase
       .from("transactions")
       .select("*")
-      .eq("status" as any, "Payment Pending")
+      .in("status", ["Payment Pending", "Processing"])
       .lt("created_at", fiveMinAgo)
 
     if (staleError) {
@@ -47,6 +58,9 @@ export async function GET(req: Request) {
 
     for (const txn of (staleOrders || [])) {
       const typedTxn = txn as any
+
+      // Skip static processing orders — those are manual admin fulfillment
+      if (typedTxn.status === "Processing" && typedTxn.payment_category === "static") continue
 
       // Skip if it already has a bank_txn_id (payment was received)
       if (typedTxn.bank_txn_id) continue
@@ -190,64 +204,13 @@ export async function GET(req: Request) {
       results.expired++
     }
 
-    // ============================================
-    // PART 2: Archive dead orders older than 24 hours
-    // ============================================
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-
-    const { data: deadOrders, error: deadError } = await supabase
-      .from("transactions")
-      .select("transaction_id")
-      .in("status", ["Failed", "Payment Failed", "Cancelled"])
-      .lt("updated_at", twentyFourHoursAgo)
-
-    if (!deadError && deadOrders) {
-      for (const order of deadOrders) {
-        await supabase.from("transactions").update({
-          status: "Archived"
-        } as any).eq("transaction_id", order.transaction_id)
-        results.archived++
-      }
-    }
-
-    // ============================================
-    // PART 3: Alert for static orders stuck in Processing > 48 hours
-    // ============================================
-    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
-    const { data: stuckOrders, error: stuckError } = await supabase
-      .from("transactions")
-      .select("transaction_id, product_name, price, user_email, created_at")
-      .eq("status", "Processing")
-      .eq("payment_category", "static")
-      .lt("created_at", fortyEightHoursAgo)
-
-    if (!stuckError && stuckOrders && stuckOrders.length > 0 && process.env.DISCORD_WEBHOOK_URL) {
-      try {
-        await fetch(process.env.DISCORD_WEBHOOK_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            embeds: [{
-              title: "⏳ ORDERS STUCK IN PROCESSING",
-              color: 0xEAB308, // Yellow
-              description: `There are **${stuckOrders.length}** static order(s) waiting for manual fulfillment for over 48 hours!`,
-              fields: stuckOrders.slice(0, 5).map(txn => ({
-                name: `Order ID: ${txn.transaction_id}`,
-                value: `${txn.product_name} - Rs. ${txn.price} (${txn.user_email})`,
-                inline: false
-              })),
-              timestamp: new Date().toISOString()
-            }]
-          })
-        })
-      } catch (e) {}
-    }
-
-    console.log(`[CRON] Results: ${results.recovered} recovered, ${results.expired} expired, ${results.archived} archived, ${results.errors} errors`)
+    console.log(`[CRON] Results: ${results.recovered} recovered, ${results.expired} expired, ${results.errors} errors`)
 
     return NextResponse.json({
       success: true,
-      ...results,
+      recovered: results.recovered,
+      expired: results.expired,
+      errors: results.errors,
       timestamp: new Date().toISOString()
     })
 

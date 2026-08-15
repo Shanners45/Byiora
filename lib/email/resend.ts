@@ -139,43 +139,91 @@ export async function sendGiftcardCodeEmail(input: {
   email: string
   userName?: string
   productName: string
-  denomination: string
-  transactionId: string
-  price: string
-  paymentMethod: string
+  denomination?: string
+  transactionId?: string
+  price?: string
+  paymentMethod?: string
   giftcardCode: string
-  isGuest: boolean
+  isGuest?: boolean
+  subjectOverride?: string
 }) {
   const resend = getResend()
   const email = input.email.trim().toLowerCase()
-  const userName = sanitizeHtml(input.userName || "Customer")
+  const userName = sanitizeHtml(input.userName || "Valued Customer")
+  const productName = sanitizeHtml(input.productName || "Gift Card")
+  const denomination = sanitizeHtml(input.denomination || "")
+  const transactionId = sanitizeHtml(input.transactionId || "")
+  const price = sanitizeHtml(input.price || "")
+  const paymentMethod = sanitizeHtml(input.paymentMethod || "")
+  const giftcardCode = sanitizeHtml(input.giftcardCode || "")
   
   const htmlContent = `
-<div style="background-color: #f3f4f6; padding: 40px 20px; font-family: sans-serif;">
-  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-    <div style="background-color: #10B981; padding: 35px 40px; text-align: center;">
-      <h2 style="color: white; margin: 0;">Your Code is Ready!</h2>
+<div style="background-color: #f3f4f6; padding: 30px 15px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+
+    <div style="background-color: #5A3588; padding: 35px 40px; text-align: center;">
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
+      <p style="color: #EBE3F5; margin: 12px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Digital Code Delivery</p>
     </div>
-    <div style="padding: 40px; text-align: center;">
-      <p style="font-size: 16px; color: #4b5563;">Hi ${userName},</p>
-      <p style="font-size: 16px; color: #4b5563;">Thank you for your purchase of <strong>${input.productName} (${input.denomination})</strong>.</p>
-      <div style="margin: 30px 0; padding: 20px; background-color: #f8fafc; border: 2px dashed #10B981; border-radius: 8px;">
-        <p style="margin: 0; font-size: 14px; color: #64748b; text-transform: uppercase;">Your Gift Card Code</p>
-        <p style="margin: 10px 0 0 0; font-size: 24px; font-weight: bold; color: #0f172a; letter-spacing: 2px;">
-          ${sanitizeHtml(input.giftcardCode)}
-        </p>
+
+    <div style="text-align: center; padding: 30px 40px 10px;">
+      <div style="display: inline-block; background-color: #F4F0F9; border-radius: 50%; padding: 18px; margin-bottom: 15px;">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6B3FA0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+          <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
       </div>
-      <p style="font-size: 14px; color: #64748b;">Order ID: ${input.transactionId}</p>
-      <p style="font-size: 14px; color: #64748b;">Amount Paid: NPR ${input.price} via ${input.paymentMethod}</p>
+      <h2 style="color: #4A2A70; font-size: 22px; margin: 0;">Order Completed & Delivered!</h2>
     </div>
+
+    <div style="padding: 0 40px 35px;">
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; text-align: center; margin-bottom: 25px;">
+        Hi <strong>${userName}</strong>, thank you for your order! Your digital code for <strong>${productName} ${denomination}</strong> is ready to be activated.
+      </p>
+
+      <div style="background: linear-gradient(135deg, rgba(107, 63, 160, 0.05) 0%, rgba(77, 168, 218, 0.05) 100%); border: 2px dashed #6B3FA0; border-radius: 10px; padding: 25px; text-align: center; margin: 25px 0;">
+        <p style="margin: 0 0 10px 0; color: #6B3FA0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;">Your Activation Code / PIN</p>
+        <div style="font-family: 'Courier New', Courier, monospace; font-size: 26px; font-weight: 700; color: #1f2937; letter-spacing: 3px; word-break: break-all;">
+          ${giftcardCode}
+        </div>
+      </div>
+
+      <div style="margin: 25px 0; border-radius: 10px; overflow: hidden; border: 1px solid #e5e7eb;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 10px 16px; font-size: 13px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%;">Order ID</td>
+            <td style="padding: 10px 16px; font-size: 13px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-family: ui-monospace, monospace;">${transactionId || '—'}</td>
+          </tr>
+          ${price ? `
+          <tr>
+            <td style="padding: 10px 16px; font-size: 13px; color: #6b7280; font-weight: 600; background-color: #f9fafb; width: 35%;">Amount Paid</td>
+            <td style="padding: 10px 16px; font-size: 13px; color: #1f2937;">NPR ${price}${paymentMethod ? ` via ${paymentMethod}` : ''}</td>
+          </tr>` : ''}
+        </table>
+      </div>
+
+      <p style="color: #6b7280; font-size: 13px; line-height: 1.6; text-align: center; margin: 0 0 25px 0;">
+        For instructions on how to activate your ${productName}, please check the description section on the Byiora product page.
+      </p>
+
+      <div style="text-align: center;">
+         <a href="https://www.byiora.com.np" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Return to Store</a>
+      </div>
+    </div>
+
+    <div style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 20px; text-align: center;">
+      <p style="color: #4A2A70; font-size: 13px; margin: 0 0 8px 0;">Need help activating? <a href="https://www.byiora.com.np/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+      <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
+    </div>
+
   </div>
 </div>`
 
   return await resend.emails.send({
-    from: "Byiora <delivery@byiora.com.np>",
+    from: "Byiora <order-status@byiora.com.np>",
     replyTo: "support@byiora.com.np",
     to: [email],
-    subject: `Your Code: ${input.productName}`,
+    subject: input.subjectOverride || `Your ${productName} Giftcard Code from Byiora`,
     html: htmlContent,
   })
 }

@@ -200,7 +200,7 @@ export interface Database {
           product_name: string
           amount: string
           price: string
-          status: "Completed" | "Failed" | "Processing" | "Cancelled" | "Payment Pending" | "Paid" | "Payment Failed" | "Expired" | "Archived" | "Refunded"
+          status: "Completed" | "Failed" | "Processing" | "Cancelled" | "Payment Pending" | "Paid" | "Payment Failed" | "Expired" | "Refunded"
           payment_method: string
           transaction_id: string
           user_email: string
@@ -222,7 +222,7 @@ export interface Database {
           product_name: string
           amount: string
           price: string
-          status?: "Completed" | "Failed" | "Processing" | "Cancelled" | "Payment Pending" | "Paid" | "Payment Failed" | "Expired" | "Archived" | "Refunded"
+          status?: "Completed" | "Failed" | "Processing" | "Cancelled" | "Payment Pending" | "Paid" | "Payment Failed" | "Expired" | "Refunded"
           payment_method: string
           transaction_id: string
           user_email: string
@@ -244,7 +244,7 @@ export interface Database {
           product_name?: string
           amount?: string
           price?: string
-          status?: "Completed" | "Failed" | "Processing" | "Cancelled" | "Payment Pending" | "Paid" | "Payment Failed" | "Expired" | "Archived" | "Refunded"
+          status?: "Completed" | "Failed" | "Processing" | "Cancelled" | "Payment Pending" | "Paid" | "Payment Failed" | "Expired" | "Refunded"
           payment_method?: string
           transaction_id?: string
           user_email?: string

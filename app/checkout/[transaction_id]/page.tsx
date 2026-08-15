@@ -581,8 +581,9 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
             </p>
             <Button
               onClick={() => {
-                const returnUrl = typeof window !== 'undefined' ? localStorage.getItem(`returnUrl_${transaction_id}`) : null
-                router.push(returnUrl || "/")
+                const rawReturn = typeof window !== 'undefined' ? (localStorage.getItem(`returnUrl_${transaction_id}`) || localStorage.getItem("byiora_checkout_return")) : null
+                const target = (rawReturn && !rawReturn.includes("/checkout")) ? rawReturn : "/"
+                router.push(target)
               }}
               className="bg-[#6B3FA0] hover:bg-[#5A3588] text-white px-8 py-6 rounded-xl text-lg font-semibold shadow-lg shadow-purple-500/20 transition-all hover:-translate-y-1"
             >
@@ -746,7 +747,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                   >
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-16 h-16 rounded-full bg-[#7E3AF2]/10 flex items-center justify-center shadow-inner">
-                        <Smartphone className="h-8 w-8 text-[#7E3AF2] animate-bounce" />
+                        <Smartphone className="h-8 w-8 text-[#7E3AF2]" />
                       </div>
                       <span className="text-xl font-bold text-gray-900 tracking-tight">
                         QR Scanned
@@ -900,7 +901,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                         )}
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent className="bg-white border-gray-200 shadow-xl sm:rounded-2xl p-6 sm:max-w-md">
+                    <AlertDialogContent className="bg-white border-gray-200 shadow-xl rounded-2xl p-6 sm:max-w-md w-[calc(100%-2rem)] mx-auto">
                       <AlertDialogHeader className="space-y-3">
                         <AlertDialogTitle className="text-2xl font-bold text-gray-900">Are you absolutely sure?</AlertDialogTitle>
                         <AlertDialogDescription className="text-gray-500 text-base">

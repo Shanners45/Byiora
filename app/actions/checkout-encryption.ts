@@ -50,7 +50,7 @@ export async function encryptCheckoutData(
     if (txnError || !txn) {
       return { error: "Transaction not found." }
     }
-    if (txn.status !== "Processing") {
+    if (!["Processing", "Payment Pending"].includes(txn.status)) {
       return { error: "Transaction is no longer in a valid state for this operation." }
     }
     if (txn.encrypted_checkout_data) {

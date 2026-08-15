@@ -418,10 +418,12 @@ export default function TransactionsPage() {
 
         <div className="grid gap-6">
           {filteredTransactions.map((transaction) => {
-            const isKhalti = transaction.paymentMethod?.toLowerCase().includes("khalti");
+            const isKhalti = transaction.paymentMethod?.toLowerCase().includes("khalti") || transaction.payment_category === "khalti";
+            const isDynamic = transaction.payment_category === "fonepay" || transaction.payment_category === "nepalpay" || transaction.paymentMethod?.toLowerCase().includes("fonepay") || transaction.paymentMethod?.toLowerCase().includes("nepalpay");
             const secondsElapsed = (new Date().getTime() - new Date(transaction.date).getTime()) / 1000;
             const isKhaltiExpired = isKhalti && (transaction.status === "Payment Pending" || transaction.status === "Processing") && secondsElapsed > 7200;
-            const displayStatus = isKhaltiExpired ? "Payment Failed" : transaction.status;
+            const isDynamicExpired = isDynamic && (transaction.status === "Payment Pending" || transaction.status === "Processing") && secondsElapsed >= 300;
+            const displayStatus = isKhaltiExpired || isDynamicExpired ? "Payment Failed" : transaction.status;
 
             return (
             <Card key={transaction.id} className="bg-brand-white border-gray-200 shadow-lg">
@@ -447,7 +449,7 @@ export default function TransactionsPage() {
                   </div>
                   <div>
                     <p className="text-brand-light-gray">Payment status</p>
-                    <p className="text-brand-charcoal font-medium">{getNormalizedStatusText(transaction.status)}</p>
+                    <p className="text-brand-charcoal font-medium">{getNormalizedStatusText(displayStatus)}</p>
                   </div>
                   <div>
                     <p className="text-brand-light-gray">Order ID</p>
@@ -492,24 +494,22 @@ export default function TransactionsPage() {
 
                 <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                   <p className="text-sm text-brand-light-gray flex-1">
-                    {transaction.status === "Completed" ? "✅ Completed" :
-                      transaction.status === "Paid" ? "✅ Payment Verified (Pending Fulfillment)" :
-                      transaction.status === "Processing" ? "⏳ Awaiting Confirmation" :
-                      transaction.status === "Payment Pending" ? "⏳ Awaiting Payment" :
-                      transaction.status === "Payment Failed" ? "❌ Payment Not Received" :
-                      transaction.status === "Cancelled" ? "❌ Cancelled" :
-                      transaction.status === "Refunded" ? "🟣 Refunded" :
+                    {displayStatus === "Completed" ? "✅ Completed" :
+                      displayStatus === "Paid" ? "✅ Payment Verified (Pending Fulfillment)" :
+                      displayStatus === "Processing" ? (transaction.payment_category === "static" ? "⏳ Awaiting Confirmation" : "⏳ Processing Payment") :
+                      displayStatus === "Payment Pending" ? "⏳ Awaiting Payment" :
+                      displayStatus === "Payment Failed" ? "❌ Payment Not Received" :
+                      displayStatus === "Cancelled" ? "❌ Cancelled" :
+                      displayStatus === "Refunded" ? "🟣 Refunded" :
                       transaction.failure_remarks ? `❌ ${transaction.failure_remarks}` : "❌ Transaction failed"}
                   </p>
 
                   <div className="flex gap-2">
                     {(() => {
-                      const isKhalti = transaction.paymentMethod?.toLowerCase().includes("khalti");
-                      const secondsElapsed = (new Date().getTime() - new Date(transaction.date).getTime()) / 1000;
-                      const isWithin7200s = secondsElapsed <= 7200; // 2 hours (7200s)
-                      const isUnpaidState = ["Payment Failed", "Payment Pending", "Processing", "Cancelled", "Failed"].includes(transaction.status);
+                      const isUnpaidState = ["Payment Failed", "Payment Pending", "Processing", "Cancelled", "Failed"].includes(displayStatus);
 
                       if (isKhalti) {
+                        const isWithin7200s = secondsElapsed <= 7200;
                         return (
                           <>
                             {isUnpaidState && isWithin7200s && (
@@ -547,7 +547,7 @@ export default function TransactionsPage() {
                               </Button>
                             )}
 
-                            {transaction.status === "Completed" && (
+                            {displayStatus === "Completed" && (
                               <Button
                                 type="button"
                                 variant="outline"
@@ -563,23 +563,27 @@ export default function TransactionsPage() {
                         )
                       }
 
-                      // Non-Khalti payment methods (NepalPay, Fonepay, Static QR)
+                      const isWithin24Hours = secondsElapsed <= 86400; // 24 hours window for payment verification
+                      const isUnpaidOrFailed = displayStatus === "Payment Failed" || displayStatus === "Failed" || isDynamicExpired;
+
                       return (
                         <>
-                          {transaction.status === "Payment Failed" && transaction.failure_remarks !== "Cancelled by user" && (
+                          {isUnpaidOrFailed && transaction.failure_remarks !== "Cancelled by user" && (
                             <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setVerifyingPhoneId(transaction.transactionId);
-                                  setPhoneNumber("");
-                                }}
-                                className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 font-semibold"
-                              >
-                                <Phone className="h-4 w-4 mr-2" />
-                                Verify Payment
-                              </Button>
+                              {isWithin24Hours && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setVerifyingPhoneId(transaction.transactionId);
+                                    setPhoneNumber("");
+                                  }}
+                                  className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 font-semibold"
+                                >
+                                  <Phone className="h-4 w-4 mr-2" />
+                                  Verify Payment
+                                </Button>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -597,20 +601,25 @@ export default function TransactionsPage() {
                             </>
                           )}
 
-                          {transaction.status === "Payment Pending" && (
+                          {displayStatus === "Cancelled" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReorder(transaction.transactionId)}
+                              disabled={reorderingId === transaction.transactionId}
+                              className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
+                            >
+                              {reorderingId === transaction.transactionId ? (
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <RefreshCcw className="h-4 w-4 mr-2" />
+                              )}
+                              Buy Again
+                            </Button>
+                          )}
+
+                          {(displayStatus === "Payment Pending" || displayStatus === "Processing") && !isDynamicExpired && (
                             <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setVerifyingPhoneId(transaction.transactionId);
-                                  setPhoneNumber("");
-                                }}
-                                className="border-[#0ea5e9] text-[#0ea5e9] hover:bg-[#0ea5e9]/10 font-semibold"
-                              >
-                                Verify Payment
-                              </Button>
                               {secondsElapsed < 300 && (
                                 <Button
                                   type="button"
@@ -625,7 +634,7 @@ export default function TransactionsPage() {
                             </>
                           )}
 
-                          {transaction.status === "Completed" && (
+                          {displayStatus === "Completed" && (
                             <Button
                               type="button"
                               variant="outline"

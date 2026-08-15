@@ -797,10 +797,10 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Health check
-    if (req.method === 'GET' && url === '/health') {
+    // Health & Keep-Alive check (handles GET /, GET /health)
+    if (req.method === 'GET' && (url === '/' || url === '/health' || url.startsWith('/health') || url.startsWith('/?'))) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', providers: ['nepalpay', 'fonepay'], activeWebSockets: activeFonepayWS.size }));
+        res.end(JSON.stringify({ status: 'ok', message: 'Byiora Payment Proxy is online', providers: ['nepalpay', 'fonepay'], activeWebSockets: activeFonepayWS.size }));
         return;
     }
 

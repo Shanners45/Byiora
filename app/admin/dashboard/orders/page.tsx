@@ -23,7 +23,7 @@ interface Transaction {
   product_name: string
   amount: string
   price: string
-  status: "Completed" | "Failed" | "Processing" | "Payment Pending" | "Archived" | "Refunded" | "Cancelled" | "Paid" | "Payment Failed"
+  status: "Completed" | "Failed" | "Processing" | "Payment Pending" | "Refunded" | "Cancelled" | "Paid" | "Payment Failed"
   payment_method: string
   transaction_id: string
   user_email: string
@@ -110,6 +110,7 @@ function DirectLoginCell({ transaction }: { transaction: Transaction }) {
     </div>
   )
 }
+
 export default function OrdersPage() {
   const supabase = createClient()
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -153,6 +154,7 @@ export default function OrdersPage() {
       setIsRefunding(false)
     }
   }
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
@@ -262,9 +264,6 @@ export default function OrdersPage() {
         return "bg-orange-100 text-orange-800 border-orange-200"
       case "Payment Failed":
         return "bg-red-50 text-red-700 border-red-200"
-
-      case "Archived":
-        return "bg-gray-50 text-gray-400 border-gray-200"
       case "Refunded":
         return "bg-purple-100 text-purple-800 border-purple-200"
       default:
@@ -416,29 +415,7 @@ export default function OrdersPage() {
         prev.map((t) => (t.id === transaction.id ? { ...t, giftcard_code: code, status: "Completed" } : t))
       )
 
-      // Send combined completion + giftcode email
-      const response = await fetch('/api/send-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: transaction.user_email,
-          userName: transaction.users?.name,
-          productName: transaction.product_name,
-          denomination: transaction.amount,
-          giftcardCode: code,
-          transactionId: transaction.transaction_id,
-          subject: `Your ${transaction.product_name} Giftcard Code from Byiora`,
-          isCompletionEmail: true
-        })
-      })
-
-      const emailResult = await response.json()
-      if (!response.ok) throw new Error(emailResult.error || 'Failed to send')
-
-      // Notification is already sent by updateTransactionStatus when status changes to Completed.
-      // The giftcode email from /api/send-code serves as the primary delivery mechanism.
-
-      toast.success("Order marked as completed and email sent with giftcode!")
+      toast.success("Order marked as completed and gift card code sent to customer!")
     } catch (error: any) {
       console.error("Error sending code:", error)
       toast.error(error.message || "Failed to process giftcard code")
@@ -476,10 +453,11 @@ export default function OrdersPage() {
   }
 
   const exportTransactions = () => {
-    const headers = ["Order ID", "Product", "Amount", "Price", "Status", "Payment Method", "Customer", "Type", "UID", "Date"]
+    const headers = ["Order ID", "Bank Txn ID", "Product", "Amount", "Price", "Status", "Payment Method", "Customer", "Type", "UID", "Date"]
 
     const rows = filteredTransactions.map((t) => [
       t.transaction_id,
+      t.bank_txn_id || "—",
       t.product_name,
       t.amount,
       `Rs. ${t.price}`,
@@ -609,11 +587,12 @@ export default function OrdersPage() {
                 <SelectItem value="all">All Statuses</SelectItem>
                 <SelectItem value="Processing">Processing</SelectItem>
                 <SelectItem value="Completed">Completed</SelectItem>
-                <SelectItem value="Failed">Failed</SelectItem>
-                <SelectItem value="Payment Pending">Payment Pending</SelectItem>
                 <SelectItem value="Paid">Paid</SelectItem>
+                <SelectItem value="Payment Pending">Payment Pending</SelectItem>
+                <SelectItem value="Payment Failed">Payment Failed</SelectItem>
+                <SelectItem value="Failed">Failed</SelectItem>
+                <SelectItem value="Cancelled">Cancelled</SelectItem>
                 <SelectItem value="Refunded">Refunded</SelectItem>
-                <SelectItem value="Archived">Archived</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -712,7 +691,9 @@ export default function OrdersPage() {
                               <SelectContent>
                                 {isDynamic ? (
                                   <>
-                                    <SelectItem value={transaction.status}>{transaction.status}</SelectItem>
+                                    <SelectItem value="Paid">Paid</SelectItem>
+                                    <SelectItem value="Completed">Completed</SelectItem>
+                                    <SelectItem value="Failed">Failed</SelectItem>
                                     <SelectItem value="Refunded">Refunded</SelectItem>
                                   </>
                                 ) : (
@@ -766,28 +747,11 @@ export default function OrdersPage() {
                         <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{getUIDForDisplay(transaction)}</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                      {transaction.status === "Paid" && !transaction.giftcard_code && (
-                        <Button
-                          size="sm"
-                          onClick={() => handleSendGiftcardCode(transaction)}
-                          disabled={sendingCodeIds[transaction.id]}
-                          className="bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white h-8 text-xs font-semibold"
-                        >
-                          {sendingCodeIds[transaction.id] ? (
-                            <RefreshCw className="h-3.5 w-3.5 mr-1 animate-spin" />
-                          ) : (
-                            <Send className="h-3.5 w-3.5 mr-1" />
-                          )}
-                          Send Code
-                        </Button>
-                      )}
-                    </TableCell>
                   </TableRow>
                 ))}
                 {paginatedTransactions.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-[#4B5563]">
+                    <TableCell colSpan={7} className="h-24 text-center text-[#4B5563]">
                       {searchQuery || statusFilter !== "all"
                         ? "No transactions found matching your filters."
                         : "No transactions available."}

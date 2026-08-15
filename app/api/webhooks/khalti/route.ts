@@ -133,6 +133,19 @@ export async function GET(request: Request) {
     console.log(`[KHALTI] Lookup response:`, verifyData.status, verifyData.transaction_id || verifyData.tidx || verifyData.idx)
 
     if (verifyData.status === "Completed") {
+      // SECURITY: Validate paid amount against order price (Khalti returns total_amount in Paisa)
+      const expectedPaisa = Math.round(Number(txn.price) * 100)
+      const receivedPaisa = Number(verifyData.total_amount || verifyData.amount)
+      if (receivedPaisa && receivedPaisa < expectedPaisa) {
+        console.error(`[KHALTI FRAUD ALERT] Amount mismatch for ${purchase_order_id}: Expected ${expectedPaisa} Paisa, received ${receivedPaisa} Paisa`)
+        await supabase.from("transactions").update({
+          status: "Payment Failed",
+          failure_remarks: `Amount discrepancy: Expected Rs. ${txn.price}, received Rs. ${receivedPaisa / 100}`,
+          updated_at: new Date().toISOString()
+        } as any).eq("transaction_id", purchase_order_id)
+        return NextResponse.redirect(failRedirect)
+      }
+
       const resolvedBankTxnId = verifyData.transaction_id || verifyData.tidx || verifyData.bank_txn_id || verifyData.idx || pidx
 
       // A. Mark as Paid in DB

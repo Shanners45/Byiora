@@ -116,7 +116,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from("transactions")
         .select("*")
         .eq("user_id", userId)
-        .neq("status" as any, "Archived")
         .order("created_at", { ascending: false })
 
       if (error) {
