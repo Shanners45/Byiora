@@ -96,11 +96,13 @@ export default function CategoryPage() {
       <div className="container mx-auto px-4 py-8">
         <Button 
           variant="ghost" 
-          onClick={() => router.back()} 
+          asChild
           className="mb-6 text-white hover:bg-white/10"
         >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Home
+          <Link href="/">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Home
+          </Link>
         </Button>
 
         <div className="mb-8">

@@ -54,6 +54,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 0.3,
     },
+    {
+      url: `${BASE_URL}/category/games`,
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.3,
+    },
+    {
+      url: `${BASE_URL}/category/direct-login`,
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 0.3,
+    },
   ]
 
   // Dynamic product routes from Supabase

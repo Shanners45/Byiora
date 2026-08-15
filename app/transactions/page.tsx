@@ -425,6 +425,8 @@ export default function TransactionsPage() {
             const isDynamicExpired = isDynamic && (transaction.status === "Payment Pending" || transaction.status === "Processing") && secondsElapsed >= 300;
             const displayStatus = isKhaltiExpired || isDynamicExpired ? "Payment Failed" : transaction.status;
 
+            const isDigitalGoods = transaction.product_category === "digital-goods" || (!transaction.product_category && !transaction.product.toLowerCase().includes("topup") && !transaction.product.toLowerCase().includes("recharge") && !transaction.product.toLowerCase().includes("direct login"));
+
             return (
             <Card key={transaction.id} className="bg-brand-white border-gray-200 shadow-lg">
               <CardHeader className="pb-3">
@@ -530,7 +532,7 @@ export default function TransactionsPage() {
                               </Button>
                             )}
 
-                            {isUnpaidState && (
+                            {isUnpaidState && isDigitalGoods && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -584,24 +586,26 @@ export default function TransactionsPage() {
                                   Verify Payment
                                 </Button>
                               )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleReorder(transaction.transactionId)}
-                                disabled={reorderingId === transaction.transactionId}
-                                className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
-                              >
-                                {reorderingId === transaction.transactionId ? (
-                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <RefreshCcw className="h-4 w-4 mr-2" />
-                                )}
-                                Buy Again
-                              </Button>
+                              {isDigitalGoods && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleReorder(transaction.transactionId)}
+                                  disabled={reorderingId === transaction.transactionId}
+                                  className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
+                                >
+                                  {reorderingId === transaction.transactionId ? (
+                                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <RefreshCcw className="h-4 w-4 mr-2" />
+                                  )}
+                                  Buy Again
+                                </Button>
+                              )}
                             </>
                           )}
 
-                          {displayStatus === "Cancelled" && (
+                          {displayStatus === "Cancelled" && isDigitalGoods && (
                             <Button
                               variant="outline"
                               size="sm"

@@ -27,6 +27,7 @@ interface Transaction {
   giftcard_code?: string
   failure_remarks?: string
   payment_category?: string
+  product_category?: string
 }
 
 interface AuthContextType {
@@ -137,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         giftcard_code: transaction.giftcard_code,
         failure_remarks: transaction.failure_remarks,
         payment_category: transaction.payment_category,
+        product_category: transaction.product_category,
       }))
 
       setTransactions(formattedTransactions)

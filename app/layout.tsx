@@ -16,11 +16,18 @@ const nunito = Nunito({
 
 const BASE_URL = "https://www.byiora.com.np"
 
+export const viewport: Viewport = {
+  themeColor: "#1A1A2E",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+}
+
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
     default: "Byiora – Buy Game Top-Up & Gift Cards in Nepal | Instant Delivery",
-    template: "%s",
+    template: "%s | Byiora",
   },
   description:
     "Nepal's #1 platform for game top-ups & gift cards. Buy Steam, PUBG UC, Valorant Points, Free Fire Diamonds, Netflix & more. Pay via eSewa, Khalti, Fonepay. Instant digital delivery.",
@@ -44,12 +51,16 @@ export const metadata: Metadata = {
     "Byiora",
     "byiora.com.np",
   ],
-  authors: [{ name: "Byiora" }],
+  authors: [{ name: "Byiora", url: BASE_URL }],
   creator: "Byiora",
   publisher: "Byiora",
   formatDetection: {
     email: false,
     telephone: false,
+    address: false,
+  },
+  alternates: {
+    canonical: BASE_URL,
   },
   openGraph: {
     type: "website",
@@ -68,9 +79,17 @@ export const metadata: Metadata = {
       },
     ],
   },
+  twitter: {
+    card: "summary_large_image",
+    title: "Byiora – Buy Game Top-Up & Gift Cards in Nepal | Instant Delivery",
+    description:
+      "Buy premium game top-ups and gift cards in Nepal instantly. Secure local payments with eSewa, Khalti, and Fonepay QR. Instant digital delivery.",
+    images: [`https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png`],
+  },
   icons: {
     icon: [
       { url: "/icon.png", type: "image/png", sizes: "192x192" },
+      { url: "/favicon.ico", sizes: "any" },
     ],
     apple: "/icon.png",
   },

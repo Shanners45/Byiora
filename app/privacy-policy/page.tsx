@@ -3,9 +3,21 @@ import { Footer } from "@/components/footer"
 import { BackButton } from "@/components/back-button"
 import type { Metadata } from "next"
 
+const BASE_URL = "https://www.byiora.com.np"
+
 export const metadata: Metadata = {
   title: "Privacy Policy | Byiora - Buy Game Gift Cards Nepal",
   description: "Read our Privacy Policy to understand how Byiora collects, uses, and protects your information while you buy game top-ups and digital gift cards in Nepal.",
+  alternates: {
+    canonical: `${BASE_URL}/privacy-policy`,
+  },
+  openGraph: {
+    title: "Privacy Policy | Byiora",
+    description: "Read our Privacy Policy to understand how Byiora collects, uses, and protects your information.",
+    url: `${BASE_URL}/privacy-policy`,
+    siteName: "Byiora",
+    type: "website",
+  },
 }
 
 export default function PrivacyPolicyPage() {

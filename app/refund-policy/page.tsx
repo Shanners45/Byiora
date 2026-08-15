@@ -3,9 +3,21 @@ import { Footer } from "@/components/footer"
 import { BackButton } from "@/components/back-button"
 import type { Metadata } from "next"
 
+const BASE_URL = "https://www.byiora.com.np"
+
 export const metadata: Metadata = {
   title: "Refund & Return Policy | Byiora - Buy Game Gift Cards Nepal",
   description: "Learn about the Refund and Return Policy at Byiora. Understand our terms for refunds on game top-ups and digital gift cards in Nepal.",
+  alternates: {
+    canonical: `${BASE_URL}/refund-policy`,
+  },
+  openGraph: {
+    title: "Refund & Return Policy | Byiora",
+    description: "Learn about the Refund and Return Policy at Byiora.",
+    url: `${BASE_URL}/refund-policy`,
+    siteName: "Byiora",
+    type: "website",
+  },
 }
 
 export default function RefundPolicyPage() {

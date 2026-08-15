@@ -670,9 +670,31 @@ export default function OrdersPage() {
                           ? transaction.failure_remarks.replace("Khalti Refunded", "Refunded").replace("Refunded (Portal)", "Refunded")
                           : null
 
-                        // 1. Terminal / Finalized statuses: always show static badge (no dropdown)
-                        const isTerminal = ["Completed", "Refunded", "Failed", "Cancelled", "Payment Failed"].includes(status)
-                        if (isTerminal) {
+                        // 1. Dynamic QR payments:
+                        // - If "Paid": show dropdown with "Paid" and "Refunded"
+                        // - Otherwise: show status badge
+                        if (isDynamic) {
+                          if (status === "Paid") {
+                            return (
+                              <div className="flex flex-col gap-1 items-start">
+                                <Select
+                                  value={status}
+                                  onValueChange={(value) =>
+                                    updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
+                                  }
+                                >
+                                  <SelectTrigger className="w-[140px] h-9 p-1 flex justify-between items-center">
+                                    <Badge className={`${getStatusColor(status)} whitespace-nowrap w-full justify-center`}>{status}</Badge>
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Paid">Paid</SelectItem>
+                                    <SelectItem value="Refunded">Refunded</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )
+                          }
+
                           return (
                             <div className="flex flex-col gap-1 items-start">
                               <Badge className={`${getStatusColor(status)} whitespace-nowrap w-fit`}>{status}</Badge>
@@ -685,8 +707,9 @@ export default function OrdersPage() {
                           )
                         }
 
-                        // 2. Dynamic QR + Digital Goods: No dropdown menu (fulfilled via Giftcard Code input + Send button)
-                        if (isDynamic && isDigitalGoods) {
+                        // 2. Static QR payments:
+                        // Show dropdown with Processing, Completed, Failed, Refunded
+                        if (status === "Cancelled") {
                           return (
                             <div className="flex flex-col gap-1 items-start">
                               <Badge className={`${getStatusColor(status)} whitespace-nowrap w-fit`}>{status}</Badge>
@@ -694,40 +717,6 @@ export default function OrdersPage() {
                           )
                         }
 
-                        // 3. Dynamic QR + Non-Digital Goods (Direct Login, Top-up, etc.):
-                        // Only show dropdown when status is "Paid" (options: Completed, Refunded)
-                        if (isDynamic) {
-                          if (status !== "Paid") {
-                            return (
-                              <div className="flex flex-col gap-1 items-start">
-                                <Badge className={`${getStatusColor(status)} whitespace-nowrap w-fit`}>{status}</Badge>
-                              </div>
-                            )
-                          }
-
-                          return (
-                            <div className="flex flex-col gap-1 items-start">
-                              <Select
-                                value={status}
-                                onValueChange={(value) =>
-                                  updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
-                                }
-                              >
-                                <SelectTrigger className="w-[140px] h-9 p-1 flex justify-between items-center">
-                                  <Badge className={`${getStatusColor(status)} whitespace-nowrap w-full justify-center`}>{status}</Badge>
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="Paid">Paid</SelectItem>
-                                  <SelectItem value="Completed">Completed</SelectItem>
-                                  <SelectItem value="Refunded">Refunded</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          )
-                        }
-
-                        // 4. Static QR (all product categories) in active/pending state:
-                        // Show dropdown with Processing, Completed, Failed, Refunded
                         return (
                           <div className="flex flex-col gap-1 items-start">
                             <Select
@@ -746,6 +735,11 @@ export default function OrdersPage() {
                                 <SelectItem value="Refunded">Refunded</SelectItem>
                               </SelectContent>
                             </Select>
+                            {refundSubtext && (
+                              <span className="text-[11px] font-semibold text-purple-700 leading-tight bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+                                {refundSubtext}
+                              </span>
+                            )}
                           </div>
                         )
                       })()}

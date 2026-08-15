@@ -17,6 +17,8 @@ interface Banner {
   title: string
 }
 
+const BASE_URL = "https://www.byiora.com.np"
+
 export default async function Home() {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -66,17 +68,35 @@ export default async function Home() {
           { id: "3", image_url: "/images/banner-3.png", link_url: "", title: "Banner 3" },
         ]
 
+  // ItemList Schema for home page top products
+  const homeItemListSchema = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    name: "Popular Game Top-Ups & Gift Cards in Nepal",
+    itemListElement: (prods || []).slice(0, 20).map((product: any, index: number) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: product.name,
+      url: `${BASE_URL}/en-np/${product.slug}`,
+      image: product.logo || `${BASE_URL}/byiora-logo-full.png`,
+    })),
+  }
+
   return (
     <div className="min-h-screen bg-brand-purple">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(homeItemListSchema).replace(/</g, "\\u003c") }}
+      />
       <Header />
 
       <main className="container mx-auto px-4 py-8">
         <h1 className="sr-only">
-            Buy Game Top-Ups and Gift Cards in Nepal
-          </h1>
-          <p className="sr-only">
-            Instant digital delivery for popular games, entertainment, and online services.
-          </p>
+          Buy Game Top-Ups and Gift Cards in Nepal
+        </h1>
+        <p className="sr-only">
+          Instant digital delivery for popular games, entertainment, and online services in Nepal.
+        </p>
         <HomeContent categories={categories} banners={banners} />
       </main>
 
