@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -16,7 +15,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
-import { AlertCircle, RefreshCw, Smartphone, Clock, ShieldCheck, Phone, ArrowLeft, Download, ShieldAlert } from "lucide-react"
+import { AlertCircle, RefreshCw, Smartphone, Clock, ShieldCheck, Phone, ArrowLeft, Download } from "lucide-react"
 import { TurnstileWidget } from "@/components/turnstile-widget"
 import { QRCodeSVG } from "qrcode.react"
 import { getOrGenerateQRAction, verifyPaymentAction, verifyPaymentByPhoneAction, expireTransactionAction, cancelTransactionAction } from "@/app/actions/checkout"
@@ -42,6 +41,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   const [isCancelled, setIsCancelled] = useState(false)
   const [isQrScanned, setIsQrScanned] = useState(false)
   const [isNewlyExpired, setIsNewlyExpired] = useState(false)
+  const qrScannedAt = useRef<number | null>(null)
   const [overlayType, setOverlayType] = useState<"success" | "cancelled" | "failed" | null>(null)
 
   // Phone verification state
@@ -98,6 +98,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
           setIsCancelled(true)
           setOverlayType("cancelled")
         } else if (res.status === "Processing" || (res as any).failureRemarks === "QR Scanned") {
+          if (!qrScannedAt.current) qrScannedAt.current = Date.now()
           setIsQrScanned(true)
         }
       } else {
@@ -152,10 +153,20 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
     }
   }, [timeLeft, isCompleted, error])
 
-  // Show success overlay on completion — will redirect after animation finishes.
+  // Show success overlay on completion — delay if QR was just scanned so user sees the blur.
   useEffect(() => {
     if (!isCompleted) return
     localStorage.removeItem(`qr_${transaction_id}`)
+
+    const scanTime = qrScannedAt.current
+    if (scanTime) {
+      const elapsed = Date.now() - scanTime
+      const minDelay = 2000 // show "QR Scanned" blur for at least 2 seconds
+      if (elapsed < minDelay) {
+        const timer = setTimeout(() => setOverlayType("success"), minDelay - elapsed)
+        return () => clearTimeout(timer)
+      }
+    }
     setOverlayType("success")
   }, [isCompleted, transaction_id])
 
@@ -191,6 +202,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
         if (newStatus === 'Completed' || newStatus === 'Paid') {
           setIsCompleted(true)
         } else if (newStatus === 'Processing' || remarks === 'QR Scanned') {
+          if (!qrScannedAt.current) qrScannedAt.current = Date.now()
           setIsQrScanned(true)
         } else if (newStatus === 'Cancelled') {
           setIsCancelled(true)
@@ -205,37 +217,45 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
     return () => { supabase.removeChannel(channel) }
   }, [qrData, isCompleted, isExpired, error, transaction_id, isCancelled])
 
-  // Static-QR polling — checks DB status every 5s for up to 5 minutes
-  // (admin manually flips status from Processing -> Completed/Failed).
+  // Fast 1.5-second polling backup for real-time QR scan detection & completion
   useEffect(() => {
-    if (!qrData?.isStatic || isCompleted || isExpired || error || isCancelled) return
+    if (!qrData || isCompleted || isExpired || error || isCancelled) return
 
-    let elapsed = 0
     let isMounted = true
-    const max = 5 * 60 * 1000 // 5 minutes
-    const interval = setInterval(async () => {
+    const checkStatus = async () => {
       if (!isMounted) return
-      elapsed += 5000
       try {
         const res = await fetch(`/api/transaction-status?id=${transaction_id}`, { cache: "no-store" })
         if (res.ok) {
           const data = await res.json()
           if (data.status === "Completed" || data.status === "Paid") {
             if (isMounted) setIsCompleted(true)
-            clearInterval(interval)
+            return
+          }
+          if (data.status === "Processing" || data.failure_remarks === "QR Scanned") {
+            if (isMounted) {
+              if (!qrScannedAt.current) qrScannedAt.current = Date.now()
+              setIsQrScanned(true)
+            }
+          }
+          if (data.status === "Cancelled") {
+            if (isMounted) {
+              setIsCancelled(true)
+              setOverlayType("cancelled")
+            }
             return
           }
           if (data.status === "Failed" || data.status === "Payment Failed") {
             if (isMounted) setIsExpired(true)
-            clearInterval(interval)
             return
           }
         }
-      } catch (e) {
-        // Swallow transient network errors; keep polling until elapsed >= max.
-      }
-      if (elapsed >= max) clearInterval(interval)
-    }, 5000)
+      } catch (e) {}
+    }
+
+    // Execute immediately on mount/update then start 1.5s interval
+    checkStatus()
+    const interval = setInterval(checkStatus, 1500)
 
     return () => {
       isMounted = false
@@ -329,54 +349,125 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
   const handleDownloadQR = async () => {
     try {
+      // 1. Static QR Image URL
       if (qrData.isStatic && qrData.staticQrUrl) {
-        const response = await fetch(qrData.staticQrUrl);
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.style.display = "none";
-        a.href = url;
-        a.download = `QR_${transaction_id}.png`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-      } else if (qrData.qrString) {
-        let qrUrl = qrData.qrString;
-        if (!qrUrl.startsWith("data:image") && qrUrl.length > 1000) {
-          qrUrl = `data:image/png;base64,${qrUrl}`;
+        const response = await fetch(qrData.staticQrUrl)
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.style.display = "none"
+        a.href = url
+        a.download = `QR_${transaction_id}.png`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+        toast.success("QR code downloaded successfully")
+        return
+      }
+
+      // 2. Base64 / Image Sticker (Dynamic Fonepay or NepalPay QR sticker)
+      if (qrData.qrString && (qrData.qrString.startsWith("data:image") || qrData.qrString.length > 1000)) {
+        let imgSource = qrData.qrString
+        if (!imgSource.startsWith("data:image")) {
+          imgSource = `data:image/png;base64,${imgSource}`
         }
 
-        if (qrUrl.startsWith("data:image")) {
-          const a = document.createElement("a");
-          a.style.display = "none";
-          a.href = qrUrl;
-          a.download = `QR_${transaction_id}.png`;
-          document.body.appendChild(a);
-          a.click();
-        } else {
-          // QRCodeSVG fallback
-          const svg = document.querySelector('svg');
-          if (svg) {
-            const svgData = new XMLSerializer().serializeToString(svg);
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
-            const img = new globalThis.Image();
-            img.onload = () => {
-              canvas.width = svg.clientWidth || 280;
-              canvas.height = svg.clientHeight || 280;
-              ctx?.drawImage(img, 0, 0);
-              const pngFile = canvas.toDataURL("image/png");
-              const a = document.createElement("a");
-              a.download = `QR_${transaction_id}.png`;
-              a.href = pngFile;
-              a.click();
-            };
-            img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)));
+        const img = new globalThis.Image()
+        img.crossOrigin = "anonymous"
+        img.onload = () => {
+          const w = img.naturalWidth || img.width
+          const h = img.naturalHeight || img.height
+
+          // The sticker uses CSS background-size: 175% and background-position: center 31% in a 1:1 box
+          const cropW = w / 1.75
+          const cropH = cropW
+          const cropX = Math.max(0, Math.min(w * (3 / 14), w - cropW))
+          const cropY = Math.max(0, Math.min((h - cropH) * 0.31, h - cropH))
+
+          const canvas = document.createElement("canvas")
+          const outSize = Math.max(600, Math.round(cropW))
+          canvas.width = outSize
+          canvas.height = outSize
+
+          const ctx = canvas.getContext("2d")
+          if (ctx) {
+            // Fill crisp white background
+            ctx.fillStyle = "#ffffff"
+            ctx.fillRect(0, 0, outSize, outSize)
+
+            // Draw cropped QR code with clean outer margin
+            const padding = Math.round(outSize * 0.04)
+            const drawSize = outSize - (padding * 2)
+            ctx.drawImage(img, cropX, cropY, cropW, cropH, padding, padding, drawSize, drawSize)
+
+            canvas.toBlob((blob) => {
+              if (!blob) {
+                toast.error("Failed to process QR image")
+                return
+              }
+              const url = window.URL.createObjectURL(blob)
+              const a = document.createElement("a")
+              a.style.display = "none"
+              a.href = url
+              a.download = `QR_${transaction_id}.png`
+              document.body.appendChild(a)
+              a.click()
+              document.body.removeChild(a)
+              window.URL.revokeObjectURL(url)
+              toast.success("QR code downloaded successfully")
+            }, "image/png")
           }
         }
+        img.onerror = () => {
+          toast.error("Failed to load QR image for download")
+        }
+        img.src = imgSource
+        return
       }
+
+      // 3. QRCodeSVG Element Fallback
+      if (qrData.qrString) {
+        const svg = (document.getElementById("checkout-qr-svg") as SVGElement | null) || (document.querySelector(".checkout-qr-box svg") as SVGElement | null)
+        if (svg) {
+          const svgData = new XMLSerializer().serializeToString(svg)
+          const canvas = document.createElement("canvas")
+          const ctx = canvas.getContext("2d")
+          const size = 600
+          canvas.width = size
+          canvas.height = size
+
+          const img = new globalThis.Image()
+          img.onload = () => {
+            if (ctx) {
+              ctx.fillStyle = "#ffffff"
+              ctx.fillRect(0, 0, size, size)
+              const pad = 24
+              ctx.drawImage(img, pad, pad, size - pad * 2, size - pad * 2)
+              canvas.toBlob((blob) => {
+                if (!blob) return
+                const url = window.URL.createObjectURL(blob)
+                const a = document.createElement("a")
+                a.style.display = "none"
+                a.href = url
+                a.download = `QR_${transaction_id}.png`
+                document.body.appendChild(a)
+                a.click()
+                document.body.removeChild(a)
+                window.URL.revokeObjectURL(url)
+                toast.success("QR code downloaded successfully")
+              }, "image/png")
+            }
+          }
+          img.src = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgData)))
+          return
+        }
+      }
+
+      toast.error("QR code is not ready yet")
     } catch (e) {
-      toast.error("Failed to download QR code");
+      console.error("QR download error:", e)
+      toast.error("Failed to download QR code")
     }
   }
 
@@ -647,15 +738,23 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
           <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-start">
             {/* LEFT COLUMN: QR CODE */}
             <div className="flex flex-col items-center justify-center w-full">
-              <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-200 relative w-full max-w-[320px] flex flex-col justify-center items-center overflow-hidden">
-                {/* QR Scanned Blur Overlay */}
-                {isQrScanned && !isCompleted && (
-                  <div className="absolute inset-0 bg-white/85 backdrop-blur-md z-20 flex flex-col items-center justify-center rounded-2xl p-6 text-center shadow-lg border border-purple-100 animate-in fade-in duration-300">
-                    <span className="text-xl font-bold text-gray-900 tracking-tight mb-3">
-                      QR Scanned
-                    </span>
-                    <div className="relative flex items-center justify-center mt-1">
-                      <RefreshCw className="h-7 w-7 text-[#7E3AF2] animate-spin" />
+              <div className="checkout-qr-box bg-white p-4 rounded-2xl shadow-inner border border-gray-200 relative w-full max-w-[320px] min-h-[320px] flex flex-col justify-center items-center overflow-hidden">
+                {/* QR Scanned Blur Overlay — shown when Fonepay WS detects scan */}
+                {isQrScanned && !overlayType && (
+                  <div
+                    className="absolute inset-0 z-20 flex flex-col items-center justify-center text-center p-6 backdrop-blur-lg bg-white/85 transition-all duration-300 animate-in fade-in"
+                  >
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-16 h-16 rounded-full bg-[#7E3AF2]/10 flex items-center justify-center shadow-inner">
+                        <Smartphone className="h-8 w-8 text-[#7E3AF2] animate-bounce" />
+                      </div>
+                      <span className="text-xl font-bold text-gray-900 tracking-tight">
+                        QR Scanned
+                      </span>
+                      <p className="text-xs font-medium text-gray-500 max-w-[210px] leading-relaxed">
+                        Please complete the payment on your mobile banking app...
+                      </p>
+                      <RefreshCw className="h-5 w-5 text-[#7E3AF2] animate-spin mt-1" />
                     </div>
                   </div>
                 )}
@@ -703,6 +802,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                 ) : (
                   <div className="p-4">
                     <QRCodeSVG
+                      id="checkout-qr-svg"
                       value={qrData.qrString || "error"}
                       size={280}
                       level="Q"

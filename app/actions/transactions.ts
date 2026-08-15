@@ -1,7 +1,6 @@
 "use server"
 
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { sendOrderPlacedEmail } from "@/lib/email/resend"
 import { headers } from "next/headers"
 import { rateLimit } from "@/lib/rate-limit"
 import crypto from "crypto"
@@ -179,12 +178,6 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       return { success: false, error: error.message || error.code || "Failed to add transaction" }
     }
 
-    // User name already resolved above
-
-    // Send order-placed email (DEFERRED)
-    // As per new logic, we do NOT send the Order Placed email at checkout creation.
-    // Emails are only sent after the payment is successfully verified.
-
     // Send Discord Webhook Notification
     if (process.env.DISCORD_WEBHOOK_URL && (!isDynamic || transactionData.productCategory === "direct-login")) {
       try {
@@ -358,9 +351,7 @@ export async function reorderTransactionAction(oldTransactionId: string) {
       product_category: oldTxn.product_category,
     }
 
-    // Use service client to bypass RLS
-    const serviceSupabase = createServiceRoleClient()
-    const { data: newTxn, error: insertError } = await serviceSupabase
+    const { data: newTxn, error: insertError } = await supabase
       .from("transactions")
       .insert([insertPayload as any])
       .select()

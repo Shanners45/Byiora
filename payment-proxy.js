@@ -125,7 +125,7 @@ const CALLBACK_SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:
 /**
  * Start a Fonepay WebSocket listener for a specific transaction.
  * Connects to the websocketId URL returned by Fonepay's receivePayment API.
- * When a VERIFIED message is received, calls the Next.js webhook to fulfill the order.
+ * Handles both intermediate QR_SCANNED events and final payment VERIFIED/PAID events.
  */
 function startFonepayWebSocket(websocketUrl, transactionId, validationTraceId) {
     if (!websocketUrl || !transactionId) return;
@@ -140,7 +140,8 @@ function startFonepayWebSocket(websocketUrl, transactionId, validationTraceId) {
     console.log(`[WS] URL: ${websocketUrl}`);
 
     try {
-        const ws = new WebSocket(websocketUrl);
+        const WebSocketClient = globalThis.WebSocket || (typeof WebSocket !== 'undefined' ? WebSocket : require('ws'));
+        const ws = new WebSocketClient(websocketUrl);
 
         // Auto-close after 6 minutes (safety timeout)
         const timeout = setTimeout(() => {
@@ -149,64 +150,83 @@ function startFonepayWebSocket(websocketUrl, transactionId, validationTraceId) {
             activeFonepayWS.delete(transactionId);
         }, 6 * 60 * 1000);
 
-        ws.addEventListener('open', () => {
+        ws.onopen = () => {
             console.log(`[WS] ✅ Connected to Fonepay WS for ${transactionId}`);
-        });
+        };
 
-        ws.addEventListener('message', async (event) => {
+        ws.onmessage = async (event) => {
             try {
                 const raw = typeof event.data === 'string' ? event.data : event.data.toString();
                 console.log(`[WS] 📩 Message for ${transactionId}:`, raw);
 
-                const msg = JSON.parse(raw);
+                let msg = {};
+                try {
+                    msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                } catch (e) {
+                    console.error(`[WS] JSON parse error for ${transactionId}:`, e.message);
+                    return;
+                }
+
                 let txStatus = msg.transactionStatus;
                 if (typeof txStatus === 'string') {
                     try { txStatus = JSON.parse(txStatus); } catch (e) {}
                 }
 
-                // Call the fulfillment webhook for EVERY message so the backend can update status
+                const isPaid = (txStatus && txStatus.success === true && (txStatus.message === "SUCCESS" || txStatus.message === "PAID" || txStatus.status === "SUCCESS")) || msg.status === "SUCCESS" || msg.event === "PAID" || msg.event === "SUCCESS";
+
+                const isQrScanned = !isPaid && (
+                    (txStatus && (txStatus.qrVerified === true || txStatus.message === "VERIFIED" || txStatus.status === "VERIFIED" || txStatus.isScanned === true)) ||
+                    msg.qrVerified === true ||
+                    msg.event === "QR_SCANNED" ||
+                    msg.event === "SCANNED" ||
+                    msg.event === "VERIFIED" ||
+                    msg.status === "VERIFIED"
+                );
+
+                const webhookUrl = `${CALLBACK_SITE_URL}/api/webhooks/fonepay-ws`;
+                const secret = INTERNAL_SECRET || process.env.INTERNAL_API_SECRET;
+
                 try {
-                    const webhookUrl = `${CALLBACK_SITE_URL}/api/webhooks/fonepay-ws`;
                     const resp = await fetch(webhookUrl, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'x-internal-secret': INTERNAL_SECRET
+                            'x-internal-secret': secret
                         },
                         body: JSON.stringify({
                             transactionId,
                             validationTraceId,
                             provider: 'fonepay',
+                            event: isPaid ? 'PAID' : (isQrScanned ? 'QR_SCANNED' : undefined),
                             fonepayData: msg
                         })
                     });
                     const result = await resp.json().catch(() => ({}));
-                    console.log(`[WS] Webhook response for ${transactionId}:`, resp.status, result);
+                    console.log(`[WS] Webhook response for ${transactionId} (isPaid: ${isPaid}, isQrScanned: ${isQrScanned}):`, resp.status, result);
                 } catch (e) {
                     console.error(`[WS] Webhook call failed for ${transactionId}:`, e.message);
                 }
 
-                if (txStatus && txStatus.success && txStatus.qrVerified) {
+                if (isPaid) {
                     console.log(`[WS] 🎉 PAYMENT VERIFIED for ${transactionId}!`);
-                    // Close the WebSocket
                     clearTimeout(timeout);
                     try { ws.close(); } catch (e) {}
                     activeFonepayWS.delete(transactionId);
                 }
             } catch (e) {
-                console.error(`[WS] Error parsing message for ${transactionId}:`, e.message);
+                console.error(`[WS] Error processing message for ${transactionId}:`, e.message);
             }
-        });
+        };
 
-        ws.addEventListener('error', (err) => {
-            console.error(`[WS] ❌ Error for ${transactionId}:`, err.message || 'Unknown error');
-        });
+        ws.onerror = (err) => {
+            console.error(`[WS] ❌ Error for ${transactionId}:`, err?.message || 'Unknown error');
+        };
 
-        ws.addEventListener('close', () => {
+        ws.onclose = () => {
             console.log(`[WS] Connection closed for ${transactionId}`);
             clearTimeout(timeout);
             activeFonepayWS.delete(transactionId);
-        });
+        };
 
         activeFonepayWS.set(transactionId, ws);
     } catch (e) {
@@ -729,78 +749,6 @@ async function handleFonepayVerifyTransaction(body, res) {
         console.error("🚨 VERIFY CRASH:", err.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, message: "Crash: " + err.message }));
-    }
-}
-
-/**
- * Start WebSocket listener for Fonepay QR code scanning/payment events.
- * Listens to Fonepay's WebSocket and posts to Byiora's fonepay-ws webhook upon payment.
- */
-function startFonepayWebSocket(wsUrl, transactionId, traceId) {
-    if (!wsUrl) return;
-
-    try {
-        console.log(`[FONEPAY WS] Connecting to ${wsUrl} for transaction ${transactionId}...`);
-        const WebSocketClient = globalThis.WebSocket || require('ws');
-        const ws = new WebSocketClient(wsUrl);
-
-        ws.onopen = () => {
-            console.log(`[FONEPAY WS] Connected for ${transactionId}`);
-        };
-
-        ws.onmessage = async (event) => {
-            console.log(`[FONEPAY WS MESSAGE] ${transactionId}:`, event.data);
-            try {
-                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                
-                let innerStatus = {};
-                if (data.transactionStatus) {
-                    try {
-                        innerStatus = typeof data.transactionStatus === 'string' ? JSON.parse(data.transactionStatus) : data.transactionStatus;
-                    } catch (e) {}
-                }
-
-                const isQrVerified = innerStatus.qrVerified === true || innerStatus.message === "VERIFIED" || data.event === "QR_SCANNED";
-                const isPaid = (innerStatus.success === true && (innerStatus.message === "SUCCESS" || innerStatus.message === "PAID")) || data.status === "SUCCESS" || data.event === "PAID";
-
-                const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-                const targetUrl = `${siteUrl}/api/webhooks/fonepay-ws`;
-                const secret = process.env.INTERNAL_API_SECRET || "byiora-internal-secret-2026-key";
-
-                if (isQrVerified && !isPaid) {
-                    console.log(`📷 [FONEPAY WS] QR SCANNED DETECTED for ${transactionId}!`);
-                    const args = [
-                        '-s', '-X', 'POST', targetUrl,
-                        '-H', 'Content-Type: application/json',
-                        '-H', `x-internal-secret: ${secret}`,
-                        '-d', JSON.stringify({ transactionId, validationTraceId: traceId, provider: "fonepay", event: "QR_SCANNED" })
-                    ];
-                    execFilePromise('curl', args).catch(err => console.error("[FONEPAY WS HOOK ERR]", err.message));
-                } else if (isPaid) {
-                    console.log(`🎉 [FONEPAY WS] PAYMENT CONFIRMED for ${transactionId}! Notifying web app...`);
-                    const args = [
-                        '-s', '-X', 'POST', targetUrl,
-                        '-H', 'Content-Type: application/json',
-                        '-H', `x-internal-secret: ${secret}`,
-                        '-d', JSON.stringify({ transactionId, validationTraceId: traceId, provider: "fonepay" })
-                    ];
-                    execFilePromise('curl', args).catch(err => console.error("[FONEPAY WS HOOK ERR]", err.message));
-                    ws.close();
-                }
-            } catch (err) {
-                console.error(`[FONEPAY WS PARSE ERROR]`, err.message);
-            }
-        };
-
-        ws.onerror = (err) => {
-            console.error(`[FONEPAY WS ERROR] ${transactionId}:`, err.message || err);
-        };
-
-        ws.onclose = () => {
-            console.log(`[FONEPAY WS CLOSED] ${transactionId}`);
-        };
-    } catch (e) {
-        console.error(`[FONEPAY WS INIT ERROR]`, e.message);
     }
 }
 

@@ -37,10 +37,6 @@ if (!PROXY_SECRET) {
 
 const QR_EXPIRY_MINUTES = 5
 
-function getProxyUrl(_category: string) {
-  return PAYMENT_PROXY_URL
-}
-
 function getProxyEndpoints(category: string) {
   if (category === "fonepay") {
     return { qr: "/api/trigger-fonepay-qr", verify: "/api/verify-fonepay-transaction" }
@@ -164,7 +160,9 @@ export async function getOrGenerateQRAction(transactionId: string) {
           expiresIn: Math.floor(QR_EXPIRY_MINUTES * 60 - qrAge * 60),
           paymentMethodName,
           paymentCategory,
-          isGuest: !txn.user_id
+          isGuest: !txn.user_id,
+          status: txn.status,
+          failureRemarks: txn.failure_remarks
         }
       }
 
@@ -205,7 +203,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
       return { success: false, error: "Failed to decrypt bank credentials" }
     }
 
-    const proxyUrl = getProxyUrl(paymentCategory)
+    const proxyUrl = PAYMENT_PROXY_URL
     const endpoints = getProxyEndpoints(paymentCategory)
 
     const proxyPayload: any = {
@@ -350,7 +348,9 @@ export async function getOrGenerateQRAction(transactionId: string) {
       expiresIn: QR_EXPIRY_MINUTES * 60,
       paymentMethodName,
       paymentCategory,
-      isGuest: !txn.user_id
+      isGuest: !txn.user_id,
+      status: txn.status,
+      failureRemarks: txn.failure_remarks
     }
 
   } catch (error: any) {
@@ -389,7 +389,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
 
     if (!username || !password) return { success: false, error: "Failed to decrypt bank credentials" }
 
-    const proxyUrl = getProxyUrl(provider)
+    const proxyUrl = PAYMENT_PROXY_URL
     const endpoints = getProxyEndpoints(provider)
 
     const response = await fetch(`${proxyUrl}${endpoints.verify}`, {
@@ -409,8 +409,6 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
     const proxyData = await response.json()
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
-      // Payment found! Call the webhook to fulfill
-      const INTERNAL_SECRET = PROXY_SECRET
       const host = headersList.get("host") || "localhost:3000"
       const protocol = host.includes("localhost") ? "http" : "https"
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
@@ -419,7 +417,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-internal-secret": INTERNAL_SECRET
+          "x-internal-secret": PROXY_SECRET
         },
         body: JSON.stringify({
           transactionId,
@@ -513,7 +511,7 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
     if (!username || !password) return { success: false, error: "Decryption failed" }
 
     // Call proxy to get transaction list and search by phone + amount + remarks
-    const proxyUrl = getProxyUrl(paymentCategory)
+    const proxyUrl = PAYMENT_PROXY_URL
     const endpoints = getProxyEndpoints(paymentCategory)
 
     const response = await fetch(`${proxyUrl}${endpoints.verify}`, {
@@ -538,7 +536,6 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
       // Payment found! Fulfill the order
-      const INTERNAL_SECRET = PROXY_SECRET
       const headersList = await headers()
       const host = headersList.get("host") || "localhost:3000"
       const protocol = host.includes("localhost") ? "http" : "https"
@@ -548,7 +545,7 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-internal-secret": INTERNAL_SECRET
+          "x-internal-secret": PROXY_SECRET
         },
         body: JSON.stringify({
           transactionId,

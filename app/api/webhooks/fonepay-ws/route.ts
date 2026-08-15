@@ -47,7 +47,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json()
-    const { transactionId, validationTraceId, provider, event } = body
+    const { transactionId, validationTraceId, provider, event, fonepayData } = body
 
     if (!transactionId) {
       return NextResponse.json({ error: "Missing transactionId" }, { status: 400 })
@@ -55,8 +55,22 @@ export async function POST(req: Request) {
 
     const supabase = createServiceRoleClient()
 
+    // Determine if this is an intermediate QR scan event vs a completed payment event
+    let isScanEvent = event === "QR_SCANNED" || event === "SCANNED"
+    if (!isScanEvent && fonepayData) {
+      let innerStatus = fonepayData.transactionStatus
+      if (typeof innerStatus === "string") {
+        try { innerStatus = JSON.parse(innerStatus) } catch (e) {}
+      }
+      const isPaid = (innerStatus?.success === true && (innerStatus?.message === "SUCCESS" || innerStatus?.message === "PAID" || innerStatus?.status === "SUCCESS")) || fonepayData.status === "SUCCESS" || fonepayData.event === "PAID" || fonepayData.event === "SUCCESS"
+      const hasScanFlag = innerStatus?.qrVerified === true || innerStatus?.message === "VERIFIED" || innerStatus?.status === "VERIFIED" || innerStatus?.isScanned === true || fonepayData.event === "QR_SCANNED" || fonepayData.event === "SCANNED" || fonepayData.status === "VERIFIED" || fonepayData.qrVerified === true
+      if (hasScanFlag && !isPaid) {
+        isScanEvent = true
+      }
+    }
+
     // Handle intermediate QR_SCANNED event from WebSocket
-    if (event === "QR_SCANNED" || event === "SCANNED") {
+    if (isScanEvent) {
       console.log(`[FONEPAY-WS] 📷 QR SCANNED event for ${transactionId}`)
       await supabase.from("transactions").update({
         status: "Processing",
