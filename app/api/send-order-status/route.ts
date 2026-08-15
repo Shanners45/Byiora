@@ -65,7 +65,9 @@ export async function POST(request: Request) {
     const isCompleted = status === 'Completed'
     const statusText = isCompleted ? 'Completed' : 'Failed'
 
-    const emailSubject = `Your order has been: ${statusText}`
+    const emailSubject = isCompleted
+      ? `Order Delivered: ${productName || 'Your Item'}`
+      : `Order Failed: ${productName || 'Your Item'}`
 
     // Derive display name — for the greeting line
     const displayName = userName || email.split('@')[0]

@@ -68,14 +68,21 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       if (cached) {
         const cachedQr = JSON.parse(cached)
         const now = Math.floor(Date.now() / 1000)
+        const normalizedCached = {
+          ...cachedQr,
+          price: cachedQr.price || cachedQr.amount || "0",
+          amount: cachedQr.amount || cachedQr.price || "0",
+          product: cachedQr.product || cachedQr.productName || "Product",
+          denomination: cachedQr.denomination || "-",
+        }
         if (cachedQr.expiresAt && now > cachedQr.expiresAt) {
           // It's expired locally. Don't fetch new QR.
-          setQrData(cachedQr)
+          setQrData(normalizedCached)
           setIsExpired(true)
           setLoading(false)
           return
         } else if (cachedQr.expiresAt && cachedQr.expiresAt > now) {
-          setQrData(cachedQr)
+          setQrData(normalizedCached)
           setTimeLeft(cachedQr.expiresAt - now)
           setLoading(false)
           return
@@ -85,12 +92,20 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       }
 
       const res = await getOrGenerateQRAction(transaction_id)
+      const normalized = {
+        ...res,
+        price: res.price || res.amount || "0",
+        amount: res.amount || res.price || "0",
+        product: res.product || res.productName || "Product",
+        denomination: res.denomination || "-",
+      }
+
       if (res.success) {
-        setQrData(res)
+        setQrData(normalized)
         setTimeLeft(res.expiresIn || 0)
 
         const expiresAt = Math.floor(Date.now() / 1000) + (res.expiresIn || 5 * 60)
-        localStorage.setItem(`qr_${transaction_id}`, JSON.stringify({ ...res, expiresAt }))
+        localStorage.setItem(`qr_${transaction_id}`, JSON.stringify({ ...normalized, expiresAt }))
 
         if (res.status === "Completed" || res.status === "Paid") {
           setIsCompleted(true)
@@ -109,7 +124,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
           setOverlayType("cancelled")
         } else if (res.status === "Payment Failed") {
           setIsExpired(true)
-          setQrData(res)
+          setQrData(normalized)
         } else {
           setError("Checkout unavailable")
         }
@@ -520,8 +535,17 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
         <div className="container mx-auto px-4 py-4 md:py-6 flex justify-between items-center w-full">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-3 text-gray-900">
-              <Smartphone className="h-7 w-7 md:h-8 md:w-8 text-[#7E3AF2]" />
-              Scan to Pay
+              {(isExpired || qrData?.status === "Payment Failed" || (timeLeft === 0 && !qrData?.isStatic && qrData)) ? (
+                <>
+                  <AlertCircle className="h-7 w-7 md:h-8 md:w-8 text-amber-500" />
+                  Payment Session Expired
+                </>
+              ) : (
+                <>
+                  <Smartphone className="h-7 w-7 md:h-8 md:w-8 text-[#7E3AF2]" />
+                  Scan to Pay
+                </>
+              )}
             </h1>
             <p className="text-gray-600 mt-1 md:mt-2 text-sm md:text-base">
               Order ID: <span className="font-mono font-bold text-gray-900 bg-white border border-gray-200 px-2 py-0.5 rounded ml-1 shadow-sm">{transaction_id}</span>
@@ -590,7 +614,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
               Return to Store
             </Button>
           </div>
-        ) : isExpired && (qrData?.isGuest || !qrData) ? (
+        ) : (isExpired || qrData?.status === "Payment Failed" || (timeLeft === 0 && !qrData?.isStatic && qrData)) ? (
           <div className="flex flex-col md:flex-row gap-6 md:gap-8 items-start w-full">
             {/* LEFT COLUMN: Order Details */}
             <div className="w-full md:w-5/12 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -614,7 +638,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                   <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-gray-600 text-sm">Product</span>
-                      <span className="font-semibold text-gray-900 text-right">{qrData?.product || "Game Top-up"}</span>
+                      <span className="font-semibold text-gray-900 text-right">{qrData?.product || qrData?.productName || "Product"}</span>
                     </div>
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-gray-600 text-sm">Denomination</span>
@@ -623,7 +647,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                     <div className="w-full h-px bg-gray-200 my-4"></div>
                     <div className="flex justify-between items-center">
                       <span className="text-gray-600 text-sm">Total Amount</span>
-                      <span className="font-bold text-xl text-[#6B3FA0]">NPR {qrData?.price || "0"}</span>
+                      <span className="font-bold text-xl text-[#6B3FA0]">Rs. {qrData?.price || qrData?.amount || "0"}</span>
                     </div>
                   </div>
                 </div>
@@ -656,12 +680,18 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                     </Button>
 
                     <Button
-                      onClick={() => router.push("/")}
+                      onClick={() => {
+                        if (qrData?.isGuest) {
+                          router.push("/")
+                        } else {
+                          router.push("/transactions")
+                        }
+                      }}
                       variant="outline"
                       className="w-full h-14 font-semibold text-base rounded-xl border-gray-300 hover:bg-gray-50 text-gray-700"
                     >
                       <ArrowLeft className="h-5 w-5 mr-2" />
-                      Return to Store
+                      {qrData?.isGuest ? "Return to Store" : "Go to Transactions"}
                     </Button>
                   </div>
                 </div>
@@ -838,8 +868,8 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                 <div className="flex justify-between items-center pb-3 border-b border-gray-200">
                   <span className="text-gray-500 font-medium">Product</span>
                   <div className="text-right flex flex-col">
-                    <span className="font-semibold text-gray-900 max-w-[200px] truncate" title={qrData.product}>{qrData.product}</span>
-                    {qrData.denomination && qrData.denomination !== qrData.product && (
+                    <span className="font-semibold text-gray-900 max-w-[200px] truncate" title={qrData.product || qrData.productName}>{qrData.product || qrData.productName || "Product"}</span>
+                    {qrData.denomination && qrData.denomination !== (qrData.product || qrData.productName) && (
                       <span className="text-xs text-[#7E3AF2] font-semibold tracking-wide mt-0.5">
                         {qrData.denomination}
                       </span>
@@ -848,7 +878,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                 </div>
                 <div className="flex justify-between items-center pb-3 border-b border-gray-200">
                   <span className="text-gray-500 font-medium">Amount to Pay</span>
-                  <span className="font-bold text-[#7E3AF2] text-xl">Rs. {qrData.amount}</span>
+                  <span className="font-bold text-[#7E3AF2] text-xl">Rs. {qrData.price || qrData.amount || "0"}</span>
                 </div>
                 {!qrData.isStatic && (
                   <div className="flex justify-between items-center text-amber-700 pt-2">

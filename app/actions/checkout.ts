@@ -81,8 +81,10 @@ export async function getOrGenerateQRAction(transactionId: string) {
         error: "Transaction is already completed", 
         status: "Completed", 
         isGuest: !txn.user_id,
+        product: txn.product_name,
         productName: txn.product_name,
-        amount: txn.amount,
+        denomination: txn.amount,
+        amount: txn.price,
         price: txn.price
       }
     }
@@ -94,8 +96,10 @@ export async function getOrGenerateQRAction(transactionId: string) {
         error: `Transaction is ${currentStatus.toLowerCase()}`, 
         status: currentStatus, 
         isGuest: !txn.user_id,
+        product: txn.product_name,
         productName: txn.product_name,
-        amount: txn.amount,
+        denomination: txn.amount,
+        amount: txn.price,
         price: txn.price
       }
     }
@@ -126,7 +130,9 @@ export async function getOrGenerateQRAction(transactionId: string) {
         staticQrUrl: (staticMethod as any)?.qr_url,
         instructions: (staticMethod as any)?.instructions,
         amount: txn.price,
+        price: txn.price,
         product: txn.product_name,
+        productName: txn.product_name,
         denomination: txn.amount,
         paymentMethodName,
         paymentCategory,
@@ -137,12 +143,28 @@ export async function getOrGenerateQRAction(transactionId: string) {
     // 3b. Khalti uses redirect-based payment, not QR — shouldn't be on checkout page
     if (paymentCategory === "khalti") {
       if ((txn.status as string) === "Paid" || (txn.status as string) === "Completed") {
-        return { success: false, error: "Transaction is already completed", status: "Completed", isGuest: !txn.user_id }
+        return { 
+          success: false, 
+          error: "Transaction is already completed", 
+          status: "Completed", 
+          isGuest: !txn.user_id,
+          product: txn.product_name,
+          productName: txn.product_name,
+          denomination: txn.amount,
+          amount: txn.price,
+          price: txn.price
+        }
       }
       return { 
         success: false, 
         error: "This order is no longer active", 
-        isGuest: !txn.user_id 
+        status: txn.status,
+        isGuest: !txn.user_id,
+        product: txn.product_name,
+        productName: txn.product_name,
+        denomination: txn.amount,
+        amount: txn.price,
+        price: txn.price
       }
     }
 
@@ -610,20 +632,28 @@ export async function expireTransactionAction(transactionId: string) {
     }
 
     let customMsg = "We noticed your payment session expired and your order has been marked as <strong>Payment Failed</strong>."
+    let actionBtn: { label: string; url: string; subtext?: string } | undefined = undefined
 
-    // Add verification button text
+    // Add verification button below order summary for dynamic QR payments
     const isDynamic = (txn as any).payment_category === "nepalpay" || (txn as any).payment_category === "fonepay"
     if (isDynamic) {
       if (txn.user_id) {
-        customMsg += "<br/><br/>If you have already paid but your order still failed, please verify your payment. "
-        customMsg += `<a href="https://www.byiora.com.np/transactions" style="color: #6B3FA0; font-weight: 600;">Go to your Transaction History</a>, and click the <strong>Verify Payment</strong> button.`
+        customMsg += "<br/><br/>If you have already paid but your order timed out, you can securely verify your payment from your Transaction History."
+        actionBtn = {
+          label: "Verify in Transaction History",
+          url: "https://www.byiora.com.np/transactions",
+          subtext: "Click the Verify Payment button next to this order within 24 hours."
+        }
       } else {
         // Guest user logic with magic link
         const rawToken = await generateGuestVerificationToken(transactionId)
         const token = encodeURIComponent(rawToken)
-        customMsg += "<br/><br/>If you have already paid but your order still failed, please click the secure link below to verify your payment. "
-        customMsg += `This link will expire in exactly 24 hours.<br/><br/>`
-        customMsg += `<div style="text-align: center;"><a href="https://www.byiora.com.np/verify-guest?token=${token}" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Verify Payment Securely</a></div>`
+        customMsg += "<br/><br/>If you have already paid but your order timed out, please click the secure link below to verify your payment and fulfill your order."
+        actionBtn = {
+          label: "Verify Payment Securely",
+          url: `https://www.byiora.com.np/verify-guest?token=${token}`,
+          subtext: "This secure link will expire in exactly 24 hours."
+        }
       }
     }
 
@@ -638,7 +668,9 @@ export async function expireTransactionAction(transactionId: string) {
         paymentMethod: txn.payment_method,
         isGuest: !txn.user_id,
         status: "Payment Failed",
-        customMessage: customMsg
+        customMessage: customMsg,
+        subjectOverride: `Order Failed: ${txn.product_name}`,
+        actionButton: actionBtn
       })
     } catch (e) {
       console.error("Failed to send failed email:", e)
@@ -653,8 +685,6 @@ export async function expireTransactionAction(transactionId: string) {
 
 /**
  * Explicitly cancel a transaction by the user.
- * Sends a "Your order was cancelled" email that still includes a magic-link
- * safety net so users who paid before cancelling can recover.
  */
 export async function cancelTransactionAction(transactionId: string) {
   try {
@@ -672,7 +702,6 @@ export async function cancelTransactionAction(transactionId: string) {
 
     // --- Send Cancellation Email ---
     const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
-    const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
 
     let userName = undefined
     if (txn.user_id) {
@@ -682,23 +711,7 @@ export async function cancelTransactionAction(transactionId: string) {
       userName = (txn as any).guest_user_data.name
     }
 
-    let customMsg = "You have cancelled your order for <strong>" + txn.product_name + "</strong>."
-
-    // Add safety-net verification link for dynamic QR payments
-    const isDynamic = (txn as any).payment_category === "nepalpay" || (txn as any).payment_category === "fonepay"
-    if (isDynamic) {
-      customMsg += "<br/><br/><strong>Already paid before cancelling?</strong> Don't worry — you can still verify your payment."
-      if (txn.user_id) {
-        customMsg += ` <a href="https://www.byiora.com.np/transactions" style="color: #6B3FA0; font-weight: 600;">Go to your Transaction History</a> and click the <strong>Verify Payment</strong> button.`
-      } else {
-        // Guest user — generate magic link
-        const rawToken = await generateGuestVerificationToken(transactionId)
-        const token = encodeURIComponent(rawToken)
-        customMsg += `<br/><br/>`
-        customMsg += `<div style="text-align: center;"><a href="https://www.byiora.com.np/verify-guest?token=${token}" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Verify Payment Securely</a></div>`
-        customMsg += `<p style="color: #9ca3af; font-size: 13px; text-align: center; margin-top: 8px;">This link expires in 24 hours.</p>`
-      }
-    }
+    const customMsg = "You have cancelled your order for <strong>" + txn.product_name + "</strong>."
 
     try {
       await sendOrderPlacedEmail({

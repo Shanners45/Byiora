@@ -57,6 +57,11 @@ export async function sendOrderPlacedEmail(input: {
   status?: string
   customMessage?: string
   subjectOverride?: string
+  actionButton?: {
+    label: string
+    url: string
+    subtext?: string
+  }
 }) {
   const resend = getResend()
 
@@ -111,12 +116,20 @@ export async function sendOrderPlacedEmail(input: {
           ${row("Order Date", orderDate)}
         </table>
       </div>
+      ${(!input.status || (!input.status.toLowerCase().includes("failed") && !input.status.toLowerCase().includes("cancelled"))) ? `
       <p style="color: #4b5563; font-size: 15px; line-height: 1.6; text-align: center;">
         We will notify you again via email as soon as your order has been completed!
-      </p>
-      ${!input.isGuest ? `<div style="margin-top: 35px; text-align: center;">
+      </p>` : ''}
+      ${input.actionButton ? `
+      <div style="margin-top: 30px; text-align: center;">
+        <a href="${input.actionButton.url}" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px; box-shadow: 0 2px 4px rgba(107, 63, 160, 0.2);">${input.actionButton.label}</a>
+        ${input.actionButton.subtext ? `<p style="color: #9ca3af; font-size: 12px; margin: 8px 0 0 0;">${input.actionButton.subtext}</p>` : ''}
+      </div>
+      ` : (!input.isGuest && (!input.status || (!input.status.toLowerCase().includes("failed") && !input.status.toLowerCase().includes("cancelled"))) ? `
+      <div style="margin-top: 35px; text-align: center;">
          <a href="https://www.byiora.com.np/transactions" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Order Status</a>
-      </div>` : ''}
+      </div>
+      ` : '')}
     </div>
     <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
       <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Need help with your order? <a href="https://www.byiora.com.np/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">Contact Support</a></p>

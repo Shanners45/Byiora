@@ -88,7 +88,27 @@ export async function getAllTransactionsAction() {
       return { error: `Failed to load transactions: ${error.message}` }
     }
 
-    const transactionsList: any[] = data || []
+    // Normalize any legacy "Archived" status to "Payment Failed"
+    const rawList: any[] = data || []
+    const transactionsList = rawList.map((txn) => {
+      if (txn.status === "Archived") {
+        return { ...txn, status: "Payment Failed" }
+      }
+      return txn
+    })
+
+    // Auto-migrate any legacy "Archived" rows in the DB to "Payment Failed" asynchronously
+    const hasArchived = rawList.some((t) => t.status === "Archived")
+    if (hasArchived) {
+      serviceSupabase
+        .from("transactions")
+        .update({ status: "Payment Failed" } as any)
+        .eq("status", "Archived" as any)
+        .then(({ error: migErr }) => {
+          if (migErr) console.error("Error migrating archived transactions:", migErr)
+          else console.log("Successfully migrated legacy Archived records to Payment Failed")
+        })
+    }
 
     // Background auto-sync: Check if any Paid/Completed Khalti transactions were refunded via Khalti App/Portal
     const paidKhaltiTxns = transactionsList.filter(

@@ -649,6 +649,7 @@ export default function OrdersPage() {
                     </TableCell>
                     <TableCell>
                       {(() => {
+                        const status = transaction.status === ("Archived" as any) ? "Payment Failed" : transaction.status
                         const isDynamic =
                           transaction.payment_category === "nepalpay" ||
                           transaction.payment_category === "fonepay" ||
@@ -656,18 +657,25 @@ export default function OrdersPage() {
                           transaction.payment_method?.toLowerCase().includes("nepalpay") ||
                           transaction.payment_method?.toLowerCase().includes("fonepay") ||
                           transaction.payment_method?.toLowerCase().includes("khalti")
-                        
-                        const isPartialRefund = transaction.status === "Refunded" && transaction.failure_remarks && (
+
+                        const isDigitalGoods =
+                          transaction.product_category === "digital-goods" ||
+                          transaction.product_category === "games" ||
+                          (!transaction.product_category && transaction.product_name)
+
+                        const isPartialRefund = status === "Refunded" && transaction.failure_remarks && (
                           transaction.failure_remarks.toLowerCase().includes("partial")
                         )
                         const refundSubtext = isPartialRefund && transaction.failure_remarks
                           ? transaction.failure_remarks.replace("Khalti Refunded", "Refunded").replace("Refunded (Portal)", "Refunded")
                           : null
 
-                        if (isDynamic && transaction.status !== "Paid" && transaction.status !== "Completed") {
+                        // 1. Terminal / Finalized statuses: always show static badge (no dropdown)
+                        const isTerminal = ["Completed", "Refunded", "Failed", "Cancelled", "Payment Failed"].includes(status)
+                        if (isTerminal) {
                           return (
                             <div className="flex flex-col gap-1 items-start">
-                              <Badge className={`${getStatusColor(transaction.status)} whitespace-nowrap w-fit`}>{transaction.status}</Badge>
+                              <Badge className={`${getStatusColor(status)} whitespace-nowrap w-fit`}>{status}</Badge>
                               {refundSubtext && (
                                 <span className="text-[11px] font-semibold text-purple-700 leading-tight bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
                                   {refundSubtext}
@@ -677,40 +685,67 @@ export default function OrdersPage() {
                           )
                         }
 
+                        // 2. Dynamic QR + Digital Goods: No dropdown menu (fulfilled via Giftcard Code input + Send button)
+                        if (isDynamic && isDigitalGoods) {
+                          return (
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge className={`${getStatusColor(status)} whitespace-nowrap w-fit`}>{status}</Badge>
+                            </div>
+                          )
+                        }
+
+                        // 3. Dynamic QR + Non-Digital Goods (Direct Login, Top-up, etc.):
+                        // Only show dropdown when status is "Paid" (options: Completed, Refunded)
+                        if (isDynamic) {
+                          if (status !== "Paid") {
+                            return (
+                              <div className="flex flex-col gap-1 items-start">
+                                <Badge className={`${getStatusColor(status)} whitespace-nowrap w-fit`}>{status}</Badge>
+                              </div>
+                            )
+                          }
+
+                          return (
+                            <div className="flex flex-col gap-1 items-start">
+                              <Select
+                                value={status}
+                                onValueChange={(value) =>
+                                  updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
+                                }
+                              >
+                                <SelectTrigger className="w-[140px] h-9 p-1 flex justify-between items-center">
+                                  <Badge className={`${getStatusColor(status)} whitespace-nowrap w-full justify-center`}>{status}</Badge>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Paid">Paid</SelectItem>
+                                  <SelectItem value="Completed">Completed</SelectItem>
+                                  <SelectItem value="Refunded">Refunded</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )
+                        }
+
+                        // 4. Static QR (all product categories) in active/pending state:
+                        // Show dropdown with Processing, Completed, Failed, Refunded
                         return (
                           <div className="flex flex-col gap-1 items-start">
                             <Select
-                              value={transaction.status}
+                              value={status}
                               onValueChange={(value) =>
                                 updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
                               }
                             >
                               <SelectTrigger className="w-[140px] h-9 p-1 flex justify-between items-center">
-                                <Badge className={`${getStatusColor(transaction.status)} whitespace-nowrap w-full justify-center`}>{transaction.status}</Badge>
+                                <Badge className={`${getStatusColor(status)} whitespace-nowrap w-full justify-center`}>{status}</Badge>
                               </SelectTrigger>
                               <SelectContent>
-                                {isDynamic ? (
-                                  <>
-                                    <SelectItem value="Paid">Paid</SelectItem>
-                                    <SelectItem value="Completed">Completed</SelectItem>
-                                    <SelectItem value="Failed">Failed</SelectItem>
-                                    <SelectItem value="Refunded">Refunded</SelectItem>
-                                  </>
-                                ) : (
-                                  <>
-                                    <SelectItem value="Processing">Processing</SelectItem>
-                                    <SelectItem value="Completed">Completed</SelectItem>
-                                    <SelectItem value="Failed">Failed</SelectItem>
-                                    <SelectItem value="Refunded">Refunded</SelectItem>
-                                  </>
-                                )}
+                                <SelectItem value="Processing">Processing</SelectItem>
+                                <SelectItem value="Completed">Completed</SelectItem>
+                                <SelectItem value="Failed">Failed</SelectItem>
+                                <SelectItem value="Refunded">Refunded</SelectItem>
                               </SelectContent>
                             </Select>
-                            {refundSubtext && (
-                              <span className="text-[11px] font-semibold text-purple-700 leading-tight bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
-                                {refundSubtext}
-                              </span>
-                            )}
                           </div>
                         )
                       })()}
@@ -730,14 +765,14 @@ export default function OrdersPage() {
                             placeholder="Enter Giftcard Code"
                             value={giftcardCodes[transaction.id] !== undefined ? giftcardCodes[transaction.id] : (transaction.giftcard_code || '')}
                             onChange={(e) => setGiftcardCodes(prev => ({ ...prev, [transaction.id]: e.target.value }))}
-                            disabled={["Failed", "Completed", "Payment Failed", "Payment Pending"].includes(transaction.status)}
+                            disabled={["Processing", "Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status)}
                             readOnly={transaction.status === "Completed"}
                             className={`w-[170px] h-8 text-xs placeholder:text-gray-500 ${transaction.status === "Completed" ? "bg-green-50 border-green-200 text-green-800 font-mono" : ""}`}
                           />
                           <Button
                             size="sm"
                             onClick={() => handleSendGiftcardCode(transaction)}
-                            disabled={["Failed", "Completed", "Payment Failed", "Payment Pending"].includes(transaction.status) || sendingCodeIds[transaction.id]}
+                            disabled={["Processing", "Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status) || sendingCodeIds[transaction.id]}
                             className={`h-8 px-2 flex-shrink-0 ${transaction.status === "Completed" ? "bg-green-500 hover:bg-green-500 text-white cursor-not-allowed" : "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"}`}
                           >
                             {sendingCodeIds[transaction.id] ? "..." : (transaction.status === "Completed" ? "✓" : <Send className="h-3 w-3" />)}

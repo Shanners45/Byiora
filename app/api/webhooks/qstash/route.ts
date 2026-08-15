@@ -75,7 +75,8 @@ async function handler(req: Request) {
       return NextResponse.json({ success: true, message: "Transaction already processed" }, { status: 200 })
     }
 
-    if (!["Payment Pending", "Processing"].includes(txn.status)) {
+    const allowedStatuses = internalTrigger ? ["Payment Pending", "Processing", "Payment Failed"] : ["Payment Pending", "Processing"]
+    if (!allowedStatuses.includes(txn.status)) {
       return NextResponse.json({ success: true, message: `Transaction is in ${txn.status} state. Stopping polling.` }, { status: 200 })
     }
 

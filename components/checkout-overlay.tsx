@@ -1,9 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import dynamic from "next/dynamic"
-
-const Lottie = dynamic(() => import("lottie-react"), { ssr: false })
 
 type OverlayType = "success" | "cancelled" | "failed"
 
@@ -38,7 +35,7 @@ const OVERLAY_CONFIG: Record<OverlayType, {
   },
   failed: {
     title: "Payment Session Expired",
-    subtitle: "Taking you to transactions to verify or reorder…",
+    subtitle: "Redirecting to transactions…",
     accentColor: "#ef4444",
     bgGradient: "radial-gradient(ellipse at center, rgba(239, 68, 68, 0.1) 0%, transparent 70%)",
     ringColor: "rgba(239, 68, 68, 0.15)",
@@ -46,19 +43,8 @@ const OVERLAY_CONFIG: Record<OverlayType, {
 }
 
 export default function CheckoutOverlay({ type, onComplete, delayMs = 3600 }: CheckoutOverlayProps) {
-  const [animData, setAnimData] = useState<any>(null)
   const [showText, setShowText] = useState(false)
   const config = OVERLAY_CONFIG[type]
-
-  // Load lottie data for success
-  useEffect(() => {
-    if (type === "success") {
-      fetch("/animations/payment-success.json")
-        .then(r => r.json())
-        .then(setAnimData)
-        .catch(() => {})
-    }
-  }, [type])
 
   // Show text slightly after mount
   useEffect(() => {
@@ -110,13 +96,9 @@ export default function CheckoutOverlay({ type, onComplete, delayMs = 3600 }: Ch
         />
 
         {/* Icon/Animation */}
-        <div className="relative z-10 flex items-center justify-center" style={{ width: 100, height: 100 }}>
-          {type === "success" && animData ? (
-            <Lottie
-              animationData={animData}
-              loop={false}
-              style={{ width: 100, height: 100 }}
-            />
+        <div className="relative z-10 flex items-center justify-center" style={{ width: 120, height: 120 }}>
+          {type === "success" ? (
+            <SuccessIcon color={config.accentColor} />
           ) : type === "cancelled" ? (
             <CancelledIcon color={config.accentColor} />
           ) : (
@@ -167,6 +149,43 @@ export default function CheckoutOverlay({ type, onComplete, delayMs = 3600 }: Ch
         }
       `}</style>
     </div>
+  )
+}
+
+// SVG icon for Success state — animated circle + checkmark (matches Cancelled & Failed in size & style)
+function SuccessIcon({ color }: { color: string }) {
+  return (
+    <svg viewBox="0 0 120 120" width="120" height="120">
+      <circle
+        cx="60" cy="60" r="50"
+        fill="none"
+        stroke={color}
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeDasharray="314"
+        strokeDashoffset="314"
+        style={{ animation: "drawCircle 0.55s cubic-bezier(0.65, 0, 0.45, 1) 0.15s forwards" }}
+      />
+      <polyline
+        points="36 62 53 78 84 46"
+        fill="none"
+        stroke={color}
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray="75"
+        strokeDashoffset="75"
+        style={{ animation: "drawCheck 0.45s cubic-bezier(0.65, 0, 0.45, 1) 0.65s forwards" }}
+      />
+      <style>{`
+        @keyframes drawCircle {
+          to { stroke-dashoffset: 0; }
+        }
+        @keyframes drawCheck {
+          to { stroke-dashoffset: 0; }
+        }
+      `}</style>
+    </svg>
   )
 }
 
