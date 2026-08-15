@@ -5,27 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
 import { verifyAdmin } from "./admin-utils"
-
-import crypto from "crypto"
-
-function decryptInventoryCodeSync(encryptedBlob: string): string | null {
-  try {
-    const key = process.env.INVENTORY_ENCRYPTION_KEY
-    if (!key) return null
-    const parts = encryptedBlob.split(":")
-    if (parts.length !== 3) return null
-    const [ivHex, authTagHex, ciphertext] = parts
-    const iv = Buffer.from(ivHex, "hex")
-    const authTag = Buffer.from(authTagHex, "hex")
-    const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(key, "hex"), iv)
-    decipher.setAuthTag(authTag)
-    let decrypted = decipher.update(ciphertext, "hex", "utf8")
-    decrypted += decipher.final("utf8")
-    return decrypted
-  } catch {
-    return null
-  }
-}
+import { decryptInventoryCode } from "@/lib/crypto/inventory"
 
 /**
  * Updates transaction status (admin only)
@@ -70,7 +50,7 @@ export async function updateTransactionStatusAction(
 
         if (!claimError && claimData && (claimData as any).length > 0 && (claimData as any)[0].encrypted_code) {
           deliveredCode = (claimData as any)[0].encrypted_code
-          decryptedCode = decryptInventoryCodeSync(deliveredCode as string)
+          decryptedCode = decryptInventoryCode(deliveredCode as string)
           
           if (decryptedCode) {
             finalStatus = "Completed"
@@ -85,6 +65,11 @@ export async function updateTransactionStatusAction(
       updatePayload.giftcard_code = decryptedCode
     } else if (deliveredCode) {
       updatePayload.giftcard_code = deliveredCode
+    }
+
+    // PRIVACY: Auto-clear direct-login credentials on terminal states
+    if (["Completed", "Refunded", "Cancelled", "Payment Failed", "Failed"].includes(finalStatus)) {
+      updatePayload.encrypted_checkout_data = null
     }
 
     const { error } = await serviceSupabase
@@ -374,7 +359,7 @@ export async function refundKhaltiTransactionAction(
             body: JSON.stringify({ pidx: lookupPidx })
           })
           const lookupData = await lookupResp.json().catch(() => ({}))
-          console.log(`[KHALTI REFUND LOOKUP RESULT]`, lookupData)
+          console.log(`[KHALTI REFUND LOOKUP RESULT] Status: ${lookupData.status || "N/A"}`)
 
           const resolvedTxnId = lookupData.transaction_id || lookupData.tidx || lookupData.bank_txn_id
           if (resolvedTxnId) {
@@ -415,7 +400,7 @@ export async function refundKhaltiTransactionAction(
         merchantPayload.mobile = mobile.trim()
       }
 
-      console.log(`[KHALTI REFUND] Attempting merchant transaction refund for ${transactionId}, Target ID: ${targetId}, URL: ${merchantUrl}, Payload:`, merchantPayload)
+      console.log(`[KHALTI REFUND] Attempting merchant transaction refund for ${transactionId}, Target ID: ${targetId}`)
 
       try {
         const resp = await fetch(merchantUrl, {
@@ -447,7 +432,7 @@ export async function refundKhaltiTransactionAction(
         v2Payload.amount = amountInPaisa
       }
 
-      console.log(`[KHALTI REFUND] Attempting v2 epayment refund for ${transactionId}, URL: ${v2Url}, Payload:`, v2Payload)
+      console.log(`[KHALTI REFUND] Attempting v2 epayment refund for ${transactionId}`)
 
       try {
         const resp = await fetch(v2Url, {
@@ -471,7 +456,7 @@ export async function refundKhaltiTransactionAction(
       }
     }
 
-    console.log(`[KHALTI REFUND RESULT] Success: ${refundSuccess}, Body:`, refundResponseData)
+    console.log(`[KHALTI REFUND RESULT] Success: ${refundSuccess}`)
 
     if (!refundSuccess) {
       return { 

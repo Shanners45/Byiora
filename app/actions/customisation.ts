@@ -23,7 +23,10 @@ export async function addBannerAction(title: string, linkUrl: string, imageUrl: 
     sort_order: sortOrder
   }]).select().single()
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Error adding banner:", error)
+    return { error: "Failed to add banner" }
+  }
   revalidatePath("/")
   return { success: true, data }
 }
@@ -41,7 +44,10 @@ export async function updateBannerAction(id: string, title: string, linkUrl: str
     link_url: sanitizedLink
   }).eq("id", id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Error updating banner:", error)
+    return { error: "Failed to update banner" }
+  }
   revalidatePath("/")
   return { success: true }
 }
@@ -58,7 +64,10 @@ export async function addCategoryAction(title: string, sortOrder: number) {
     product_ids: []
   }]).select().single()
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Error adding category:", error)
+    return { error: "Failed to add category" }
+  }
   revalidatePath("/")
   return { success: true, data }
 }
@@ -73,7 +82,10 @@ export async function updateCategoryTitleAction(id: string, title: string) {
     title: sanitizedTitle
   }).eq("id", id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Error updating category title:", error)
+    return { error: "Failed to update category title" }
+  }
   revalidatePath("/")
   return { success: true }
 }
@@ -94,7 +106,10 @@ export async function deleteBannerAction(id: string) {
 
   const { error } = await supabase.from("banners").delete().eq("id", id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Error deleting banner:", error)
+    return { error: "Failed to delete banner" }
+  }
   revalidatePath("/")
   return { success: true }
 }
@@ -105,7 +120,10 @@ export async function toggleBannerStatusAction(id: string, currentStatus: boolea
 
   const { error } = await supabase.from("banners").update({ is_active: !currentStatus }).eq("id", id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Error toggling banner status:", error)
+    return { error: "Failed to update banner status" }
+  }
   revalidatePath("/")
   return { success: true }
 }
@@ -143,7 +161,10 @@ export async function deleteCategoryAction(id: string) {
 
   const { error } = await supabase.from("homepage_categories").delete().eq("id", id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Error deleting category:", error)
+    return { error: "Failed to delete category" }
+  }
   revalidatePath("/")
   return { success: true }
 }
@@ -154,7 +175,10 @@ export async function toggleCategoryStatusAction(id: string, currentStatus: bool
 
   const { error } = await supabase.from("homepage_categories").update({ is_active: !currentStatus }).eq("id", id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Error toggling category status:", error)
+    return { error: "Failed to update category status" }
+  }
   revalidatePath("/")
   return { success: true }
 }
@@ -165,7 +189,10 @@ export async function updateCategoryProductsAction(id: string, productIds: strin
 
   const { error } = await supabase.from("homepage_categories").update({ product_ids: productIds }).eq("id", id)
 
-  if (error) return { error: error.message }
+  if (error) {
+    console.error("Error updating category products:", error)
+    return { error: "Failed to update category products" }
+  }
   revalidatePath("/")
   return { success: true }
 }

@@ -5,15 +5,15 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import crypto from "crypto"
 
-import { verifyAdmin } from "./admin-utils"
+import { verifySuperAdmin } from "./admin-utils"
 
 /**
- * Promotes a user to a different admin role (admin only)
+ * Promotes a user to a different admin role (Super Admin only)
  * Uses Service Role to bypass RLS
  */
 export async function promoteUserAction(userId: string, newRole: "sub_admin" | "order_management") {
-  if (!(await verifyAdmin())) {
-    return { error: "Unauthorized: Admin access required" }
+  if (!(await verifySuperAdmin())) {
+    return { error: "Unauthorized: Super Admin access required" }
   }
 
   try {
@@ -26,7 +26,7 @@ export async function promoteUserAction(userId: string, newRole: "sub_admin" | "
 
     if (error) {
       console.error("Error promoting user:", error)
-      return { error: `Failed to promote user: ${error.message}` }
+      return { error: "Failed to promote user" }
     }
 
     // 2. Generate a secure random password and update auth
@@ -37,20 +37,18 @@ export async function promoteUserAction(userId: string, newRole: "sub_admin" | "
 
     if (authError) {
       console.error("Error resetting password during promotion:", authError)
-      // We don't necessarily fail the whole promotion if auth reset fails, 
-      // but it's better to log it.
     }
 
     revalidatePath("/admin/dashboard/admin-users")
     return { success: true, newPassword }
   } catch (error: any) {
     console.error("Error in promoteUserAction:", error)
-    return { error: error.message || "An unexpected error occurred" }
+    return { error: "An unexpected error occurred" }
   }
 }
 
 /**
- * Adds a new admin user (admin only)
+ * Adds a new admin user (Super Admin only)
  * Creates the Auth user server-side using Service Role to avoid
  * polluting the calling admin's session with a signUp().
  */
@@ -60,8 +58,8 @@ export async function addAdminUserAction(
   password: string,
   role: "sub_admin" | "order_management"
 ) {
-  if (!(await verifyAdmin())) {
-    return { error: "Unauthorized: Admin access required" }
+  if (!(await verifySuperAdmin())) {
+    return { error: "Unauthorized: Super Admin access required" }
   }
 
   try {
@@ -96,24 +94,24 @@ export async function addAdminUserAction(
       // Rollback: delete the auth user we just created
       await serviceSupabase.auth.admin.deleteUser(uid)
       console.error("Error adding admin user:", error)
-      return { error: `Failed to add admin user: ${error.message}` }
+      return { error: "Failed to add admin user" }
     }
 
     revalidatePath("/admin/dashboard/admin-users")
     return { success: true }
   } catch (error: any) {
     console.error("Error in addAdminUserAction:", error)
-    return { error: error.message || "An unexpected error occurred" }
+    return { error: "An unexpected error occurred" }
   }
 }
 
 /**
- * Toggles admin user status (admin only)
+ * Toggles admin user status (Super Admin only)
  * Uses Service Role to bypass RLS
  */
 export async function toggleAdminStatusAction(id: string, currentStatus: string) {
-  if (!(await verifyAdmin())) {
-    return { error: "Unauthorized: Admin access required" }
+  if (!(await verifySuperAdmin())) {
+    return { error: "Unauthorized: Super Admin access required" }
   }
 
   try {
@@ -128,24 +126,24 @@ export async function toggleAdminStatusAction(id: string, currentStatus: string)
 
     if (error) {
       console.error("Error updating admin status:", error)
-      return { error: `Failed to update admin status: ${error.message}` }
+      return { error: "Failed to update admin status" }
     }
 
     revalidatePath("/admin/dashboard/admin-users")
     return { success: true, newStatus }
   } catch (error: any) {
     console.error("Error in toggleAdminStatusAction:", error)
-    return { error: error.message || "An unexpected error occurred" }
+    return { error: "An unexpected error occurred" }
   }
 }
 
 /**
- * Gets all admin users (admin only)
+ * Gets all admin users (Super Admin only)
  * Uses Service Role to bypass RLS
  */
 export async function getAdminUsersAction() {
-  if (!(await verifyAdmin())) {
-    return { error: "Unauthorized: Admin access required" }
+  if (!(await verifySuperAdmin())) {
+    return { error: "Unauthorized: Super Admin access required" }
   }
 
   try {
@@ -153,27 +151,28 @@ export async function getAdminUsersAction() {
 
     const { data, error } = await serviceSupabase
       .from("admin_users")
-      .select("*")
+      .select("id, name, email, role, status, created_at")
       .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching admin users:", error)
-      return { error: `Failed to fetch admin users: ${error.message}` }
+      return { error: "Failed to fetch admin users" }
     }
 
     return { success: true, data }
   } catch (error: any) {
     console.error("Error in getAdminUsersAction:", error)
-    return { error: error.message || "An unexpected error occurred" }
+    return { error: "An unexpected error occurred" }
   }
 }
+
 /**
- * Resets an admin user's password (admin only)
+ * Resets an admin user's password (Super Admin only)
  * Uses Service Role to update the actual Auth system
  */
 export async function resetAdminPasswordAction(userId: string, newPassword: string) {
-  if (!(await verifyAdmin())) {
-    return { error: "Unauthorized: Admin access required" }
+  if (!(await verifySuperAdmin())) {
+    return { error: "Unauthorized: Super Admin access required" }
   }
 
   try {

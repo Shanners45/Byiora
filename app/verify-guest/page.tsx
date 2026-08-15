@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { ShieldAlert, CreditCard, ShieldCheck } from "lucide-react"
 import Image from "next/image"
 import { VerifyGuestPaymentClient } from "./verify-client"
+import { headers } from "next/headers"
+import { rateLimit } from "@/lib/rate-limit"
 
 export default async function VerifyGuestPage({
   searchParams,
@@ -16,6 +18,29 @@ export default async function VerifyGuestPage({
 
   if (!token) {
     redirect("/")
+  }
+
+  // SECURITY: Rate limit guest verification attempts (20 per minute per IP)
+  const h = await headers()
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+  const rl = await rateLimit(`verify-guest:${ip}`, { windowMs: 60_000, max: 20 })
+  if (!rl.ok) {
+    return (
+      <div className="min-h-screen bg-white flex flex-col items-center pt-24 p-4">
+        <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h1 className="text-3xl font-extrabold text-gray-900 mb-4 tracking-tight">Too Many Requests</h1>
+        <p className="text-gray-600 text-lg mb-8 max-w-md text-center leading-relaxed">
+          Please wait a minute before attempting to verify again.
+        </p>
+        <Link href="/">
+          <Button className="bg-[#6B3FA0] hover:bg-[#5A3588] text-white px-8 py-6 rounded-xl text-lg font-semibold">
+            Return to Store
+          </Button>
+        </Link>
+      </div>
+    )
   }
 
   // Decrypt and verify the token

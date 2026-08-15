@@ -143,7 +143,7 @@ export async function updateProductAction(
 
     if (error) {
       console.error("Error updating product:", error)
-      return { error: `Failed to update product: ${error.message}` }
+      return { error: "Failed to update product. Please check your inputs." }
     }
 
     revalidatePath("/admin/dashboard/products")
@@ -152,7 +152,7 @@ export async function updateProductAction(
     return { success: true, data }
   } catch (error: any) {
     console.error("Error in updateProductAction:", error)
-    return { error: error.message || "An unexpected error occurred" }
+    return { error: "An unexpected error occurred while updating the product" }
   }
 }
 
@@ -176,13 +176,13 @@ export async function getProductByIdAction(id: string) {
 
     if (error) {
       console.error("Error fetching product:", error)
-      return { error: `Failed to fetch product: ${error.message}` }
+      return { error: "Failed to fetch product" }
     }
 
     return { success: true, data }
   } catch (error: any) {
     console.error("Error in getProductByIdAction:", error)
-    return { error: error.message || "An unexpected error occurred" }
+    return { error: "An unexpected error occurred" }
   }
 }
 
@@ -205,7 +205,7 @@ export async function deleteProductAction(id: string) {
 
     if (error) {
       console.error("Error deleting product:", error)
-      return { error: `Failed to delete product: ${error.message}` }
+      return { error: "Failed to delete product" }
     }
 
     revalidatePath("/admin/dashboard/products")
@@ -213,7 +213,7 @@ export async function deleteProductAction(id: string) {
     return { success: true }
   } catch (error: any) {
     console.error("Error in deleteProductAction:", error)
-    return { error: error.message || "An unexpected error occurred" }
+    return { error: "An unexpected error occurred" }
   }
 }
 
@@ -239,7 +239,7 @@ export async function updateProductStatusAction(id: string, isActive: boolean) {
 
     if (error) {
       console.error("Error updating product status:", error)
-      return { error: `Failed to update product status: ${error.message}` }
+      return { error: "Failed to update product status" }
     }
 
     revalidatePath("/admin/dashboard/products")
@@ -247,6 +247,7 @@ export async function updateProductStatusAction(id: string, isActive: boolean) {
     return { success: true }
   } catch (error: any) {
     console.error("Error in updateProductStatusAction:", error)
-    return { error: error.message || "An unexpected error occurred" }
+    return { error: "An unexpected error occurred" }
   }
 }
+

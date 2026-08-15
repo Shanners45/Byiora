@@ -88,11 +88,14 @@ export async function getAllTransactionsAction() {
       return { error: `Failed to load transactions: ${error.message}` }
     }
 
-    // Normalize any legacy "Archived" status to "Payment Failed"
+    // Normalize any legacy "Archived" status to "Payment Failed" and restore any Paid orders that have bank_txn_id
     const rawList: any[] = data || []
     const transactionsList = rawList.map((txn) => {
       if (txn.status === "Archived") {
         return { ...txn, status: "Payment Failed" }
+      }
+      if (txn.status === "Payment Failed" && txn.bank_txn_id) {
+        return { ...txn, status: txn.giftcard_code ? "Completed" : "Paid" }
       }
       return txn
     })
@@ -107,6 +110,20 @@ export async function getAllTransactionsAction() {
         .then(({ error: migErr }) => {
           if (migErr) console.error("Error migrating archived transactions:", migErr)
           else console.log("Successfully migrated legacy Archived records to Payment Failed")
+        })
+    }
+
+    // Auto-heal any paid transactions with a bank_txn_id that were mistakenly marked Payment Failed by stale timers
+    const hasMismatchedPaid = rawList.some((t) => t.status === "Payment Failed" && t.bank_txn_id)
+    if (hasMismatchedPaid) {
+      serviceSupabase
+        .from("transactions")
+        .update({ status: "Paid", failure_remarks: null } as any)
+        .eq("status", "Payment Failed" as any)
+        .not("bank_txn_id", "is", null)
+        .then(({ error: healErr }) => {
+          if (healErr) console.error("Error healing mismatched paid transactions:", healErr)
+          else console.log("Successfully restored Paid status for transactions with bank_txn_id")
         })
     }
 

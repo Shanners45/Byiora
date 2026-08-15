@@ -2,7 +2,7 @@
 
 import crypto from "crypto"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { verifyAdmin } from "./admin-utils"
+import { verifySuperAdmin } from "./admin-utils"
 
 function getBankEncryptionKey(): Buffer {
   const key = process.env.BANK_CREDENTIALS_ENCRYPTION_KEY
@@ -40,17 +40,12 @@ export async function decryptBankCredentials(encryptedBlob: string) {
 }
 
 export async function getPaymentCredentialsAction() {
-  if (!(await verifyAdmin())) return { error: "Unauthorized" }
+  if (!(await verifySuperAdmin())) return { error: "Unauthorized: Super Admin access required" }
 
   const supabase = createServiceRoleClient()
   const { data, error } = await supabase.from("payment_credentials").select("*") as any
   
   if (error) return { error: error.message }
-  
-  // Decrypt to show in admin dashboard (or we could just return stars, 
-  // but usually admin needs to see or we just show if it's set)
-  // For security, it's better to just return whether it is configured or not, 
-  // but if the user requested "username and password will be asked", they might want to see the username.
   
   const formattedData: Record<string, { username: string, isPasswordSet: boolean }> = {}
   
@@ -70,7 +65,7 @@ export async function getPaymentCredentialsAction() {
 }
 
 export async function savePaymentCredentialsAction(provider: string, username: string, password?: string) {
-  if (!(await verifyAdmin())) return { error: "Unauthorized" }
+  if (!(await verifySuperAdmin())) return { error: "Unauthorized: Super Admin access required" }
   
   try {
     const supabase = createServiceRoleClient()

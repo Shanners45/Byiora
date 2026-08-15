@@ -246,7 +246,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
               }
             }
 
-            console.log(`[KHALTI INITIATE] Key length: ${secretKey.length}, Prefix: "${secretKey.substring(0, 12)}...", URL: ${url}`)
+            console.log(`[KHALTI INITIATE] Initiating payment for ${transactionId} via ${url}`)
 
             const authHeader = secretKey.startsWith("Key ") ? secretKey : `Key ${secretKey}`
 
@@ -272,11 +272,11 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
               const alternateUrl = url.includes("dev.khalti.com")
                 ? "https://khalti.com/api/v2/epayment/initiate/"
                 : "https://dev.khalti.com/api/v2/epayment/initiate/"
-              console.log(`[KHALTI INITIATE] Initial endpoint failed (${khaltiRes.status}). Retrying with alternate URL: ${alternateUrl}`)
+              console.log(`[KHALTI INITIATE] Initial endpoint failed (${khaltiRes.status}). Retrying with alternate URL`)
               khaltiRes = await makeKhaltiCall(alternateUrl)
             }
 
-            console.log(`[KHALTI INITIATE RESPONSE] Status: ${khaltiRes.status}, Body:`, khaltiRes.data)
+            console.log(`[KHALTI INITIATE RESPONSE] Status: ${khaltiRes.status}, Ok: ${khaltiRes.ok}`)
 
             if (khaltiRes.ok && khaltiRes.data.payment_url) {
               paymentUrl = khaltiRes.data.payment_url
@@ -422,6 +422,16 @@ export async function retryKhaltiPaymentAction(transactionId: string): Promise<{
 
     if (txn.status === "Paid" || txn.status === "Completed") {
       return { success: false, error: "Transaction is already paid/completed." }
+    }
+
+    // SECURITY: Verify user ownership for registered user orders
+    if (txn.user_id) {
+      const { createClient } = await import("@/lib/supabase/server")
+      const userSupabase = await createClient()
+      const { data: { user } } = await userSupabase.auth.getUser()
+      if (!user || user.id !== txn.user_id) {
+        return { success: false, error: "Unauthorized" }
+      }
     }
 
     // 3. Initiate Khalti payment session

@@ -3,36 +3,10 @@ import { verifySignatureAppRouter } from "@upstash/qstash/dist/nextjs"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/app/actions/payment-credentials"
 import { sendOrderPlacedEmail, sendGiftcardCodeEmail } from "@/lib/email/resend"
-import crypto from "crypto"
+import { decryptInventoryCode } from "@/lib/crypto/inventory"
+import { Redis } from "@upstash/redis"
 
 const BYPASS_SIGNATURE = process.env.NODE_ENV === "development"
-
-/**
- * Decrypt an inventory code using the INVENTORY_ENCRYPTION_KEY.
- * Inline here to avoid importing server-action with headers() dependency.
- */
-function decryptInventoryCodeSync(encryptedBlob: string): string | null {
-  try {
-    const key = process.env.INVENTORY_ENCRYPTION_KEY
-    if (!key) return null
-
-    const parts = encryptedBlob.split(":")
-    if (parts.length !== 3) return null
-
-    const [ivHex, authTagHex, ciphertext] = parts
-    const iv = Buffer.from(ivHex, "hex")
-    const authTag = Buffer.from(authTagHex, "hex")
-
-    const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(key, "hex"), iv)
-    decipher.setAuthTag(authTag)
-
-    let decrypted = decipher.update(ciphertext, "hex", "utf8")
-    decrypted += decipher.final("utf8")
-    return decrypted
-  } catch {
-    return null
-  }
-}
 
 async function handler(req: Request) {
   try {
@@ -113,17 +87,51 @@ async function handler(req: Request) {
         return NextResponse.json({ error: "Not verified yet" }, { status: 500 })
       }
 
+      // SECURITY: Validate paid amount matches order amount (anti-underpayment fraud)
+      const rawPaidAmount = proxyData.data.raw?.amount || proxyData.data.raw?.transactionAmount
+      if (rawPaidAmount) {
+        const paidAmount = parseInt(rawPaidAmount)
+        const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
+        if (paidAmount > 0 && paidAmount < expectedAmount) {
+          console.error(`[FRAUD ALERT] Amount mismatch for ${transactionId}: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`)
+          await supabase.from("transactions").update({
+            status: "Payment Failed",
+            failure_remarks: `Amount discrepancy: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`
+          } as any).eq("transaction_id", transactionId)
+          return NextResponse.json({ error: "Amount mismatch" }, { status: 400 })
+        }
+      }
+
       resolvedBankTxnId = proxyData.data.bankTxnId || proxyData.data.txnId || null
     }
 
-    // 3. Payment Confirmed! Mark as Paid (Manual Delivery state) + store bank txn ID
+    // 3. Payment Confirmed! Acquire idempotency lock to prevent double fulfillment
+    let redis: Redis | null = null
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+      const lockKey = `fulfill-lock:${transactionId}`
+      const acquired = await redis.set(lockKey, "1", { nx: true, ex: 60 })
+      if (!acquired) {
+        console.log(`[WEBHOOK] Idempotency lock already held for ${transactionId}, skipping`)
+        return NextResponse.json({ success: true, message: "Already being processed" }, { status: 200 })
+      }
+    }
+
+    // 4. Mark as Paid (Manual Delivery state) + store bank txn ID
     // We will upgrade this to "Completed" ONLY if we successfully auto-deliver a code.
     const updatePayload: any = { status: "Paid" }
     if (resolvedBankTxnId) {
       updatePayload.bank_txn_id = resolvedBankTxnId
     }
-    const { data: updateData, error: updateError } = await supabase.from("transactions").update(updatePayload).eq("transaction_id", transactionId).select()
-    console.log(`[WEBHOOK UPDATE] TxnId: ${transactionId}, Data:`, updateData, `Error:`, updateError)
+    const { error: updateError } = await supabase.from("transactions").update(updatePayload).eq("transaction_id", transactionId)
+    if (updateError) {
+      console.error(`[WEBHOOK UPDATE ERROR] TxnId: ${transactionId}:`, updateError)
+    } else {
+      console.log(`[WEBHOOK UPDATE] Marked ${transactionId} as Paid`)
+    }
     // 4. Fulfillment: If category is digital-goods or games, claim an inventory code
     const categoriesWithInventory = ["digital-goods", "games"]
     let deliveredCode: string | null = null
@@ -145,7 +153,7 @@ async function handler(req: Request) {
         deliveredCode = (claimData as any)[0].encrypted_code
 
         // DECRYPT the code before storing and emailing
-        decryptedCode = decryptInventoryCodeSync(deliveredCode as string)
+        decryptedCode = decryptInventoryCode(deliveredCode as string)
 
         if (decryptedCode) {
           // Store the decrypted code in the transaction for admin to see

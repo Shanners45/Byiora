@@ -75,11 +75,22 @@ export async function getOrGenerateQRAction(transactionId: string) {
       return { success: false, error: "Transaction not found" }
     }
 
-    if (txn.status === "Completed") {
+    // SECURITY: For registered users, verify the session user owns this transaction
+    if (txn.user_id) {
+      const { createClient } = await import("@/lib/supabase/server")
+      const userSupabase = await createClient()
+      const { data: { user } } = await userSupabase.auth.getUser()
+      if (!user || user.id !== txn.user_id) {
+        return { success: false, error: "Unauthorized" }
+      }
+    }
+
+    // 1b. INDUSTRY STANDARD STATE MACHINE: If order is Paid, Completed, or has bank_txn_id, NEVER expire or fail
+    if (txn.status === "Completed" || txn.status === "Paid" || txn.bank_txn_id) {
+      const resolvedStatus = (txn.status === "Payment Failed" && txn.bank_txn_id) ? "Paid" : txn.status
       return { 
-        success: false, 
-        error: "Transaction is already completed", 
-        status: "Completed", 
+        success: true, 
+        status: resolvedStatus, 
         isGuest: !txn.user_id,
         product: txn.product_name,
         productName: txn.product_name,
@@ -188,12 +199,19 @@ export async function getOrGenerateQRAction(transactionId: string) {
         }
       }
 
-      // SECURITY: One-shot QR lock — QR existed but is expired. Lock the order permanently.
-      // This prevents infinite QR regeneration via page refresh.
-      await supabase.from("transactions").update({
-        status: "Payment Failed",
-        failure_remarks: "QR code expired (server-side enforcement)"
-      } as any).eq("transaction_id", transactionId)
+      // SECURITY: One-shot QR lock — QR existed but is expired. Lock the order permanently ONLY IF UNPAID.
+      // Database atomic guard: Never overwrite if status is Paid/Completed or if bank_txn_id exists
+      await supabase
+        .from("transactions")
+        .update({
+          status: "Payment Failed",
+          failure_remarks: "QR code expired (server-side enforcement)",
+          encrypted_checkout_data: null
+        } as any)
+        .eq("transaction_id", transactionId)
+        .in("status", ["Payment Pending", "Processing"])
+        .is("bank_txn_id", null)
+
       return { 
         success: false, 
         error: "Payment session expired", 
@@ -396,7 +414,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
     const supabase = createServiceRoleClient()
 
     // Ensure it's not already completed
-    const { data: txn } = await supabase.from("transactions").select("status").eq("transaction_id", transactionId).single()
+    const { data: txn } = await supabase.from("transactions").select("status, price").eq("transaction_id", transactionId).single()
     if (txn && txn.status === "Completed") {
       return { success: true, completed: true }
     }
@@ -429,6 +447,21 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
     const proxyData = await response.json()
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
+      // SECURITY: Validate paid amount matches order amount (anti-underpayment fraud)
+      const rawPaidAmount = proxyData.data.raw?.amount || proxyData.data.raw?.transactionAmount
+      if (rawPaidAmount && txn?.price) {
+        const paidAmount = parseInt(rawPaidAmount)
+        const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
+        if (paidAmount > 0 && paidAmount < expectedAmount) {
+          console.error(`[VERIFY FRAUD ALERT] Amount mismatch for ${transactionId}: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`)
+          await supabase.from("transactions").update({
+            status: "Payment Failed",
+            failure_remarks: `Amount discrepancy: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`
+          } as any).eq("transaction_id", transactionId)
+          return { success: false, error: "Amount mismatch detected" }
+        }
+      }
+
       const host = headersList.get("host") || "localhost:3000"
       const protocol = host.includes("localhost") ? "http" : "https"
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
@@ -561,10 +594,7 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
       // Payment found! Fulfill the order
-      const headersList = await headers()
-      const host = headersList.get("host") || "localhost:3000"
-      const protocol = host.includes("localhost") ? "http" : "https"
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `https://${(await headers()).get("host") || "localhost:3000"}`
 
       const fulfillRes = await fetch(`${siteUrl}/api/webhooks/qstash`, {
         method: "POST",
@@ -608,16 +638,34 @@ export async function expireTransactionAction(transactionId: string) {
   try {
     const supabase = createServiceRoleClient()
 
-    // Verify it is still in an unpaid state (Payment Pending or Processing for dynamic QR) before expiring
+    // SECURITY: Verify ownership — only the transaction's owner can trigger expiry
+    const { createClient } = await import("@/lib/supabase/server")
+    const userSupabase = await createClient()
+    const { data: { user } } = await userSupabase.auth.getUser()
+
+    // Verify it is still in an unpaid state (Payment Pending or Processing for dynamic QR) and NO payment received
     const { data: txn } = await supabase.from("transactions").select("*").eq("transaction_id", transactionId).single()
-    if (!txn || !["Payment Pending", "Processing"].includes(txn.status as string) || (txn as any).payment_category === "static") {
+    if (!txn || !["Payment Pending", "Processing"].includes(txn.status as string) || (txn as any).payment_category === "static" || txn.bank_txn_id) {
       return { success: false }
     }
 
-    await supabase.from("transactions").update({
-      status: "Payment Failed",
-      failure_remarks: "QR code expired without payment confirmation (Client Timeout)"
-    } as any).eq("transaction_id", transactionId)
+    // For registered users, verify the authenticated user owns this transaction
+    if (txn.user_id && (!user || user.id !== txn.user_id)) {
+      return { success: false, error: "Unauthorized" }
+    }
+
+    const { error: updateError } = await supabase
+      .from("transactions")
+      .update({
+        status: "Payment Failed",
+        failure_remarks: "QR code expired without payment confirmation (Client Timeout)",
+        encrypted_checkout_data: null
+      } as any)
+      .eq("transaction_id", transactionId)
+      .in("status", ["Payment Pending", "Processing"])
+      .is("bank_txn_id", null)
+
+    if (updateError) return { success: false }
 
     // Send Payment Failed Email
     const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
@@ -691,14 +739,32 @@ export async function cancelTransactionAction(transactionId: string) {
     const supabase = createServiceRoleClient()
 
     const { data: txn } = await supabase.from("transactions").select("*").eq("transaction_id", transactionId).single()
-    if (!txn || !["Payment Pending", "Processing"].includes(txn.status as string)) {
+    if (!txn || !["Payment Pending", "Processing"].includes(txn.status as string) || txn.bank_txn_id) {
       return { success: false, error: "Cannot cancel this transaction" }
     }
 
-    await supabase.from("transactions").update({
-      status: "Payment Failed",
-      failure_remarks: "Cancelled by user"
-    } as any).eq("transaction_id", transactionId)
+    // SECURITY: Verify ownership — only the transaction's owner can cancel
+    if (txn.user_id) {
+      const { createClient } = await import("@/lib/supabase/server")
+      const userSupabase = await createClient()
+      const { data: { user } } = await userSupabase.auth.getUser()
+      if (!user || user.id !== txn.user_id) {
+        return { success: false, error: "Unauthorized" }
+      }
+    }
+
+    const { error: cancelError } = await supabase
+      .from("transactions")
+      .update({
+        status: "Payment Failed",
+        failure_remarks: "Cancelled by user",
+        encrypted_checkout_data: null
+      } as any)
+      .eq("transaction_id", transactionId)
+      .in("status", ["Payment Pending", "Processing"])
+      .is("bank_txn_id", null)
+
+    if (cancelError) return { success: false, error: "Could not cancel transaction" }
 
     // --- Send Cancellation Email ---
     const { sendOrderPlacedEmail } = await import("@/lib/email/resend")

@@ -39,3 +39,13 @@ export async function verifyAdmin(): Promise<boolean> {
   const result = await getAdminSessionAction()
   return result.success
 }
+
+/**
+ * Strict check: Only full Super Admins (role === "admin")
+ * Use for user management, role promotion, password resets, and bank credentials.
+ */
+export async function verifySuperAdmin(): Promise<boolean> {
+  const result = await getAdminSessionAction()
+  return result.success && result.data.role === "admin"
+}
+

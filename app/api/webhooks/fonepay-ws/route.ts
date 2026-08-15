@@ -2,34 +2,8 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/app/actions/payment-credentials"
 import { sendOrderPlacedEmail, sendGiftcardCodeEmail } from "@/lib/email/resend"
-import crypto from "crypto"
-
-/**
- * Decrypt an inventory code using the INVENTORY_ENCRYPTION_KEY.
- * Inline here to avoid importing server-action with headers() dependency.
- */
-function decryptInventoryCodeSync(encryptedBlob: string): string | null {
-  try {
-    const key = process.env.INVENTORY_ENCRYPTION_KEY
-    if (!key) return null
-
-    const parts = encryptedBlob.split(":")
-    if (parts.length !== 3) return null
-
-    const [ivHex, authTagHex, ciphertext] = parts
-    const iv = Buffer.from(ivHex, "hex")
-    const authTag = Buffer.from(authTagHex, "hex")
-
-    const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(key, "hex"), iv)
-    decipher.setAuthTag(authTag)
-
-    let decrypted = decipher.update(ciphertext, "hex", "utf8")
-    decrypted += decipher.final("utf8")
-    return decrypted
-  } catch {
-    return null
-  }
-}
+import { decryptInventoryCode } from "@/lib/crypto/inventory"
+import { Redis } from "@upstash/redis"
 
 /**
  * Fonepay WebSocket Webhook
@@ -105,6 +79,7 @@ export async function POST(req: Request) {
 
     // 2. Verify the payment with Fonepay settlement API to get the bank txn ID
     let resolvedBankTxnId: string | null = null
+    let bankVerified = false
     try {
       const PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
       const PROXY_SECRET = process.env.INTERNAL_API_SECRET!
@@ -128,21 +103,67 @@ export async function POST(req: Request) {
               amount: parseInt(txn.price),
               remarks: transactionId
             }),
-            cache: 'no-store'
+            cache: 'no-store',
+            signal: AbortSignal.timeout(10000)
           })
 
           const verifyData = await response.json()
           if (verifyData.success && verifyData.data?.status === "SUCCESS") {
             resolvedBankTxnId = verifyData.data.bankTxnId || verifyData.data.txnId || null
+            bankVerified = true
+
+            // SECURITY: Validate paid amount matches order amount (anti-underpayment fraud)
+            const rawPaidAmount = verifyData.data.raw?.transactionAmount || verifyData.data.raw?.amount
+            if (rawPaidAmount) {
+              const paidAmount = parseInt(rawPaidAmount)
+              const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
+              if (paidAmount > 0 && paidAmount < expectedAmount) {
+                console.error(`[FONEPAY-WS FRAUD ALERT] Amount mismatch for ${transactionId}: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`)
+                await supabase.from("transactions").update({
+                  status: "Payment Failed",
+                  failure_remarks: `Amount discrepancy: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`
+                } as any).eq("transaction_id", transactionId)
+                return NextResponse.json({ error: "Amount mismatch" }, { status: 400 })
+              }
+            }
           }
         }
       }
     } catch (e: any) {
       console.error(`[FONEPAY-WS] Verification fetch failed:`, e.message)
-      // Continue anyway — the WebSocket VERIFIED message is authoritative
+      // SECURITY: Do NOT fulfill without bank confirmation. Mark as Processing for cron/QStash to verify later.
+      await supabase.from("transactions").update({
+        status: "Processing",
+        failure_remarks: "WS VERIFIED received but bank API unreachable — pending cron verification"
+      } as any).eq("transaction_id", transactionId)
+      return NextResponse.json({ success: true, message: "Queued for cron verification" }, { status: 200 })
     }
 
-    // 3. Mark as Paid
+    // If bank API was reachable but payment not confirmed, don't fulfill
+    if (!bankVerified) {
+      console.log(`[FONEPAY-WS] WS event received but bank did not confirm payment for ${transactionId}`)
+      await supabase.from("transactions").update({
+        status: "Processing",
+        failure_remarks: "WS event received, bank verification pending"
+      } as any).eq("transaction_id", transactionId)
+      return NextResponse.json({ success: true, message: "Bank verification pending" }, { status: 200 })
+    }
+
+    // 3. Mark as Paid (bank confirmed) — Acquire idempotency lock to prevent double fulfillment
+    let redis: Redis | null = null
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+      const lockKey = `fulfill-lock:${transactionId}`
+      const acquired = await redis.set(lockKey, "1", { nx: true, ex: 60 })
+      if (!acquired) {
+        console.log(`[FONEPAY-WS] Idempotency lock already held for ${transactionId}, skipping`)
+        return NextResponse.json({ success: true, message: "Already being processed" }, { status: 200 })
+      }
+    }
+
     const updatePayload: any = { status: "Paid" }
     if (resolvedBankTxnId) {
       updatePayload.bank_txn_id = resolvedBankTxnId
@@ -168,7 +189,7 @@ export async function POST(req: Request) {
         console.error("RPC claim error:", claimError)
       } else if (claimData && (claimData as any).length > 0 && (claimData as any)[0].encrypted_code) {
         deliveredCode = (claimData as any)[0].encrypted_code
-        decryptedCode = decryptInventoryCodeSync(deliveredCode as string)
+        decryptedCode = decryptInventoryCode(deliveredCode as string)
 
         if (decryptedCode) {
           await supabase.from("transactions").update({

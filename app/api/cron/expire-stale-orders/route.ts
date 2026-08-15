@@ -16,11 +16,9 @@ if (!PROXY_SECRET) {
  * 3. Discord alert for any suspicious expirations (had a validation_trace_id).
  */
 export async function GET(req: Request) {
-  // Verify cron secret (supports Authorization header, custom headers, or ?secret= URL param)
+  // Verify cron secret (supports Authorization header and custom headers only — NOT query params to avoid log leakage)
   const authHeader = req.headers.get("authorization")
   const customHeader = req.headers.get("x-cron-secret") || req.headers.get("x-internal-secret")
-  const url = new URL(req.url)
-  const querySecret = url.searchParams.get("secret") || url.searchParams.get("key")
   
   const cronSecret = process.env.CRON_SECRET || process.env.INTERNAL_API_SECRET
   const internalSecret = process.env.INTERNAL_API_SECRET
@@ -29,9 +27,7 @@ export async function GET(req: Request) {
     (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
     (internalSecret && authHeader === `Bearer ${internalSecret}`) ||
     (cronSecret && customHeader === cronSecret) ||
-    (internalSecret && customHeader === internalSecret) ||
-    (cronSecret && querySecret === cronSecret) ||
-    (internalSecret && querySecret === internalSecret)
+    (internalSecret && customHeader === internalSecret)
   
   if (!isAuthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -59,8 +55,12 @@ export async function GET(req: Request) {
     for (const txn of (staleOrders || [])) {
       const typedTxn = txn as any
 
-      // Skip static processing orders — those are manual admin fulfillment
-      if (typedTxn.status === "Processing" && typedTxn.payment_category === "static") continue
+      // Skip static processing orders that are less than 48 hours old — those are manual admin fulfillment
+      if (typedTxn.status === "Processing" && typedTxn.payment_category === "static") {
+        const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).getTime()
+        if (new Date(typedTxn.created_at).getTime() > fortyEightHoursAgo) continue
+        // Otherwise, fall through and expire it (stale static order > 48h)
+      }
 
       // Skip if it already has a bank_txn_id (payment was received)
       if (typedTxn.bank_txn_id) continue
@@ -170,10 +170,11 @@ export async function GET(req: Request) {
       // If payment was recovered, skip marking as failed
       if (recovered) continue
 
-      // Mark as Payment Failed
+      // Mark as Payment Failed & clear sensitive direct-login credentials
       await supabase.from("transactions").update({
         status: "Payment Failed",
-        failure_remarks: "QR code expired without payment confirmation"
+        failure_remarks: "QR code expired without payment confirmation",
+        encrypted_checkout_data: null
       } as any).eq("transaction_id", txn.transaction_id)
 
       // Send Payment Failed email for nepalpay and fonepay

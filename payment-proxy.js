@@ -116,6 +116,20 @@ function extractBearerToken(rawResponse) {
 
 const sessionCache = {};
 
+// Periodic cleanup of expired JWT tokens from sessionCache (every 10 minutes)
+setInterval(() => {
+    let cleaned = 0;
+    for (const key of Object.keys(sessionCache)) {
+        const token = sessionCache[key];
+        const decoded = parseJwt(token);
+        if (!decoded || !decoded.exp || decoded.exp < Math.floor(Date.now() / 1000)) {
+            delete sessionCache[key];
+            cleaned++;
+        }
+    }
+    if (cleaned > 0) console.log(`[CACHE] Cleaned ${cleaned} expired session(s)`);
+}, 10 * 60 * 1000);
+
 // Active Fonepay WebSocket connections: Map<transactionId, WebSocket>
 const activeFonepayWS = new Map();
 
@@ -137,7 +151,6 @@ function startFonepayWebSocket(websocketUrl, transactionId, validationTraceId) {
     }
 
     console.log(`[WS] Opening Fonepay WebSocket for ${transactionId}`);
-    console.log(`[WS] URL: ${websocketUrl}`);
 
     try {
         const WebSocketClient = globalThis.WebSocket || (typeof WebSocket !== 'undefined' ? WebSocket : require('ws'));
@@ -157,7 +170,6 @@ function startFonepayWebSocket(websocketUrl, transactionId, validationTraceId) {
         ws.onmessage = async (event) => {
             try {
                 const raw = typeof event.data === 'string' ? event.data : event.data.toString();
-                console.log(`[WS] 📩 Message for ${transactionId}:`, raw);
 
                 let msg = {};
                 try {
@@ -201,8 +213,7 @@ function startFonepayWebSocket(websocketUrl, transactionId, validationTraceId) {
                             fonepayData: msg
                         })
                     });
-                    const result = await resp.json().catch(() => ({}));
-                    console.log(`[WS] Webhook response for ${transactionId} (isPaid: ${isPaid}, isQrScanned: ${isQrScanned}):`, resp.status, result);
+                    console.log(`[WS] Webhook called for ${transactionId} (isPaid: ${isPaid}, isQrScanned: ${isQrScanned})`);
                 } catch (e) {
                     console.error(`[WS] Webhook call failed for ${transactionId}:`, e.message);
                 }
@@ -349,7 +360,7 @@ async function handleNepalPayTriggerQR(body, res) {
                 return;
             }
 
-            console.log("LOGIN DATA:", JSON.stringify(loginData).substring(0, 1000));
+            console.log("LOGIN DATA: status:", loginData.status, "merchantCode:", loginData.data?.merchantCode);
             accessToken = loginData.data.accessToken;
             const decoded = parseJwt(accessToken);
             merchantCode = decoded.merchantCode;
@@ -375,7 +386,7 @@ async function handleNepalPayTriggerQR(body, res) {
             }
         };
 
-        console.log(">>> QR PAYLOAD:", JSON.stringify(qrPayload));
+
 
         const qrData = await makeBankRequest(
             'https://business.nepalpay.com.np/backend/api/nqr/generate',
@@ -411,7 +422,8 @@ async function handleNepalPayVerifyTransaction(body, res) {
         const { nqrTxnId, username, password, phoneNumber, amount, remarks } = JSON.parse(body);
         const userKey = username.trim();
 
-        console.log(`\n🔍 [NEPALPAY VERIFY] Checking nqrTxnId: ${nqrTxnId} or phone: ${phoneNumber} for user ${userKey}`);
+        const maskedPhone = phoneNumber ? '***' + phoneNumber.slice(-4) : 'N/A';
+        console.log(`\n🔍 [NEPALPAY VERIFY] Checking nqrTxnId: ${nqrTxnId} or phone: ${maskedPhone} for user ${userKey}`);
 
         let accessToken = null;
         let merchantCode = null;
@@ -483,15 +495,16 @@ async function handleNepalPayVerifyTransaction(body, res) {
             const resultArr = listData.data.result;
             if (Array.isArray(resultArr) && resultArr.length > 0) {
                 const matchingTxn = resultArr.find(txn => {
+                    // PRIORITY 1: Exact QR trace ID match (strongest)
                     if (nqrTxnId && txn.validationTraceId === nqrTxnId) return true;
-                    if (phoneNumber && amount) {
+                    // PRIORITY 2: Phone + Amount + Remarks (all three required for security)
+                    if (phoneNumber && amount && remarks) {
                         const cleanTxnPhone = (txn.payerMobileNumber || txn.customerMobileNumber || "").replace(/\D/g, "");
                         const isPhoneMatch = cleanTxnPhone && cleanTxnPhone.endsWith(phoneNumber.slice(-10));
                         const isAmountMatch = txn.amount === amount || parseInt(txn.amount) === parseInt(amount);
-                        if (isPhoneMatch && isAmountMatch) return true;
+                        const isRemarksMatch = txn.remarks && txn.remarks.includes(remarks);
+                        if (isPhoneMatch && isAmountMatch && isRemarksMatch) return true;
                     }
-                    // Fallback check on remarks if provided
-                    if (remarks && txn.remarks && txn.remarks.includes(remarks)) return true;
                     return false;
                 });
 
@@ -706,22 +719,26 @@ async function handleFonepayVerifyTransaction(body, res) {
             const searchBillId = nqrTxnId || remarks;
 
             const matchingTxn = resultArr.find(txn => {
-                let isAmountMatch = true;
-                if (amount !== undefined && amount !== null) {
-                    isAmountMatch = txn.transactionAmount === amount.toString() || parseInt(txn.transactionAmount) === parseInt(amount);
-                }
-
                 const isSuccess = txn.paymentStatus === "Success";
-                const isTrackingMatch = searchBillId && (txn.billId === searchBillId || txn.remarks1 === searchBillId);
+                if (!isSuccess) return false;
 
-                // Fallback matching if they typed the phone number
-                let isPhoneMatch = false;
-                if (phoneNumber && txn.initiator) {
-                    const cleanPhone = txn.initiator.replace(/\D/g, "");
-                    isPhoneMatch = cleanPhone.endsWith(phoneNumber.slice(-10));
+                // PRIORITY 1: Exact billId / remarks tracking match (strongest)
+                const isTrackingMatch = searchBillId && (txn.billId === searchBillId || txn.remarks1 === searchBillId);
+                if (isTrackingMatch) return true;
+
+                // PRIORITY 2: Phone + Amount + BillId (all three required for security)
+                if (phoneNumber && amount !== undefined && amount !== null && searchBillId) {
+                    let isAmountMatch = txn.transactionAmount === amount.toString() || parseInt(txn.transactionAmount) === parseInt(amount);
+                    let isPhoneMatch = false;
+                    if (txn.initiator) {
+                        const cleanPhone = txn.initiator.replace(/\D/g, "");
+                        isPhoneMatch = cleanPhone.endsWith(phoneNumber.slice(-10));
+                    }
+                    const isBillIdMatch = txn.billId === searchBillId || (txn.remarks1 && txn.remarks1.includes(searchBillId));
+                    if (isPhoneMatch && isAmountMatch && isBillIdMatch) return true;
                 }
 
-                return isSuccess && (isTrackingMatch || (isPhoneMatch && isAmountMatch));
+                return false;
             });
 
             if (matchingTxn) {
@@ -800,7 +817,7 @@ const server = http.createServer(async (req, res) => {
     // Health & Keep-Alive check (handles GET /, GET /health)
     if (req.method === 'GET' && (url === '/' || url === '/health' || url.startsWith('/health') || url.startsWith('/?'))) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok', message: 'Byiora Payment Proxy is online', providers: ['nepalpay', 'fonepay'], activeWebSockets: activeFonepayWS.size }));
+        res.end(JSON.stringify({ status: 'ok' }));
         return;
     }
 

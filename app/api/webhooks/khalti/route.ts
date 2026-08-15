@@ -2,33 +2,8 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/app/actions/payment-credentials"
 import { sendOrderPlacedEmail, sendGiftcardCodeEmail } from "@/lib/email/resend"
-import crypto from "crypto"
-
-/**
- * Decrypt an inventory code using the INVENTORY_ENCRYPTION_KEY.
- */
-function decryptInventoryCodeSync(encryptedBlob: string): string | null {
-  try {
-    const key = process.env.INVENTORY_ENCRYPTION_KEY
-    if (!key) return null
-
-    const parts = encryptedBlob.split(":")
-    if (parts.length !== 3) return null
-
-    const [ivHex, authTagHex, ciphertext] = parts
-    const iv = Buffer.from(ivHex, "hex")
-    const authTag = Buffer.from(authTagHex, "hex")
-
-    const decipher = crypto.createDecipheriv("aes-256-gcm", Buffer.from(key, "hex"), iv)
-    decipher.setAuthTag(authTag)
-
-    let decrypted = decipher.update(ciphertext, "hex", "utf8")
-    decrypted += decipher.final("utf8")
-    return decrypted
-  } catch {
-    return null
-  }
-}
+import { decryptInventoryCode } from "@/lib/crypto/inventory"
+import { Redis } from "@upstash/redis"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -148,6 +123,21 @@ export async function GET(request: Request) {
 
       const resolvedBankTxnId = verifyData.transaction_id || verifyData.tidx || verifyData.bank_txn_id || verifyData.idx || pidx
 
+      // Acquire idempotency lock to prevent double fulfillment
+      let redis: Redis | null = null
+      if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+        redis = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        })
+        const lockKey = `fulfill-lock:${purchase_order_id}`
+        const acquired = await redis.set(lockKey, "1", { nx: true, ex: 60 })
+        if (!acquired) {
+          console.log(`[KHALTI] Idempotency lock already held for ${purchase_order_id}, skipping`)
+          return NextResponse.redirect(successRedirect)
+        }
+      }
+
       // A. Mark as Paid in DB
       await supabase
         .from("transactions")
@@ -178,7 +168,7 @@ export async function GET(request: Request) {
           console.error("[KHALTI] RPC claim error:", claimError)
         } else if (claimData && (claimData as any).length > 0 && (claimData as any)[0].encrypted_code) {
           deliveredCode = (claimData as any)[0].encrypted_code
-          decryptedCode = decryptInventoryCodeSync(deliveredCode as string)
+          decryptedCode = decryptInventoryCode(deliveredCode as string)
 
           if (decryptedCode) {
             await supabase.from("transactions").update({

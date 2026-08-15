@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { sendWelcomeEmail, sendPasswordChangedEmail } from "@/lib/email/resend"
 import { headers } from "next/headers"
 import { verifyTurnstileToken } from "@/lib/captcha"
+import { rateLimit } from "@/lib/rate-limit"
 
 // Must match your Supabase Dashboard → Auth → Email OTP Length
 const OTP_LENGTH = 6
@@ -140,9 +141,17 @@ export async function requestPasswordReset(email: string, captchaToken?: string)
   if (!email || !email.includes("@")) {
     return { error: "Please enter a valid email address" }
   }
-  if (!captchaToken) return { error: "Captcha verification required." }
+
   const h = await headers()
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim()
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+
+  // SECURITY: Rate limit password resets (3 per 15 min per IP)
+  const rl = await rateLimit(`forgot-pw:${ip}`, { windowMs: 900_000, max: 3 })
+  if (!rl.ok) {
+    return { error: "Too many password reset requests. Please wait a few minutes." }
+  }
+
+  if (!captchaToken) return { error: "Captcha verification required." }
   const captchaOk = await verifyTurnstileToken(captchaToken, ip)
   if (!captchaOk) return { error: "Captcha validation failed. Please try again." }
 
