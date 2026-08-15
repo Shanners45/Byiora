@@ -144,8 +144,31 @@ export default function OrdersPage() {
       if (res.error) {
         toast.error(res.error)
       } else {
+        const txn = refundModal.transaction
         toast.success(res.message || "Khalti refund processed successfully!")
         setRefundModal({ open: false, transaction: null })
+
+        // Send Refund Email to customer
+        try {
+          await fetch('/api/send-order-status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: txn.user_email,
+              userName: txn.users?.name || txn.guest_user_data?.name || txn.user_email.split('@')[0],
+              productName: txn.product_name,
+              denomination: txn.amount,
+              status: "Refunded",
+              transactionId: txn.transaction_id,
+              remarks: res.message || (parsedAmount ? `Refunded (Partial): Rs. ${parsedAmount}` : `Refunded (Full): Rs. ${txn.price}`),
+              isGuest: !txn.user_id,
+              isDynamic: true
+            })
+          })
+        } catch (emailErr) {
+          console.error("Failed to send refund email:", emailErr)
+        }
+
         await loadTransactions(true)
       }
     } catch (e: any) {
@@ -349,10 +372,10 @@ export default function OrdersPage() {
         await sendOrderStatusNotification(transaction, actualNewStatus, remarks)
       }
 
-      // Send Order Status Email for Completed, Failed, or (Payment Failed for nepalpay/fonepay)
+      // Send Order Status Email for Completed, Failed, Refunded, or (Payment Failed for nepalpay/fonepay)
       // Skip if the action already sent an email (e.g. auto-fulfilled with giftcard code)
       const isPaymentFailedEmail = actualNewStatus === "Payment Failed" && (transaction?.payment_category === "nepalpay" || transaction?.payment_category === "fonepay");
-      if (!result.emailSent && transaction && (actualNewStatus === "Completed" || actualNewStatus === "Failed" || isPaymentFailedEmail) && actualNewStatus !== oldStatus) {
+      if (!result.emailSent && transaction && (actualNewStatus === "Completed" || actualNewStatus === "Failed" || actualNewStatus === "Refunded" || isPaymentFailedEmail) && actualNewStatus !== oldStatus) {
         try {
           await fetch('/api/send-order-status', {
             method: 'POST',
@@ -364,9 +387,9 @@ export default function OrdersPage() {
               denomination: transaction.amount,
               status: actualNewStatus,
               transactionId: transaction.transaction_id,
-              remarks: remarks || undefined,
+              remarks: remarks || transaction.failure_remarks || undefined,
               isGuest: !transaction.user_id,
-              isDynamic: transaction.payment_category === "nepalpay" || transaction.payment_category === "fonepay"
+              isDynamic: transaction.payment_category === "nepalpay" || transaction.payment_category === "fonepay" || transaction.payment_category === "khalti"
             })
           })
         } catch (e) {
@@ -708,7 +731,7 @@ export default function OrdersPage() {
                         }
 
                         // 2. Static QR payments:
-                        // Show dropdown with Processing, Completed, Failed, Refunded
+                        // Show dropdown with Processing, Completed, Failed
                         if (status === "Cancelled") {
                           return (
                             <div className="flex flex-col gap-1 items-start">
@@ -732,7 +755,6 @@ export default function OrdersPage() {
                                 <SelectItem value="Processing">Processing</SelectItem>
                                 <SelectItem value="Completed">Completed</SelectItem>
                                 <SelectItem value="Failed">Failed</SelectItem>
-                                <SelectItem value="Refunded">Refunded</SelectItem>
                               </SelectContent>
                             </Select>
                             {refundSubtext && (

@@ -63,11 +63,14 @@ export async function POST(request: Request) {
     }
 
     const isCompleted = status === 'Completed'
-    const statusText = isCompleted ? 'Completed' : 'Failed'
+    const isRefunded = status === 'Refunded'
+    const statusText = isCompleted ? 'Completed' : (isRefunded ? 'Refunded' : 'Failed')
 
     const emailSubject = isCompleted
       ? `Order Delivered: ${productName || 'Your Item'}`
-      : `Order Failed: ${productName || 'Your Item'}`
+      : (isRefunded
+        ? `Order Refunded: ${productName || 'Your Item'}`
+        : `Order Failed: ${productName || 'Your Item'}`)
 
     // Derive display name — for the greeting line
     const displayName = userName || email.split('@')[0]
@@ -106,6 +109,66 @@ export async function POST(request: Request) {
 
         <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0; text-align: center;">
           We hope you enjoy your purchase!
+        </p>
+
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 20px; text-align: center;">
+        <p style="color: #4A2A70; font-size: 13px; margin: 0 0 8px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+        <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
+      </td>
+    </tr>
+
+  </table>
+</div>
+    `
+
+    // Refunded Order Email Template - Table-based, mobile-optimized matching brand design
+    const refundedTemplate = `
+<div style="background-color: #f3f4f6; padding: 20px 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+
+    <tr>
+      <td style="background-color: #5A3588; padding: 30px 20px; text-align: center;">
+        <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 40px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
+        <p style="color: #EBE3F5; margin: 12px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Order Refund Processed</p>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding: 30px 20px;">
+
+        <h2 style="color: #1E1E1E; font-size: 20px; font-weight: 700; margin: 0 0 6px 0;">Hi ${displayName},</h2>
+        <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
+          A refund has been processed for your order of <strong>${productName} ${denomination}</strong>.
+        </p>
+
+        <div style="margin-bottom: 20px; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
+          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
+            <tr>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Item</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-weight: 600; word-break: break-word;">${productName} ${denomination}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Order ID</td>
+              <td style="padding: 10px 16px; font-size: 13px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; word-break: break-all;">${transactionId || 'N/A'}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''} width: 35%; vertical-align: top;">Status</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #7E3AF2; font-weight: 700; text-transform: uppercase;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''}">Refunded</td>
+            </tr>
+            ${remarks ? `
+            <tr>
+              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; width: 35%; vertical-align: top;">Details</td>
+              <td style="padding: 10px 16px; font-size: 14px; color: #7E3AF2; font-weight: 600; word-break: break-word;">${remarks}</td>
+            </tr>` : ''}
+          </table>
+        </div>
+
+        <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0; text-align: center;">
+          The refund amount has been returned to your original payment method. Depending on your bank/payment provider, it may take a few moments to reflect in your account.
         </p>
 
       </td>
@@ -194,7 +257,7 @@ export async function POST(request: Request) {
 </div>
     `
 
-    const htmlContent = isCompleted ? completedTemplate : failedTemplate
+    const htmlContent = isCompleted ? completedTemplate : (isRefunded ? refundedTemplate : failedTemplate)
 
     const data = await resend.emails.send({
       from: 'Byiora <order-status@byiora.com.np>',
