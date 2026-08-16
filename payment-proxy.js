@@ -494,18 +494,46 @@ async function handleNepalPayVerifyTransaction(body, res) {
         if (listData.status === "SUCCESS" && listData.data) {
             const resultArr = listData.data.result;
             if (Array.isArray(resultArr) && resultArr.length > 0) {
+                const cleanReqPhone = phoneNumber ? String(phoneNumber).replace(/\D/g, "") : "";
+                const isPhoneVerification = cleanReqPhone.length >= 10;
+                const expectedAmount = (amount !== undefined && amount !== null) ? Math.round(parseFloat(String(amount).replace(/,/g, ''))) : 0;
+
                 const matchingTxn = resultArr.find(txn => {
-                    // PRIORITY 1: Exact QR trace ID match (strongest)
-                    if (nqrTxnId && txn.validationTraceId === nqrTxnId) return true;
-                    // PRIORITY 2: Phone + Amount + Remarks (all three required for security)
-                    if (phoneNumber && amount && remarks) {
-                        const cleanTxnPhone = (txn.payerMobileNumber || txn.customerMobileNumber || "").replace(/\D/g, "");
-                        const isPhoneMatch = cleanTxnPhone && cleanTxnPhone.endsWith(phoneNumber.slice(-10));
-                        const isAmountMatch = txn.amount === amount || parseInt(txn.amount) === parseInt(amount);
-                        const isRemarksMatch = txn.remarks && txn.remarks.includes(remarks);
-                        if (isPhoneMatch && isAmountMatch && isRemarksMatch) return true;
+                    const isSuccess = txn.status === "SUCCESS" || txn.paymentStatus === "Success" || txn.status === "Success";
+                    if (!isSuccess && txn.status !== undefined) return false;
+
+                    // 1. COMPULSORY AMOUNT CHECK:
+                    // If expectedAmount is specified, paid amount MUST be >= expectedAmount
+                    const rawAmount = txn.amount || txn.transactionAmount || "0";
+                    const paidAmount = Math.round(parseFloat(String(rawAmount).replace(/,/g, '')));
+                    if (expectedAmount > 0) {
+                        if (paidAmount < expectedAmount) {
+                            console.warn(`[NEPALPAY VERIFY] Underpayment rejected: Paid ${paidAmount} < Expected ${expectedAmount}`);
+                            return false; // Underpayment -> REJECT
+                        }
                     }
-                    return false;
+
+                    // 2. Tracking match (QR Trace ID or Remarks/Order ID)
+                    const isTraceMatch = nqrTxnId && (txn.validationTraceId === nqrTxnId || txn.nqrTxnId === nqrTxnId);
+                    const isRemarksMatch = remarks && txn.remarks && txn.remarks.includes(remarks);
+
+                    if (isPhoneVerification) {
+                        // 3. COMPULSORY PHONE CHECK (for post-expiry/phone verification):
+                        const txnPhoneRaw = txn.payerMobileNumber || txn.customerMobileNumber || txn.payerMobile || txn.mobileNumber || txn.mobileNo || txn.contactNumber || txn.initiator || "";
+                        const cleanTxnPhone = txnPhoneRaw.replace(/\D/g, "");
+                        const isPhoneMatch = cleanTxnPhone.length >= 10 && cleanTxnPhone.endsWith(cleanReqPhone.slice(-10));
+
+                        if (!isPhoneMatch) {
+                            return false; // Phone mismatch -> REJECT
+                        }
+
+                        // Must match: Phone AND Amount AND (Trace ID OR Remarks)
+                        return isTraceMatch || isRemarksMatch;
+                    } else {
+                        // ACTIVE CHECKOUT POLLING (no phone provided):
+                        // Must match: Amount AND (Trace ID OR Remarks)
+                        return isTraceMatch || isRemarksMatch;
+                    }
                 });
 
                 if (matchingTxn) {
@@ -717,28 +745,44 @@ async function handleFonepayVerifyTransaction(body, res) {
 
             const resultArr = listData.searchedDataList;
             const searchBillId = nqrTxnId || remarks;
+            const cleanReqPhone = phoneNumber ? String(phoneNumber).replace(/\D/g, "") : "";
+            const isPhoneVerification = cleanReqPhone.length >= 10;
+            const expectedAmount = (amount !== undefined && amount !== null) ? Math.round(parseFloat(String(amount).replace(/,/g, ''))) : 0;
 
             const matchingTxn = resultArr.find(txn => {
-                const isSuccess = txn.paymentStatus === "Success";
+                const isSuccess = txn.paymentStatus === "Success" || txn.status === "SUCCESS" || txn.status === "Success";
                 if (!isSuccess) return false;
 
-                // PRIORITY 1: Exact billId / remarks tracking match (strongest)
-                const isTrackingMatch = searchBillId && (txn.billId === searchBillId || txn.remarks1 === searchBillId);
-                if (isTrackingMatch) return true;
-
-                // PRIORITY 2: Phone + Amount + BillId (all three required for security)
-                if (phoneNumber && amount !== undefined && amount !== null && searchBillId) {
-                    let isAmountMatch = txn.transactionAmount === amount.toString() || parseInt(txn.transactionAmount) === parseInt(amount);
-                    let isPhoneMatch = false;
-                    if (txn.initiator) {
-                        const cleanPhone = txn.initiator.replace(/\D/g, "");
-                        isPhoneMatch = cleanPhone.endsWith(phoneNumber.slice(-10));
+                // 1. COMPULSORY AMOUNT CHECK:
+                const rawAmount = txn.transactionAmount || txn.amount || "0";
+                const paidAmount = Math.round(parseFloat(String(rawAmount).replace(/,/g, '')));
+                if (expectedAmount > 0) {
+                    if (paidAmount < expectedAmount) {
+                        console.warn(`[FONEPAY VERIFY] Underpayment rejected: Paid ${paidAmount} < Expected ${expectedAmount}`);
+                        return false; // Underpayment -> REJECT
                     }
-                    const isBillIdMatch = txn.billId === searchBillId || (txn.remarks1 && txn.remarks1.includes(searchBillId));
-                    if (isPhoneMatch && isAmountMatch && isBillIdMatch) return true;
                 }
 
-                return false;
+                // 2. Tracking match (Bill ID or Remarks/Order ID)
+                const isTrackingMatch = searchBillId && (txn.billId === searchBillId || txn.remarks1 === searchBillId || (txn.remarks1 && txn.remarks1.includes(searchBillId)));
+
+                if (isPhoneVerification) {
+                    // 3. COMPULSORY PHONE CHECK (for post-expiry/phone verification):
+                    const txnPhoneRaw = txn.initiator || txn.mobileNumber || txn.payerMobileNumber || txn.customerMobileNumber || txn.mobileNo || "";
+                    const cleanTxnPhone = txnPhoneRaw.replace(/\D/g, "");
+                    const isPhoneMatch = cleanTxnPhone.length >= 10 && cleanTxnPhone.endsWith(cleanReqPhone.slice(-10));
+
+                    if (!isPhoneMatch) {
+                        return false; // Phone mismatch -> REJECT
+                    }
+
+                    // Must match: Phone AND Amount AND Tracking
+                    return isTrackingMatch;
+                } else {
+                    // ACTIVE CHECKOUT POLLING (no phone provided):
+                    // Must match: Amount AND Tracking
+                    return isTrackingMatch;
+                }
             });
 
             if (matchingTxn) {

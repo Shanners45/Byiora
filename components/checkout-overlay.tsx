@@ -29,9 +29,9 @@ const OVERLAY_CONFIG: Record<OverlayType, {
   cancelled: {
     title: "Order Cancelled",
     subtitle: "Returning to store…",
-    accentColor: "#7E3AF2",
-    bgGradient: "radial-gradient(ellipse at center, rgba(126, 58, 242, 0.1) 0%, transparent 70%)",
-    ringColor: "rgba(126, 58, 242, 0.15)",
+    accentColor: "#ef4444",
+    bgGradient: "radial-gradient(ellipse at center, rgba(239, 68, 68, 0.1) 0%, transparent 70%)",
+    ringColor: "rgba(239, 68, 68, 0.15)",
   },
   failed: {
     title: "Payment Session Expired",

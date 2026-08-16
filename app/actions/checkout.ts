@@ -579,7 +579,7 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
         password,
         // Extra fields for phone-based matching
         phoneNumber: cleanPhone,
-        amount: parseInt(txn.price),
+        amount: Math.round(parseFloat(String(txn.price || "0").replace(/,/g, ''))),
         remarks: transactionId
       }),
       cache: 'no-store'
@@ -588,6 +588,21 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
     const proxyData = await response.json()
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
+      // SECURITY: Validate paid amount matches order amount (anti-underpayment fraud)
+      const rawPaidAmount = proxyData.data.raw?.amount || proxyData.data.raw?.transactionAmount
+      if (rawPaidAmount && txn?.price) {
+        const paidAmount = Math.round(parseFloat(String(rawPaidAmount).replace(/,/g, '')))
+        const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
+        if (paidAmount > 0 && paidAmount < expectedAmount) {
+          console.error(`[VERIFY FRAUD ALERT] Amount mismatch for ${transactionId}: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`)
+          await supabase.from("transactions").update({
+            status: "Payment Failed",
+            failure_remarks: `Amount discrepancy: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`
+          } as any).eq("transaction_id", transactionId)
+          return { success: false, error: `Amount mismatch: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}` }
+        }
+      }
+
       const fulfillResult = await fulfillOrderDirectly({
         transactionId,
         validationTraceId: typedTxn.validation_trace_id,
