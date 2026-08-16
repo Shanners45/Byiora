@@ -3,8 +3,7 @@
 import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
-import { DollarSign, ArrowUpRight, TrendingUp, CreditCard, Package, RotateCcw, ShieldAlert } from "lucide-react"
+import { DollarSign, ArrowUpRight, TrendingUp, CreditCard, Package, RotateCcw } from "lucide-react"
 import { getAllTransactionsAction } from "@/app/actions/dashboard"
 import {
   AreaChart,
@@ -36,7 +35,7 @@ function getRefundAmount(t: any): number {
 }
 
 export default function RevenuePage() {
-  const [allTransactions, setAllTransactions] = useState<any[]>([])
+  const [transactions, setTransactions] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isMounted, setIsMounted] = useState(false)
 
@@ -50,27 +49,28 @@ export default function RevenuePage() {
       setLoading(true)
       const result = await getAllTransactionsAction()
       if (result.success && result.data) {
-        setAllTransactions(result.data)
+        setTransactions(result.data)
       }
       setLoading(false)
     }
     fetchTransactions()
   }, [])
 
-  // Filter transactions based on selected month and year
-  const completedTransactions = useMemo(() => allTransactions.filter(t => {
+  // Filter completed transactions for the selected month and year
+  const completedTransactions = useMemo(() => transactions.filter(t => {
     if (t.status !== "Completed") return false
     const date = new Date(t.created_at)
     return date.getMonth().toString() === selectedMonth && date.getFullYear().toString() === selectedYear
-  }), [allTransactions, selectedMonth, selectedYear])
+  }), [transactions, selectedMonth, selectedYear])
 
-  const refundedTransactions = useMemo(() => allTransactions.filter(t => {
+  // Filter refunded transactions for the selected month and year
+  const refundedTransactions = useMemo(() => transactions.filter(t => {
     if (t.status !== "Refunded") return false
     const date = new Date(t.created_at)
     return date.getMonth().toString() === selectedMonth && date.getFullYear().toString() === selectedYear
-  }), [allTransactions, selectedMonth, selectedYear])
+  }), [transactions, selectedMonth, selectedYear])
 
-  // Calculate gross revenue (from completed orders)
+  // Calculate gross revenue from completed orders
   const grossRevenue = useMemo(() => completedTransactions.reduce((sum, t) => {
     const cleanPrice = String(t.price).replace(/,/g, '')
     const parsed = Number.parseFloat(cleanPrice)
@@ -83,23 +83,23 @@ export default function RevenuePage() {
   }, 0), [refundedTransactions])
 
   // Net revenue = Gross Revenue - Refunds
-  const netRevenue = useMemo(() => Math.max(0, grossRevenue - totalRefunded), [grossRevenue, totalRefunded])
+  const totalRevenue = useMemo(() => Math.max(0, grossRevenue - totalRefunded), [grossRevenue, totalRefunded])
 
   // Get available years from transactions
   const availableYears = useMemo(() => {
-    const years = Array.from(new Set(allTransactions.map(t => new Date(t.created_at).getFullYear()))).sort((a, b) => b - a)
+    const years = Array.from(new Set(transactions.map(t => new Date(t.created_at).getFullYear()))).sort((a, b) => b - a)
     if (!years.includes(currentDate.getFullYear())) {
       years.unshift(currentDate.getFullYear())
     }
     return years
-  }, [allTransactions, currentDate])
+  }, [transactions, currentDate])
 
   const months = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
   ]
 
-  // 1. Revenue Trend Chart
+  // 1. Revenue Trend Chart (Daily net revenue)
   const trendData = useMemo(() => {
     const year = parseInt(selectedYear)
     const month = parseInt(selectedMonth)
@@ -110,9 +110,7 @@ export default function RevenuePage() {
       return {
         date: `${day} ${months[month].substring(0, 3)}`,
         dayNum: day,
-        gross: 0,
-        refunds: 0,
-        net: 0,
+        revenue: 0,
       }
     })
 
@@ -122,25 +120,14 @@ export default function RevenuePage() {
       const cleanPrice = String(t.price).replace(/,/g, '')
       const parsed = Number.parseFloat(cleanPrice)
       if (!isNaN(parsed) && day >= 1 && day <= daysInMonth) {
-        dailyData[day - 1].gross += parsed
-        dailyData[day - 1].net += parsed
-      }
-    })
-
-    refundedTransactions.forEach(t => {
-      const date = new Date(t.created_at)
-      const day = date.getDate()
-      const amt = getRefundAmount(t)
-      if (day >= 1 && day <= daysInMonth) {
-        dailyData[day - 1].refunds += amt
-        dailyData[day - 1].net = Math.max(0, dailyData[day - 1].net - amt)
+        dailyData[day - 1].revenue += parsed
       }
     })
 
     return dailyData
-  }, [completedTransactions, refundedTransactions, selectedMonth, selectedYear])
+  }, [completedTransactions, selectedMonth, selectedYear])
 
-  // 2. Payment Methods Split (Completed)
+  // 2. Payment Methods Split
   const paymentMethodData = useMemo(() => {
     const methods: Record<string, number> = {}
     completedTransactions.forEach(t => {
@@ -189,7 +176,7 @@ export default function RevenuePage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">Revenue Dashboard</h1>
-          <p className="text-[#4B5563]">Track and analyze platform revenue, orders, and refunds</p>
+          <p className="text-[#4B5563]">Track and analyze your platform's financial performance</p>
         </div>
 
         <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-gray-200 shadow-sm">
@@ -226,17 +213,20 @@ export default function RevenuePage() {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {/* Gross Revenue */}
+          <div className="grid gap-6 md:grid-cols-3">
             <Card className="border-none shadow-md bg-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Gross Revenue</p>
-                    <div className="text-2xl font-bold text-[#1F2937]">
-                      Rs. {grossRevenue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                    <p className="text-sm font-medium text-gray-500 mb-1">Total Revenue</p>
+                    <div className="text-3xl font-bold text-[#1F2937]">
+                      Rs. {totalRevenue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                     </div>
-                    <p className="text-xs text-gray-400 mt-1">{completedTransactions.length} completed orders</p>
+                    {totalRefunded > 0 && (
+                      <p className="text-xs text-[#7E3AF2] mt-1 font-medium">
+                        (Rs. {totalRefunded.toLocaleString()} refunded)
+                      </p>
+                    )}
                   </div>
                   <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center">
                     <DollarSign className="h-6 w-6 text-green-600" />
@@ -245,47 +235,27 @@ export default function RevenuePage() {
               </CardContent>
             </Card>
 
-            {/* Total Refunded */}
             <Card className="border-none shadow-md bg-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-purple-700 mb-1 flex items-center gap-1">
-                      <span>Total Refunded</span>
-                    </p>
-                    <div className="text-2xl font-bold text-purple-700">
-                      Rs. {totalRefunded.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                    <p className="text-sm font-medium text-gray-500 mb-1">Completed Orders</p>
+                    <div className="text-3xl font-bold text-[#1F2937]">
+                      {completedTransactions.length}
                     </div>
-                    <p className="text-xs text-purple-600 font-medium mt-1">
-                      {refundedTransactions.length} {refundedTransactions.length === 1 ? 'refunded order' : 'refunded orders'}
-                    </p>
+                    {refundedTransactions.length > 0 && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        {refundedTransactions.length} {refundedTransactions.length === 1 ? 'refund' : 'refunds'}
+                      </p>
+                    )}
                   </div>
                   <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
-                    <RotateCcw className="h-6 w-6 text-purple-700" />
+                    <Package className="h-6 w-6 text-[#7E3AF2]" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Net Revenue */}
-            <Card className="border-none shadow-md bg-white">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Net Revenue</p>
-                    <div className="text-2xl font-bold text-[#7E3AF2]">
-                      Rs. {netRevenue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1">Gross minus refunds</p>
-                  </div>
-                  <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center">
-                    <TrendingUp className="h-6 w-6 text-[#7E3AF2]" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Selected Period Info */}
             <Card className="border-none shadow-md bg-gradient-to-br from-[#7E3AF2] to-[#9D68F5] text-white">
               <CardContent className="p-6">
                 <div className="flex flex-col justify-center h-full">
@@ -295,7 +265,7 @@ export default function RevenuePage() {
                   </div>
                   <p className="text-sm text-white/70 mt-1 flex items-center">
                     <ArrowUpRight className="h-4 w-4 mr-1" />
-                    {completedTransactions.length + refundedTransactions.length} total processed
+                    Data up to date
                   </p>
                 </div>
               </CardContent>
@@ -312,7 +282,7 @@ export default function RevenuePage() {
                   </div>
                   <div>
                     <CardTitle className="text-lg">Revenue Trend</CardTitle>
-                    <CardDescription className="text-gray-400">Daily gross revenue and refunds for the selected month</CardDescription>
+                    <CardDescription className="text-gray-400">Daily revenue for the selected month</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -325,10 +295,6 @@ export default function RevenuePage() {
                           <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="5%" stopColor="#7E3AF2" stopOpacity={0.3} />
                             <stop offset="95%" stopColor="#7E3AF2" stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="colorRefunds" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
@@ -349,33 +315,20 @@ export default function RevenuePage() {
                         />
                         <Tooltip
                           contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
-                          formatter={(value, name) => {
+                          formatter={(value) => {
                             const n = typeof value === "number" ? value : Number(value ?? 0)
-                            const label = name === "gross" ? "Gross Revenue" : name === "refunds" ? "Refunds" : "Net Revenue"
-                            return [`Rs. ${n.toLocaleString()}`, label]
+                            return [`Rs. ${n.toLocaleString()}`, 'Revenue']
                           }}
                           labelStyle={{ fontWeight: 'bold', color: '#1F2937', marginBottom: '4px' }}
                         />
                         <Area
                           type="monotone"
-                          dataKey="gross"
+                          dataKey="revenue"
                           stroke="#7E3AF2"
                           strokeWidth={3}
                           fillOpacity={1}
                           fill="url(#colorRevenue)"
-                          name="gross"
                         />
-                        {totalRefunded > 0 && (
-                          <Area
-                            type="monotone"
-                            dataKey="refunds"
-                            stroke="#EF4444"
-                            strokeWidth={2}
-                            fillOpacity={0.5}
-                            fill="url(#colorRefunds)"
-                            name="refunds"
-                          />
-                        )}
                       </AreaChart>
                     </ResponsiveContainer>
                   )}
@@ -392,7 +345,7 @@ export default function RevenuePage() {
                   </div>
                   <div>
                     <CardTitle className="text-lg">Payment Methods</CardTitle>
-                    <CardDescription className="text-gray-400">Completed revenue by provider</CardDescription>
+                    <CardDescription className="text-gray-400">Revenue by provider</CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -437,103 +390,8 @@ export default function RevenuePage() {
             </Card>
           </div>
 
-          {/* 3. Refunded Orders Breakdown */}
-          <Card className="border-none shadow-sm">
-            <CardHeader className="pb-3 border-b border-gray-100">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <div className="h-8 w-8 rounded-md bg-purple-100 flex items-center justify-center mr-3">
-                    <RotateCcw className="h-4 w-4 text-purple-700" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg text-purple-950">Refunded Orders</CardTitle>
-                    <CardDescription className="text-gray-500">
-                      All refunded orders for {months[parseInt(selectedMonth)]} {selectedYear}
-                    </CardDescription>
-                  </div>
-                </div>
-                {refundedTransactions.length > 0 && (
-                  <Badge className="bg-purple-100 text-purple-800 border-purple-200 hover:bg-purple-100 font-semibold">
-                    {refundedTransactions.length} {refundedTransactions.length === 1 ? "Refund" : "Refunds"} (Rs. {totalRefunded.toLocaleString()})
-                  </Badge>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {refundedTransactions.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-purple-50/50 border-b border-purple-100 text-gray-600">
-                      <tr>
-                        <th className="px-6 py-3.5 font-semibold">Order ID</th>
-                        <th className="px-6 py-3.5 font-semibold">Customer</th>
-                        <th className="px-6 py-3.5 font-semibold">Product</th>
-                        <th className="px-6 py-3.5 font-semibold">Payment Method</th>
-                        <th className="px-6 py-3.5 font-semibold">Refund Details</th>
-                        <th className="px-6 py-3.5 font-semibold text-right">Refunded Amount</th>
-                        <th className="px-6 py-3.5 font-semibold text-right">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {refundedTransactions.map((txn) => {
-                        const refundAmt = getRefundAmount(txn)
-                        const customerName = txn.users?.name || txn.guest_user_data?.name || txn.user_email?.split('@')[0] || "Customer"
-
-                        return (
-                          <tr key={txn.id || txn.transaction_id} className="hover:bg-purple-50/30 transition-colors">
-                            <td className="px-6 py-4 font-mono text-xs text-gray-700">
-                              {txn.transaction_id}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="font-medium text-gray-900">{customerName}</div>
-                              <div className="text-xs text-gray-500">{txn.user_email}</div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="font-medium text-gray-900">{txn.product_name}</div>
-                              <div className="text-xs text-gray-500">{txn.amount}</div>
-                            </td>
-                            <td className="px-6 py-4 text-gray-700">
-                              <Badge variant="outline" className="text-xs border-gray-300">
-                                {txn.payment_method || "Dynamic QR"}
-                              </Badge>
-                            </td>
-                            <td className="px-6 py-4">
-                              {txn.failure_remarks ? (
-                                <span className="inline-block text-xs font-medium text-purple-800 bg-purple-50 px-2 py-1 rounded border border-purple-200">
-                                  {txn.failure_remarks}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-gray-400">—</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 text-right font-bold text-purple-700">
-                              Rs. {refundAmt.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                            </td>
-                            <td className="px-6 py-4 text-right text-xs text-gray-500">
-                              {new Date(txn.created_at).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric',
-                              })}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="p-12 text-center flex flex-col items-center justify-center text-gray-500">
-                  <RotateCcw className="h-10 w-10 text-gray-300 mb-3" />
-                  <p className="font-medium text-gray-600">No refunded orders in {months[parseInt(selectedMonth)]} {selectedYear}</p>
-                  <p className="text-xs text-gray-400 mt-1">When orders are refunded via Khalti or admin action, they will appear here.</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* 4. Top Performing Products */}
-          <Card className="border-none shadow-sm">
+          {/* 3. Top Performing Products */}
+          <Card className="border-none shadow-sm mt-6">
             <CardHeader className="pb-2 border-b border-gray-50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
@@ -590,6 +448,64 @@ export default function RevenuePage() {
               )}
             </CardContent>
           </Card>
+
+          {/* 4. Refunded Orders (only if refunds exist in this period) */}
+          {refundedTransactions.length > 0 && (
+            <Card className="border-none shadow-sm mt-6">
+              <CardHeader className="pb-2 border-b border-gray-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center">
+                    <div className="h-8 w-8 rounded-md bg-[#7E3AF2]/10 flex items-center justify-center mr-3">
+                      <RotateCcw className="h-4 w-4 text-[#7E3AF2]" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">Refunded Orders</CardTitle>
+                      <CardDescription className="text-gray-400">Orders refunded during this period</CardDescription>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-6 py-4 font-medium text-gray-500">Order ID</th>
+                        <th className="px-6 py-4 font-medium text-gray-500">Product</th>
+                        <th className="px-6 py-4 font-medium text-gray-500 text-right">Refunded Amount</th>
+                        <th className="px-6 py-4 font-medium text-gray-500 text-right">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {refundedTransactions.map((txn) => {
+                        const refundAmt = getRefundAmount(txn)
+                        return (
+                          <tr key={txn.id || txn.transaction_id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4 font-mono text-xs text-gray-600">
+                              {txn.transaction_id}
+                            </td>
+                            <td className="px-6 py-4 font-medium text-[#1F2937]">
+                              {txn.product_name} {txn.amount ? <span className="text-xs text-gray-400 font-normal">({txn.amount})</span> : null}
+                            </td>
+                            <td className="px-6 py-4 text-right font-medium text-[#7E3AF2]">
+                              Rs. {refundAmt.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                            </td>
+                            <td className="px-6 py-4 text-right text-xs text-gray-500">
+                              {new Date(txn.created_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </>
       )}
     </div>

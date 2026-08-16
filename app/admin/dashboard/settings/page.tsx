@@ -580,7 +580,7 @@ export default function AdminSettingsPage() {
           <TabsContent value="payment" className="space-y-6">
             <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
               <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <CardTitle className="text-[#1F2937] flex items-center gap-2">
                       <CreditCard className="h-5 w-5" />
@@ -592,7 +592,7 @@ export default function AdminSettingsPage() {
                   </div>
                   <Button
                     onClick={() => setShowAddForm(true)}
-                    className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white"
+                    className="bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white w-full sm:w-auto shrink-0"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Method
@@ -618,14 +618,16 @@ export default function AdminSettingsPage() {
                       {editingId === method.id ? (
                         /* —— EDIT MODE —— */
                         <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <h3 className="font-semibold text-[#1F2937]">Editing: {method.name}</h3>
-                            <div className="flex gap-2">
-                              <Button size="sm" onClick={handleSaveEdit} className="bg-green-600 hover:bg-green-700 text-white">
-                                <Check className="h-4 w-4 mr-1" /> Save
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                            <h3 className="font-semibold text-base text-[#1F2937] truncate">
+                              Editing: <span className="text-[#7E3AF2]">{method.name}</span>
+                            </h3>
+                            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                              <Button size="sm" onClick={handleSaveEdit} className="bg-green-600 hover:bg-green-700 text-white h-8 px-3 text-xs">
+                                <Check className="h-3.5 w-3.5 mr-1" /> Save
                               </Button>
-                              <Button size="sm" variant="outline" onClick={handleCancelEdit}>
-                                <X className="h-4 w-4 mr-1" /> Cancel
+                              <Button size="sm" variant="outline" onClick={handleCancelEdit} className="h-8 px-3 text-xs">
+                                <X className="h-3.5 w-3.5 mr-1" /> Cancel
                               </Button>
                             </div>
                           </div>
@@ -633,14 +635,14 @@ export default function AdminSettingsPage() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <Label className="text-[#1F2937]">Name {(editForm.category !== "static") && "(Auto-set)"}</Label>
-                              <div className="flex gap-2">
+                              <div className="flex flex-col sm:flex-row gap-2">
                                 <Select
                                   value={editForm.category || "static"}
                                   onValueChange={(val) => {
                                     setEditForm((f) => ({ ...f, category: val as any, name: val !== "static" ? (val === "nepalpay" ? "NepalPay" : val === "fonepay" ? "Fonepay" : "Khalti") : f.name }))
                                   }}
                                 >
-                                  <SelectTrigger className="w-32 border-2 border-[#F59E0B]/30 focus:border-[#F59E0B]">
+                                  <SelectTrigger className={`border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] ${(editForm.category || "static") === "static" ? "w-full sm:w-36" : "w-full"}`}>
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -662,7 +664,7 @@ export default function AdminSettingsPage() {
                             </div>
                             <div className="space-y-2">
                               <Label className="text-[#1F2937]">Logo URL (optional)</Label>
-                              <div className="flex gap-2 items-center">
+                              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                                 <Input
                                   value={editForm.logo_url || ""}
                                   onChange={(e) => setEditForm((f) => ({ ...f, logo_url: e.target.value }))}
@@ -686,7 +688,7 @@ export default function AdminSettingsPage() {
                                   size="sm"
                                   disabled={isUploadingQR === method.id}
                                   onClick={() => document.getElementById(`logo-upload-edit-${method.id}`)?.click()}
-                                  className="border-[#F59E0B] text-[#F59E0B] hover:bg-[#F59E0B]/10 whitespace-nowrap"
+                                  className="border-[#F59E0B] text-[#F59E0B] hover:bg-[#F59E0B]/10 whitespace-nowrap shrink-0"
                                 >
                                   <Upload className="h-4 w-4 mr-1" />
                                   Upload
@@ -697,200 +699,214 @@ export default function AdminSettingsPage() {
                           
                           {(editForm.category || "static") === "static" ? (
                             <>
-                          <div className="space-y-2">
-                            <Label className="text-[#1F2937]">Instructions shown to user</Label>
-                            <Textarea
-                              value={editForm.instructions || ""}
-                              onChange={(e) => setEditForm((f) => ({ ...f, instructions: e.target.value }))}
-                              className="border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-400"
-                              placeholder="e.g. Scan QR code with your app..."
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label className="text-[#1F2937]">QR Code</Label>
-                            <div className="flex items-center gap-4">
-                              {editForm.qr_url && (
-                                <div className="w-24 h-24 border border-gray-200 rounded overflow-hidden flex-shrink-0">
-                                  <img
-                                    src={editForm.qr_url}
-                                    alt="QR"
-                                    className="object-contain w-full h-full max-w-[96px] max-h-[96px]"
+                              <div className="space-y-2">
+                                <Label className="text-[#1F2937]">Instructions shown to user</Label>
+                                <Textarea
+                                  value={editForm.instructions || ""}
+                                  onChange={(e) => setEditForm((f) => ({ ...f, instructions: e.target.value }))}
+                                  className="border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-400"
+                                  placeholder="e.g. Scan QR code with your app..."
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-[#1F2937]">QR Code</Label>
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                                  {editForm.qr_url && (
+                                    <div className="w-24 h-24 border border-gray-200 rounded overflow-hidden shrink-0">
+                                      <img
+                                        src={editForm.qr_url}
+                                        alt="QR"
+                                        className="object-contain w-full h-full max-w-[96px] max-h-[96px]"
+                                      />
+                                    </div>
+                                  )}
+                                  <div className="flex-1 w-full space-y-2">
+                                    <Input
+                                      value={editForm.qr_url || ""}
+                                      onChange={(e) => setEditForm((f) => ({ ...f, qr_url: e.target.value }))}
+                                      className="border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-400"
+                                      placeholder="QR code image URL (or upload below)"
+                                    />
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      id={`qr-upload-edit-${method.id}`}
+                                      className="hidden"
+                                      onChange={(e) =>
+                                        handleQRUpload(e, method.id, (url) =>
+                                          setEditForm((f) => ({ ...f, qr_url: url }))
+                                        )
+                                      }
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={isUploadingQR === method.id}
+                                      onClick={() => document.getElementById(`qr-upload-edit-${method.id}`)?.click()}
+                                      className="border-[#F59E0B] text-[#F59E0B] hover:bg-[#F59E0B]/10 whitespace-nowrap"
+                                    >
+                                      <Upload className="h-4 w-4 mr-2" />
+                                      {isUploadingQR === method.id ? "Uploading..." : "Upload QR"}
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            /* AUTOMATED GATEWAY CREDENTIALS */
+                            <div className="mt-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                                <h4 className="font-semibold text-sm text-slate-800 flex items-center gap-1.5 min-w-0">
+                                  <Lock className="h-4 w-4 text-green-600 shrink-0" />
+                                  <span className="truncate">Automated Gateway Credentials ({(editForm.category || "static") === "nepalpay" ? "NepalPay" : (editForm.category === "fonepay" ? "Fonepay" : "Khalti")})</span>
+                                </h4>
+                                {((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : ((editForm.category === "fonepay" ? gatewayCreds.fonepay?.isPasswordSet : gatewayCreds.khalti?.isPasswordSet))) && (
+                                  <span className="self-start sm:self-auto bg-green-100 text-green-700 text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1 shrink-0">
+                                    <Check className="w-3 h-3 mr-0.5" />
+                                    Logged In 
+                                    {(editForm.category || "static") === "nepalpay" && gatewayCreds.nepalpay?.merchantCode && ` (Merchant: ${gatewayCreds.nepalpay.merchantCode})`}
+                                    {(editForm.category || "static") === "fonepay" && gatewayCreds.fonepay?.merchantCode && ` (Merchant: ${gatewayCreds.fonepay.merchantCode})`}
+                                    {(editForm.category || "static") === "khalti" && gatewayCreds.khalti?.merchantCode && ` (Verified)`}
+                                  </span>
+                                )}
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                  <Label className="text-xs">{(editForm.category || "static") === "khalti" ? "Secret Key (Username)" : "Username (Merchant Code)"}</Label>
+                                  <Input 
+                                    value={(editForm.category || "static") === "nepalpay" ? nepalpayUser : ((editForm.category === "fonepay" ? fonepayUser : khaltiUser))}
+                                    onChange={(e) => {
+                                      if ((editForm.category || "static") === "nepalpay") setNepalpayUser(e.target.value)
+                                      else if (editForm.category === "fonepay") setFonepayUser(e.target.value)
+                                      else setKhaltiUser(e.target.value)
+                                    }}
+                                    placeholder={(editForm.category || "static") === "khalti" ? "Secret key (e.g. 5e7779be...)" : "Username"}
+                                    className="bg-white border-slate-300 h-9 text-sm"
                                   />
                                 </div>
-                              )}
-                              <div className="flex-1 space-y-2">
-                                <Input
-                                  value={editForm.qr_url || ""}
-                                  onChange={(e) => setEditForm((f) => ({ ...f, qr_url: e.target.value }))}
-                                  className="border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-400"
-                                  placeholder="QR code image URL (or upload below)"
-                                />
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  id={`qr-upload-edit-${method.id}`}
-                                  className="hidden"
-                                  onChange={(e) =>
-                                    handleQRUpload(e, method.id, (url) =>
-                                      setEditForm((f) => ({ ...f, qr_url: url }))
-                                    )
-                                  }
-                                />
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  disabled={isUploadingQR === method.id}
-                                  onClick={() => document.getElementById(`qr-upload-edit-${method.id}`)?.click()}
-                                  className="border-[#F59E0B] text-[#F59E0B] hover:bg-[#F59E0B]/10"
-                                >
-                                  <Upload className="h-4 w-4 mr-2" />
-                                  {isUploadingQR === method.id ? "Uploading..." : "Upload QR"}
-                                </Button>
+                                <div className="space-y-2">
+                                  <Label className="text-xs">
+                                    {(editForm.category || "static") === "khalti" ? "Public Key (Password)" : "Password"} {((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : ((editForm.category === "fonepay" ? gatewayCreds.fonepay?.isPasswordSet : gatewayCreds.khalti?.isPasswordSet))) && <span className="text-green-600">(Saved)</span>}
+                                  </Label>
+                                  <Input 
+                                    type="password"
+                                    value={(editForm.category || "static") === "nepalpay" ? nepalpayPass : ((editForm.category === "fonepay" ? fonepayPass : khaltiPass))}
+                                    onChange={(e) => {
+                                      if ((editForm.category || "static") === "nepalpay") setNepalpayPass(e.target.value)
+                                      else if (editForm.category === "fonepay") setFonepayPass(e.target.value)
+                                      else setKhaltiPass(e.target.value)
+                                    }}
+                                    placeholder="Enter to update"
+                                    className="bg-white border-slate-300 h-9 text-sm"
+                                  />
+                                </div>
                               </div>
+                              <Button
+                                size="sm"
+                                onClick={async () => {
+                                  const isNepal = (editForm.category || "static") === "nepalpay"
+                                  const isFonepay = editForm.category === "fonepay"
+                                  const provider = isNepal ? "nepalpay" : (isFonepay ? "fonepay" : "khalti")
+                                  const u = isNepal ? nepalpayUser : (isFonepay ? fonepayUser : khaltiUser)
+                                  const p = isNepal ? nepalpayPass : (isFonepay ? fonepayPass : khaltiPass)
+                                  await handleSaveGateway(provider, u, p)
+                                }}
+                                disabled={isSavingGateways}
+                                className="mt-3 bg-green-600 hover:bg-green-700 text-white w-full"
+                              >
+                                {isSavingGateways ? "Saving..." : (((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : ((editForm.category === "fonepay" ? gatewayCreds.fonepay?.isPasswordSet : gatewayCreds.khalti?.isPasswordSet))) ? "Update Credentials" : "Save Credentials Securely")}
+                              </Button>
                             </div>
-                          </div>
-                          </>
-                          ) : (
-
-                          /* AUTOMATED GATEWAY CREDENTIALS */
-                          <div className="mt-2 bg-slate-50 p-4 rounded-lg border border-slate-200">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="font-semibold text-sm text-slate-800 flex items-center gap-2">
-                                <Lock className="h-4 w-4 text-green-600" />
-                                Automated Gateway Credentials ({(editForm.category || "static") === "nepalpay" ? "NepalPay" : (editForm.category === "fonepay" ? "Fonepay" : "Khalti")})
-                              </h4>
-                              {((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : ((editForm.category === "fonepay" ? gatewayCreds.fonepay?.isPasswordSet : gatewayCreds.khalti?.isPasswordSet))) && (
-                                <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full font-medium flex items-center">
-                                  <Check className="w-3 h-3 mr-1" />
-                                  Logged In 
-                                  {(editForm.category || "static") === "nepalpay" && gatewayCreds.nepalpay?.merchantCode && ` (Merchant: ${gatewayCreds.nepalpay.merchantCode})`}
-                                  {(editForm.category || "static") === "fonepay" && gatewayCreds.fonepay?.merchantCode && ` (Merchant: ${gatewayCreds.fonepay.merchantCode})`}
-                                  {(editForm.category || "static") === "khalti" && gatewayCreds.khalti?.merchantCode && ` (Verified)`}
-                                </span>
-                              )}
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label className="text-xs">{(editForm.category || "static") === "khalti" ? "Secret Key (Username)" : "Username (Merchant Code)"}</Label>
-                                <Input 
-                                  value={(editForm.category || "static") === "nepalpay" ? nepalpayUser : ((editForm.category === "fonepay" ? fonepayUser : khaltiUser))}
-                                  onChange={(e) => {
-                                    if ((editForm.category || "static") === "nepalpay") setNepalpayUser(e.target.value)
-                                    else if (editForm.category === "fonepay") setFonepayUser(e.target.value)
-                                    else setKhaltiUser(e.target.value)
-                                  }}
-                                  placeholder={(editForm.category || "static") === "khalti" ? "Secret key (e.g. 5e7779be...)" : "Username"}
-                                  className="bg-white border-slate-300 h-9 text-sm"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label className="text-xs">
-                                  {(editForm.category || "static") === "khalti" ? "Public Key (Password)" : "Password"} {((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : ((editForm.category === "fonepay" ? gatewayCreds.fonepay?.isPasswordSet : gatewayCreds.khalti?.isPasswordSet))) && <span className="text-green-600">(Saved)</span>}
-                                </Label>
-                                <Input 
-                                  type="password"
-                                  value={(editForm.category || "static") === "nepalpay" ? nepalpayPass : ((editForm.category === "fonepay" ? fonepayPass : khaltiPass))}
-                                  onChange={(e) => {
-                                    if ((editForm.category || "static") === "nepalpay") setNepalpayPass(e.target.value)
-                                    else if (editForm.category === "fonepay") setFonepayPass(e.target.value)
-                                    else setKhaltiPass(e.target.value)
-                                  }}
-                                  placeholder="Enter to update"
-                                  className="bg-white border-slate-300 h-9 text-sm"
-                                />
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              onClick={async () => {
-                                const isNepal = (editForm.category || "static") === "nepalpay"
-                                const isFonepay = editForm.category === "fonepay"
-                                const provider = isNepal ? "nepalpay" : (isFonepay ? "fonepay" : "khalti")
-                                const u = isNepal ? nepalpayUser : (isFonepay ? fonepayUser : khaltiUser)
-                                const p = isNepal ? nepalpayPass : (isFonepay ? fonepayPass : khaltiPass)
-                                await handleSaveGateway(provider, u, p)
-                              }}
-                              disabled={isSavingGateways}
-                              className="mt-3 bg-green-600 hover:bg-green-700 text-white w-full"
-                            >
-                              {isSavingGateways ? "Saving..." : (((editForm.category || "static") === "nepalpay" ? gatewayCreds.nepalpay?.isPasswordSet : ((editForm.category === "fonepay" ? gatewayCreds.fonepay?.isPasswordSet : gatewayCreds.khalti?.isPasswordSet))) ? "Update Credentials" : "Save Credentials Securely")}
-                            </Button>
-                          </div>
                           )}
                         </div>
                       ) : (
                         /* —— VIEW MODE —— */
-                        <div className="flex items-center gap-4">
-                          {/* QR thumbnail or logo or placeholder */}
-                          <div className="w-14 h-14 border border-gray-200 rounded overflow-hidden flex-shrink-0 flex items-center justify-center bg-gray-50">
-                            {method.logo_url ? (
-                              <img
-                                src={method.logo_url}
-                                alt={method.name}
-                                className="object-contain w-full h-full p-1"
-                              />
-                            ) : method.qr_url ? (
-                              <img
-                                src={method.qr_url}
-                                alt={method.name}
-                                className="object-contain w-full h-full max-w-[56px] max-h-[56px]"
-                              />
-                            ) : (
-                              <QrCode className="h-6 w-6 text-gray-300" />
-                            )}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-1">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {/* QR thumbnail or logo or placeholder */}
+                            <div className="w-12 h-12 sm:w-14 sm:h-14 border border-gray-200 rounded-lg overflow-hidden shrink-0 flex items-center justify-center bg-gray-50 p-1">
+                              {method.logo_url ? (
+                                <img
+                                  src={method.logo_url}
+                                  alt={method.name}
+                                  className="object-contain w-full h-full p-0.5"
+                                />
+                              ) : method.qr_url ? (
+                                <img
+                                  src={method.qr_url}
+                                  alt={method.name}
+                                  className="object-contain w-full h-full max-w-[48px] max-h-[48px]"
+                                />
+                              ) : (
+                                <QrCode className="h-6 w-6 text-gray-300" />
+                              )}
+                            </div>
+                            {/* Info */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-semibold text-sm sm:text-base text-[#1F2937] truncate">{method.name}</p>
+                                <span className={`text-[10px] sm:text-xs font-medium px-2 py-0.5 rounded-full shrink-0 ${
+                                  method.is_enabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                                }`}>
+                                  {method.is_enabled ? "Active" : "Hidden"}
+                                </span>
+                              </div>
+                              {method.instructions && (
+                                <p className="text-xs text-[#4B5563] truncate mt-0.5">{method.instructions}</p>
+                              )}
+                            </div>
                           </div>
-                          {/* Info */}
-                          <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-[#1F2937]">{method.name}</p>
-                            <p className="text-xs text-[#4B5563] truncate">{method.instructions}</p>
-                          </div>
+
                           {/* Controls */}
-                          <div className="flex items-center gap-3 flex-shrink-0">
+                          <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 shrink-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-xs text-[#4B5563]">
-                                {method.is_enabled ? "Active" : "Hidden"}
-                              </span>
                               <Switch
                                 checked={method.is_enabled}
                                 onCheckedChange={() => handleToggleEnabled(method)}
                               />
                             </div>
                             
-                            <div className="flex flex-col border-l border-r border-gray-200 px-2 gap-1 ml-2">
+                            <div className="flex items-center border-l border-r border-gray-200 px-1 sm:px-2 gap-0.5">
                               <button 
                                 onClick={() => moveMethod(paymentMethods.findIndex(m => m.id === method.id), "up")}
                                 disabled={paymentMethods.findIndex(m => m.id === method.id) === 0}
-                                className="text-gray-400 hover:text-[#7E3AF2] disabled:opacity-30 transition-colors"
+                                className="p-1 text-gray-400 hover:text-[#7E3AF2] disabled:opacity-30 transition-colors"
+                                title="Move Up"
                               >
                                 <ArrowUp className="h-4 w-4" />
                               </button>
                               <button 
                                 onClick={() => moveMethod(paymentMethods.findIndex(m => m.id === method.id), "down")}
                                 disabled={paymentMethods.findIndex(m => m.id === method.id) === paymentMethods.length - 1}
-                                className="text-gray-400 hover:text-[#7E3AF2] disabled:opacity-30 transition-colors"
+                                className="p-1 text-gray-400 hover:text-[#7E3AF2] disabled:opacity-30 transition-colors"
+                                title="Move Down"
                               >
                                 <ArrowDown className="h-4 w-4" />
                               </button>
                             </div>
 
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleStartEdit(method)}
-                              className="text-[#7E3AF2] hover:bg-[#7E3AF2]/10"
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDelete(method)}
-                              className="text-[#EF4444] hover:bg-red-50"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleStartEdit(method)}
+                                className="h-8 w-8 p-0 text-[#7E3AF2] hover:bg-[#7E3AF2]/10"
+                                title="Edit"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDelete(method)}
+                                className="h-8 w-8 p-0 text-[#EF4444] hover:bg-red-50"
+                                title="Delete"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       )}
@@ -901,9 +917,9 @@ export default function AdminSettingsPage() {
                 {/* Add New Form */}
                 {showAddForm && (
                   <div className="bg-white rounded-lg border-2 border-[#7E3AF2]/30 p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-[#1F2937]">New Payment Method</h3>
-                      <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)}>
+                    <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                      <h3 className="font-semibold text-base text-[#1F2937]">New Payment Method</h3>
+                      <Button size="sm" variant="ghost" onClick={() => setShowAddForm(false)} className="h-8 w-8 p-0">
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -912,12 +928,12 @@ export default function AdminSettingsPage() {
                         <Label className="text-[#1F2937]">
                           {(newMethod.category || "static") === "static" ? "Method Type & Name" : "Method Type"}
                         </Label>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <Select
                             value={newMethod.category || "static"}
                             onValueChange={(val) => setNewMethod((n: any) => ({ ...n, category: val, name: val !== "static" ? (val === "nepalpay" ? "NepalPay" : val === "fonepay" ? "Fonepay" : "Khalti") : n.name }))}
                           >
-                            <SelectTrigger className="w-32 border-2 border-[#7E3AF2]/30 focus:border-[#7E3AF2]">
+                            <SelectTrigger className={`border-2 border-[#7E3AF2]/30 focus:border-[#7E3AF2] ${(newMethod.category || "static") === "static" ? "w-full sm:w-36" : "w-full"}`}>
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -939,7 +955,7 @@ export default function AdminSettingsPage() {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[#1F2937]">Logo URL (optional)</Label>
-                        <div className="flex gap-2 items-center">
+                        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                           <Input
                             value={newMethod.logo_url}
                             onChange={(e) => setNewMethod((n: any) => ({ ...n, logo_url: e.target.value }))}
@@ -961,7 +977,7 @@ export default function AdminSettingsPage() {
                             size="sm"
                             disabled={isUploadingQR === "new"}
                             onClick={() => document.getElementById("logo-upload-new")?.click()}
-                            className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 whitespace-nowrap"
+                            className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 whitespace-nowrap shrink-0"
                           >
                             <Upload className="h-4 w-4 mr-1" />
                             Upload
@@ -981,7 +997,7 @@ export default function AdminSettingsPage() {
                         </div>
                         <div className="space-y-2">
                           <Label className="text-[#1F2937]">QR Code URL</Label>
-                          <div className="flex gap-2 items-center">
+                          <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                             <Input
                               value={newMethod.qr_url}
                               onChange={(e) => setNewMethod((n: any) => ({ ...n, qr_url: e.target.value }))}
@@ -1003,7 +1019,7 @@ export default function AdminSettingsPage() {
                               size="sm"
                               disabled={isUploadingQR === "new"}
                               onClick={() => document.getElementById("qr-upload-new")?.click()}
-                              className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 whitespace-nowrap"
+                              className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 whitespace-nowrap shrink-0"
                             >
                               <Upload className="h-4 w-4 mr-1" />
                               {isUploadingQR === "new" ? "Uploading..." : "Upload QR"}

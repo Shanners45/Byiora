@@ -119,7 +119,7 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">
             Welcome back, {adminUser?.name || "Admin"}!
@@ -129,7 +129,7 @@ export default function AdminDashboardPage() {
         <Button
           onClick={() => loadDashboardStats(false)}
           variant="outline"
-          className="flex items-center gap-2 border-[#F59E0B] text-[#92400E] hover:bg-[#FEF7E0]"
+          className="flex items-center gap-2 border-[#F59E0B] text-[#92400E] hover:bg-[#FEF7E0] self-start sm:self-auto shrink-0"
         >
           <RefreshCw className="h-4 w-4" />
           Refresh
@@ -228,15 +228,15 @@ export default function AdminDashboardPage() {
               {stats.recentOrders.map((order) => (
                 <div
                   key={order.id}
-                  className="flex items-center justify-between p-3 bg-white rounded-lg border border-[#F59E0B]/20"
+                  className="flex items-center justify-between gap-3 p-3 bg-white rounded-lg border border-[#F59E0B]/20"
                 >
-                  <div>
-                    <p className="font-medium text-[#1F2937]">{order.product_name}</p>
-                    <p className="text-sm text-[#4B5563]">{order.user_email}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-sm sm:text-base text-[#1F2937] truncate">{order.product_name}</p>
+                    <p className="text-xs sm:text-sm text-[#4B5563] truncate">{order.user_email}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-medium text-[#1F2937]">Rs. {order.price}</p>
-                    <Badge variant="outline" className={getStatusColor(order.status)}>{order.status}</Badge>
+                  <div className="text-right shrink-0 flex flex-col items-end justify-center gap-1">
+                    <p className="font-medium text-sm sm:text-base text-[#1F2937] whitespace-nowrap">Rs. {order.price}</p>
+                    <Badge variant="outline" className={`whitespace-nowrap text-[11px] sm:text-xs px-2 py-0.5 ${getStatusColor(order.status)}`}>{order.status}</Badge>
                   </div>
                 </div>
               ))}
@@ -256,18 +256,18 @@ export default function AdminDashboardPage() {
               {stats.topProducts.map((product) => (
                 <div
                   key={product.id}
-                  className="flex items-center justify-between p-3 bg-white rounded-lg border border-[#F59E0B]/20"
+                  className="flex items-center justify-between gap-3 p-3 bg-white rounded-lg border border-[#F59E0B]/20"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center shrink-0">
                       <Package className="h-5 w-5 text-gray-500" />
                     </div>
-                    <div>
-                      <p className="font-medium text-[#1F2937]">{product.name}</p>
-                      <p className="text-sm text-[#4B5563] capitalize">{product.category}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm sm:text-base text-[#1F2937] truncate">{product.name}</p>
+                      <p className="text-xs sm:text-sm text-[#4B5563] capitalize truncate">{product.category}</p>
                     </div>
                   </div>
-                  <Badge className="bg-green-100 text-green-800">Active</Badge>
+                  <Badge className="bg-green-100 text-green-800 shrink-0 whitespace-nowrap text-[11px] sm:text-xs px-2 py-0.5">Active</Badge>
                 </div>
               ))}
               {stats.topProducts.length === 0 && (

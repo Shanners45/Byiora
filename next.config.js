@@ -7,6 +7,9 @@ const remotePatterns = [
   { protocol: "https", hostname: "upload.wikimedia.org" },
   { protocol: "https", hostname: "logos-world.net" },
   { protocol: "https", hostname: "tkovigthghwpwbtjikyp.supabase.co" },
+  { protocol: "https", hostname: "byiora.com.np" },
+  { protocol: "https", hostname: "www.byiora.com.np" },
+  { protocol: "https", hostname: "admin.byiora.com.np" },
 ]
 
 try {
@@ -64,7 +67,7 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' blob: data: https://*.supabase.co https://www.byiora.com.np https://byiora.com.np https://hebbkx1anhila5yf.public.blob.vercel-storage.com https://cdn.worldvectorlogo.com https://upload.wikimedia.org https://logos-world.net; font-src 'self' https://fonts.gstatic.com; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' wss://*.supabase.co https://*.supabase.co https://*.resend.com https://api.upstash.com https://cloudflareinsights.com https://raw.githubusercontent.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io; worker-src 'self' blob:; upgrade-insecure-requests;"
+            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' blob: data: https://*.supabase.co https://www.byiora.com.np https://byiora.com.np https://admin.byiora.com.np https://hebbkx1anhila5yf.public.blob.vercel-storage.com https://cdn.worldvectorlogo.com https://upload.wikimedia.org https://logos-world.net; font-src 'self' https://fonts.gstatic.com; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' wss://*.supabase.co https://*.supabase.co https://*.resend.com https://api.upstash.com https://cloudflareinsights.com https://raw.githubusercontent.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://byiora.sentry.io https://*.sentry.io; worker-src 'self' blob:; upgrade-insecure-requests;"
           }
         ],
       },
@@ -73,11 +76,13 @@ const nextConfig = {
 }
 
 module.exports = withSentryConfig(nextConfig, {
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
+  org: process.env.SENTRY_ORG || "byiora",
+  project: process.env.SENTRY_PROJECT || "byiora",
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !process.env.CI,
   widenClientFileUpload: true,
+  hideSourceMaps: true,
+  tunnelRoute: "/monitoring-tunnel",
   webpack: {
     treeshake: {
       removeDebugLogging: true,

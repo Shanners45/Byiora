@@ -142,7 +142,7 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">Gift Card Inventory</h1>
           <p className="text-[#4B5563]">Manage encrypted gift card codes for automated delivery</p>
@@ -150,44 +150,44 @@ export default function InventoryPage() {
         <Button
           variant="outline"
           onClick={loadData}
-          className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10"
+          className="border-[#F59E0B] text-[#92400E] hover:bg-[#FEF7E0] self-start sm:self-auto"
         >
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh
         </Button>
       </div>
 
-      <Card className="shadow-md">
-        <CardHeader className="px-6 py-4 border-b">
+      <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+        <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
           <CardTitle className="text-[#1F2937]">Digital Goods & Games</CardTitle>
-          <CardDescription className="text-gray-600 font-medium">Click on a product to view denominations and add stock.</CardDescription>
+          <CardDescription className="text-[#92400E] font-medium">Click on a product to view denominations and add stock.</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
           <div className="relative mb-6">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
               placeholder="Search products..."
-              className="pl-10 bg-white text-gray-900 border-gray-300 focus:border-[#7E3AF2] placeholder:text-gray-400"
+              className="pl-10 bg-white text-[#1F2937] border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-400"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
 
-          <div className="rounded-md border overflow-hidden">
+          <div className="rounded-md border-2 border-[#F59E0B]/20 overflow-x-auto bg-white">
             <Table>
-              <TableHeader className="bg-gray-50">
+              <TableHeader className="bg-white border-b border-[#F59E0B]/20">
                 <TableRow>
                   <TableHead className="w-10"></TableHead>
-                  <TableHead className="text-gray-700 font-semibold">Product</TableHead>
-                  <TableHead className="text-gray-700 font-semibold">Category</TableHead>
-                  <TableHead className="text-gray-700 font-semibold">Status</TableHead>
+                  <TableHead className="text-[#1F2937] font-semibold">Product</TableHead>
+                  <TableHead className="text-[#1F2937] font-semibold">Category</TableHead>
+                  <TableHead className="text-[#1F2937] font-semibold">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedProducts.map((product) => (
                   <React.Fragment key={product.id}>
                     <TableRow 
-                      className="cursor-pointer hover:bg-gray-50 transition-colors"
+                      className="cursor-pointer hover:bg-[#FEF7E0]/50 transition-colors border-b border-[#F59E0B]/10"
                       onClick={() => toggleExpand(product.id)}
                     >
                       <TableCell>
@@ -198,19 +198,19 @@ export default function InventoryPage() {
                         )}
                       </TableCell>
                       <TableCell className="font-medium flex items-center gap-3">
-                        <div className="h-10 w-10 relative rounded overflow-hidden bg-gray-100">
+                        <div className="h-10 w-10 relative rounded overflow-hidden bg-gray-100 shrink-0">
                           {product.logo ? (
                             <Image src={product.logo} alt={product.name} fill className="object-cover" />
                           ) : (
                             <KeyRound className="h-5 w-5 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400" />
                           )}
                         </div>
-                        {product.name}
+                        <span className="text-[#1F2937]">{product.name}</span>
                       </TableCell>
-                      <TableCell className="capitalize">{product.category}</TableCell>
+                      <TableCell className="capitalize text-[#4B5563]">{product.category}</TableCell>
                       <TableCell>
                         {product.denominations?.length ? (
-                          <Badge variant="outline" className="text-gray-600">
+                          <Badge variant="outline" className="text-[#4B5563] border-gray-300">
                             {product.denominations.length} Denominations
                           </Badge>
                         ) : (
@@ -220,28 +220,28 @@ export default function InventoryPage() {
                     </TableRow>
 
                     {expandedProducts[product.id] && (
-                      <TableRow className="bg-gray-50/50">
+                      <TableRow className="bg-[#FEF7E0]/20">
                         <TableCell colSpan={4} className="p-0">
-                          <div className="p-4 pl-14 border-t border-gray-100 shadow-inner bg-slate-50">
-                            <h4 className="text-sm font-semibold mb-3 text-slate-700">Denomination Inventory</h4>
+                          <div className="p-4 pl-4 sm:pl-14 border-t border-[#F59E0B]/20 shadow-inner bg-[#FEF7E0]/40">
+                            <h4 className="text-sm font-semibold mb-3 text-[#1F2937]">Denomination Inventory</h4>
                             {product.denominations?.length > 0 ? (
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {product.denominations.map((denom: any) => {
                                   const stats = productStocks[product.id]?.[denom.label] || { available: 0, delivered: 0 }
                                   return (
-                                    <div key={denom.label} className="bg-white p-3 rounded-md shadow-sm border border-slate-200 flex flex-col justify-between">
+                                    <div key={denom.label} className="bg-white p-3 rounded-lg shadow-sm border border-[#F59E0B]/20 flex flex-col justify-between">
                                       <div className="flex justify-between items-start mb-2">
-                                        <div className="font-medium text-slate-900">{denom.label}</div>
+                                        <div className="font-semibold text-[#1F2937]">{denom.label}</div>
                                         <Badge variant="outline" className={stats.available > 0 ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}>
                                           {stats.available} Available
                                         </Badge>
                                       </div>
-                                      <div className="flex justify-between items-center text-xs text-slate-500 mt-2">
+                                      <div className="flex justify-between items-center text-xs text-[#4B5563] mt-2">
                                         <span>Delivered: {stats.delivered}</span>
                                         <Button 
                                           size="sm" 
                                           variant="ghost" 
-                                          className="h-7 px-2 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                          className="h-7 px-2 text-[#92400E] hover:text-[#92400E] hover:bg-[#FEF7E0] font-medium"
                                           onClick={(e) => {
                                             e.stopPropagation()
                                             openAddDialog(product.id, denom.label)
@@ -255,7 +255,7 @@ export default function InventoryPage() {
                                 })}
                               </div>
                             ) : (
-                              <p className="text-sm text-gray-500">Add denominations to this product first.</p>
+                              <p className="text-sm text-[#4B5563]">Add denominations to this product first.</p>
                             )}
                           </div>
                         </TableCell>
@@ -269,7 +269,7 @@ export default function InventoryPage() {
 
           {filteredProducts.length > 0 && (
             <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-4">
-              <p className="text-sm text-gray-600 font-medium">
+              <p className="text-sm text-[#92400E] font-medium">
                 Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredProducts.length)} of {filteredProducts.length} entries
               </p>
               <div className="flex gap-2">
@@ -278,7 +278,7 @@ export default function InventoryPage() {
                   size="sm"
                   onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="text-gray-700"
+                  className="border-[#F59E0B]/30 text-[#92400E] hover:bg-[#FEF7E0] disabled:opacity-40"
                 >
                   Previous
                 </Button>
@@ -287,7 +287,7 @@ export default function InventoryPage() {
                   size="sm"
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages || totalPages === 0}
-                  className="text-gray-700"
+                  className="border-[#F59E0B]/30 text-[#92400E] hover:bg-[#FEF7E0] disabled:opacity-40"
                 >
                   Next
                 </Button>
@@ -298,31 +298,31 @@ export default function InventoryPage() {
       </Card>
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-white border border-[#F59E0B]/30">
           <DialogHeader>
-            <DialogTitle className="text-gray-900">Add Gift Card Codes</DialogTitle>
-            <DialogDescription className="text-gray-600 font-medium">
-              Adding codes for <span className="font-bold text-gray-900">{selectedDenom}</span>. 
+            <DialogTitle className="text-[#1F2937]">Add Gift Card Codes</DialogTitle>
+            <DialogDescription className="text-[#4B5563] font-medium">
+              Adding codes for <span className="font-bold text-[#1F2937]">{selectedDenom}</span>. 
               Paste multiple codes separated by new lines. These will be encrypted instantly.
             </DialogDescription>
           </DialogHeader>
           <div className="py-2">
             <Textarea
               placeholder={`XXXX-XXXX-XXXX-XXXX\nYYYY-YYYY-YYYY-YYYY`}
-              className="min-h-[150px] font-mono text-sm bg-white text-gray-900 border-gray-300 focus:border-[#7E3AF2] placeholder:text-gray-400"
+              className="min-h-[150px] font-mono text-sm bg-white text-[#1F2937] border-2 border-[#F59E0B]/30 focus:border-[#F59E0B] placeholder:text-gray-400"
               value={codesInput}
               onChange={(e) => setCodesInput(e.target.value)}
             />
-            <div className="flex items-center gap-1.5 mt-2 text-xs text-amber-600 bg-amber-50 p-2 rounded">
-              <AlertCircle className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-1.5 mt-2 text-xs text-[#92400E] bg-[#FEF7E0] border border-[#F59E0B]/30 p-2.5 rounded-md">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
               <span>Duplicate codes will be automatically ignored using blind hashing.</span>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddOpen(false)} disabled={addingCodes}>
+            <Button variant="outline" onClick={() => setIsAddOpen(false)} disabled={addingCodes} className="border-gray-200 hover:bg-gray-50">
               Cancel
             </Button>
-            <Button onClick={handleAddCodes} disabled={addingCodes} className="bg-[#7E3AF2] hover:bg-[#6c2bd9] text-white">
+            <Button onClick={handleAddCodes} disabled={addingCodes} className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white">
               {addingCodes ? (
                 <>
                   <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />

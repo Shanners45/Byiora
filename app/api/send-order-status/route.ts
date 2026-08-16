@@ -75,185 +75,138 @@ export async function POST(request: Request) {
     // Derive display name — for the greeting line
     const displayName = userName || email.split('@')[0]
 
-    // Completed Order Email Template - Table-based, mobile-optimized
+    const row = (label: string, value: string) => `
+      <tr>
+        <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">${label}</td>
+        <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb; word-break: break-word;">${value}</td>
+      </tr>`
+
+    // Completed Order Email Template
     const completedTemplate = `
-<div style="background-color: #f3f4f6; padding: 20px 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+<div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
+    <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
+      <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Order Delivered Successfully</p>
+    </div>
+    <div style="padding: 40px;">
+      <h2 style="color: #1E1E1E; font-size: 20px; margin-top: 0;">Hi ${displayName},</h2>
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
+        Great news! Your order for <strong>${productName} ${denomination}</strong> has been successfully processed and delivered.
+      </p>
 
-    <tr>
-      <td style="background-color: #5A3588; padding: 30px 20px; text-align: center;">
-        <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 40px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
-        <p style="color: #EBE3F5; margin: 12px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Order Delivered Successfully</p>
-      </td>
-    </tr>
-
-    <tr>
-      <td style="padding: 30px 20px;">
-
-        <h2 style="color: #1E1E1E; font-size: 20px; font-weight: 700; margin: 0 0 6px 0;">Hi ${displayName},</h2>
-        <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
-          Great news! Your order for <strong>${productName} ${denomination}</strong> has been successfully processed and delivered.
-        </p>
-
-        <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F4F0F9; border: 2px solid #D8CBEB; border-radius: 12px; margin-bottom: 25px;">
-          <tr>
-            <td style="padding: 20px; text-align: center;">
-              <p style="margin: 0 0 8px 0; color: #6b7280; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px;">Order Status</p>
-              <div style="font-size: 20px; font-weight: bold; color: #6B3FA0; letter-spacing: 2px; padding: 10px; background-color: #ffffff; border-radius: 8px; text-transform: uppercase;">
-                ${statusText}
-              </div>
-              <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 12px;">Order ID: ${transactionId || 'N/A'}</p>
-            </td>
-          </tr>
+      <div style="margin: 32px 0; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
+        <div style="background-color: #6B3FA0; padding: 12px 16px;">
+          <p style="margin: 0; color: #ffffff; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Order Summary</p>
+        </div>
+        <table style="width: 100%; border-collapse: collapse;">
+          ${row("Product", `${productName} ${denomination}`.trim())}
+          ${row("Order ID", transactionId || "—")}
+          ${row("Status", '<span style="color: #16a34a; font-weight: 700; text-transform: uppercase;">Completed</span>')}
         </table>
+      </div>
 
-        <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0; text-align: center;">
-          We hope you enjoy your purchase!
-        </p>
-
-      </td>
-    </tr>
-
-    <tr>
-      <td style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 20px; text-align: center;">
-        <p style="color: #4A2A70; font-size: 13px; margin: 0 0 8px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
-        <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
-      </td>
-    </tr>
-
-  </table>
+      <div style="text-align: center; margin-top: 35px;">
+         <a href="https://www.byiora.com.np/transactions" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">View Order Details</a>
+      </div>
+    </div>
+    <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
+      <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+      <p style="color: #9ca3af; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
+    </div>
+  </div>
 </div>
     `
 
-    // Refunded Order Email Template - Table-based, mobile-optimized matching brand design
+    // Refunded Order Email Template - Matching standard design
     const refundedTemplate = `
-<div style="background-color: #f3f4f6; padding: 20px 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);">
+<div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
+    <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
+      <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Order Refund Processed</p>
+    </div>
+    <div style="padding: 40px;">
+      <h2 style="color: #1E1E1E; font-size: 20px; margin-top: 0;">Hi ${displayName},</h2>
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
+        A refund has been processed for your order of <strong>${productName} ${denomination}</strong>.
+      </p>
 
-    <tr>
-      <td style="background-color: #5A3588; padding: 30px 20px; text-align: center;">
-        <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 40px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
-        <p style="color: #EBE3F5; margin: 12px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Order Refund Processed</p>
-      </td>
-    </tr>
-
-    <tr>
-      <td style="padding: 30px 20px;">
-
-        <h2 style="color: #1E1E1E; font-size: 20px; font-weight: 700; margin: 0 0 6px 0;">Hi ${displayName},</h2>
-        <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
-          A refund has been processed for your order of <strong>${productName} ${denomination}</strong>.
-        </p>
-
-        <div style="margin-bottom: 20px; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
-          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
-            <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Item</td>
-              <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-weight: 600; word-break: break-word;">${productName} ${denomination}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Order ID</td>
-              <td style="padding: 10px 16px; font-size: 13px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; word-break: break-all;">${transactionId || 'N/A'}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''} width: 35%; vertical-align: top;">Status</td>
-              <td style="padding: 10px 16px; font-size: 14px; color: #7E3AF2; font-weight: 700; text-transform: uppercase;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''}">Refunded</td>
-            </tr>
-            ${remarks ? `
-            <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; width: 35%; vertical-align: top;">Details</td>
-              <td style="padding: 10px 16px; font-size: 14px; color: #7E3AF2; font-weight: 600; word-break: break-word;">${remarks}</td>
-            </tr>` : ''}
-          </table>
+      <div style="margin: 32px 0; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
+        <div style="background-color: #6B3FA0; padding: 12px 16px;">
+          <p style="margin: 0; color: #ffffff; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Refund Summary</p>
         </div>
+        <table style="width: 100%; border-collapse: collapse;">
+          ${row("Product", `${productName} ${denomination}`.trim())}
+          ${row("Order ID", transactionId || "—")}
+          ${row("Status", '<span style="color: #7E3AF2; font-weight: 700; text-transform: uppercase;">Refunded</span>')}
+          ${remarks ? row("Details", remarks) : ''}
+        </table>
+      </div>
 
-        <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0 0 20px 0; text-align: center;">
-          The refund amount has been returned to your original payment method. Depending on your bank/payment provider, it may take a few moments to reflect in your account.
-        </p>
+      <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0 0 25px 0; text-align: center;">
+        The refund amount has been returned to your original payment method. Depending on your bank or payment provider, it may take a few moments to reflect in your account.
+      </p>
 
-      </td>
-    </tr>
-
-    <tr>
-      <td style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 20px; text-align: center;">
-        <p style="color: #4A2A70; font-size: 13px; margin: 0 0 8px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
-        <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
-      </td>
-    </tr>
-
-  </table>
+      <div style="text-align: center;">
+         <a href="https://www.byiora.com.np" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">Return to Store</a>
+      </div>
+    </div>
+    <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
+      <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+      <p style="color: #9ca3af; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
+    </div>
+  </div>
 </div>
     `
 
-    // Failed Order Email Template - Table-based, mobile-optimized
+    // Failed Order Email Template
     const failedTemplate = `
-<div style="background-color: #f3f4f6; padding: 20px 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
-  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
+<div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
+    <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" />
+      <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Order Processing Issue</p>
+    </div>
+    <div style="padding: 40px;">
+      <h2 style="color: #1E1E1E; font-size: 20px; margin-top: 0;">Hi ${displayName},</h2>
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6;">
+        We regret to inform you that there was an issue processing your order. Please review the details below.
+      </p>
 
-    <tr>
-      <td style="background-color: #5A3588; padding: 30px 20px; text-align: center;">
-        <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 40px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
-        <p style="color: #EBE3F5; margin: 12px 0 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;">Order Processing Issue</p>
-      </td>
-    </tr>
+      <div style="margin: 32px 0; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
+        <div style="background-color: #6B3FA0; padding: 12px 16px;">
+          <p style="margin: 0; color: #ffffff; font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Order Details</p>
+        </div>
+        <table style="width: 100%; border-collapse: collapse;">
+          ${row("Product", `${productName} ${denomination}`.trim())}
+          ${row("Order ID", transactionId || "—")}
+          ${row("Order Status", '<span style="color: #dc2626; font-weight: 700; text-transform: uppercase;">Failed</span>')}
+          ${remarks ? row("Reason", remarks) : ''}
+        </table>
+      </div>
 
-    <tr>
-      <td style="padding: 30px 20px;">
-
-        <h2 style="color: #1E1E1E; font-size: 20px; font-weight: 700; margin: 0 0 6px 0;">Hi ${displayName},</h2>
-        <p style="color: #4b5563; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
-          We regret to inform you that there was an issue processing your order. Please review the details below.
+      ${magicLinkToken ? `
+      <div style="margin-top: 25px; padding: 20px; background-color: #F4F0F9; border-radius: 8px; text-align: center;">
+        <p style="color: #4A2A70; font-size: 15px; margin: 0 0 15px 0;">
+          If you have already paid but your order still failed, please click the secure link below to verify your payment. This link will expire in exactly 24 hours.
         </p>
-
-        <div style="margin-bottom: 20px; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
-          <table border="0" cellpadding="0" cellspacing="0" width="100%" style="border-collapse: collapse;">
-            <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Item</td>
-              <td style="padding: 10px 16px; font-size: 14px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-weight: 600; word-break: break-word;">${productName} ${denomination}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%; vertical-align: top;">Order ID</td>
-              <td style="padding: 10px 16px; font-size: 13px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; word-break: break-all;">${transactionId || 'N/A'}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''} width: 35%; vertical-align: top;">Order Status</td>
-              <td style="padding: 10px 16px; font-size: 14px; color: #dc2626; font-weight: 600; text-transform: uppercase;${remarks ? ' border-bottom: 1px solid #e5e7eb;' : ''}">${statusText}</td>
-            </tr>
-            ${remarks ? `
-            <tr>
-              <td style="padding: 10px 16px; font-size: 14px; color: #6b7280; font-weight: 600; background-color: #f9fafb; width: 35%; vertical-align: top;">Reason</td>
-              <td style="padding: 10px 16px; font-size: 14px; color: #dc2626; font-weight: 600; word-break: break-word;">${remarks}</td>
-            </tr>` : ''}
-          </table>
-        </div>
-
-        ${magicLinkToken ? `
-        <div style="margin-top: 25px; padding: 20px; background-color: #F4F0F9; border-radius: 8px; text-align: center;">
-          <p style="color: #4A2A70; font-size: 15px; margin: 0 0 15px 0;">
-            If you have already paid but your order still failed, please click the secure link below to verify your payment. This link will expire in exactly 24 hours.
-          </p>
-          <a href="https://www.byiora.com.np/verify-guest?token=${magicLinkToken}" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Verify Payment Securely</a>
-        </div>
-        ` : (!isGuest && isDynamic ? `
-        <div style="margin-top: 25px; padding: 20px; background-color: #F4F0F9; border-radius: 8px; text-align: center;">
-          <p style="color: #4A2A70; font-size: 15px; margin: 0 0 15px 0;">
-            If you have already paid but your payment has been marked as failed, please verify your payment from your Transaction History.
-          </p>
-          <a href="https://www.byiora.com.np/transactions" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Visit Transaction History</a>
-        </div>
-        ` : '')}
-
-      </td>
-    </tr>
-
-    <tr>
-      <td style="background-color: #F4F0F9; border-top: 1px solid #D8CBEB; padding: 20px; text-align: center;">
-        <p style="color: #4A2A70; font-size: 13px; margin: 0 0 8px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #6B3FA0; text-decoration: none; font-weight: 600;">Contact Support</a></p>
-        <p style="color: #A58BC5; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
-      </td>
-    </tr>
-
-  </table>
+        <a href="https://www.byiora.com.np/verify-guest?token=${magicLinkToken}" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Verify Payment Securely</a>
+      </div>
+      ` : (!isGuest && isDynamic ? `
+      <div style="margin-top: 25px; padding: 20px; background-color: #F4F0F9; border-radius: 8px; text-align: center;">
+        <p style="color: #4A2A70; font-size: 15px; margin: 0 0 15px 0;">
+          If you have already paid but your payment has been marked as failed, please verify your payment from your Transaction History.
+        </p>
+        <a href="https://www.byiora.com.np/transactions" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 15px;">Visit Transaction History</a>
+      </div>
+      ` : '')}
+    </div>
+    <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
+      <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+      <p style="color: #9ca3af; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
+    </div>
+  </div>
 </div>
     `
 

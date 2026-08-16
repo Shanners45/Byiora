@@ -3,6 +3,7 @@
 import { verifyTurnstileToken } from "@/lib/captcha"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "./payment-credentials"
+import { fulfillOrderDirectly } from "@/lib/fulfillment"
 import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 import { headers } from "next/headers"
@@ -413,9 +414,12 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
 
     const supabase = createServiceRoleClient()
 
-    // Ensure it's not already completed
+    // Ensure it exists and not already completed
     const { data: txn } = await supabase.from("transactions").select("status, price").eq("transaction_id", transactionId).single()
-    if (txn && txn.status === "Completed") {
+    if (!txn) {
+      return { success: false, error: "Transaction not found" }
+    }
+    if (txn.status === "Completed" || txn.status === "Paid") {
       return { success: true, completed: true }
     }
 
@@ -439,7 +443,9 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
       body: JSON.stringify({
         nqrTxnId: validationTraceId,
         username,
-        password
+        password,
+        remarks: transactionId,
+        amount: Math.round(parseFloat(String(txn.price || "0").replace(/,/g, '')))
       }),
       cache: 'no-store'
     })
@@ -462,29 +468,18 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
         }
       }
 
-      const host = headersList.get("host") || "localhost:3000"
-      const protocol = host.includes("localhost") ? "http" : "https"
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `${protocol}://${host}`
-
-      const fulfillRes = await fetch(`${siteUrl}/api/webhooks/qstash`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-internal-secret": PROXY_SECRET
-        },
-        body: JSON.stringify({
-          transactionId,
-          validationTraceId,
-          provider,
-          bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
-          internalTrigger: true
-        })
+      const fulfillResult = await fulfillOrderDirectly({
+        transactionId,
+        validationTraceId,
+        provider,
+        bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
       })
 
-      if (fulfillRes.ok) {
-        // Fetch the final status set by the webhook
+      if (fulfillResult.success) {
         const { data: finalTxn } = await supabase.from("transactions").select("status").eq("transaction_id", transactionId).single()
         return { success: true, completed: true, status: finalTxn?.status || "Completed" }
+      } else {
+        return { success: false, error: fulfillResult.error || "Fulfillment failed" }
       }
     }
 
@@ -593,30 +588,18 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
     const proxyData = await response.json()
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
-      // Payment found! Fulfill the order
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || `https://${(await headers()).get("host") || "localhost:3000"}`
-
-      const fulfillRes = await fetch(`${siteUrl}/api/webhooks/qstash`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-internal-secret": PROXY_SECRET
-        },
-        body: JSON.stringify({
-          transactionId,
-          validationTraceId: typedTxn.validation_trace_id,
-          provider: paymentCategory,
-          bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
-          internalTrigger: true
-        })
+      const fulfillResult = await fulfillOrderDirectly({
+        transactionId,
+        validationTraceId: typedTxn.validation_trace_id,
+        provider: paymentCategory,
+        bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
       })
 
-      if (fulfillRes.ok) {
+      if (fulfillResult.success) {
         return { success: true, verified: true }
       } else {
-        const errorText = await fulfillRes.text()
-        console.error("Webhook fulfillment failed:", errorText)
-        return { success: false, error: "Internal error processing the payment" }
+        console.error("Direct fulfillment failed:", fulfillResult.error)
+        return { success: false, error: fulfillResult.error || "Internal error processing the payment" }
       }
     }
 
@@ -765,37 +748,6 @@ export async function cancelTransactionAction(transactionId: string) {
       .is("bank_txn_id", null)
 
     if (cancelError) return { success: false, error: "Could not cancel transaction" }
-
-    // --- Send Cancellation Email ---
-    const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
-
-    let userName = undefined
-    if (txn.user_id) {
-      const { data: userData } = await supabase.from("users").select("name").eq("id", txn.user_id).single()
-      if (userData) userName = userData.name
-    } else if ((txn as any).guest_user_data && (txn as any).guest_user_data.name) {
-      userName = (txn as any).guest_user_data.name
-    }
-
-    const customMsg = "You have cancelled your order for <strong>" + txn.product_name + "</strong>."
-
-    try {
-      await sendOrderPlacedEmail({
-        email: txn.user_email,
-        userName: userName,
-        productName: txn.product_name,
-        denomination: txn.amount,
-        transactionId: transactionId,
-        price: txn.price,
-        paymentMethod: txn.payment_method,
-        isGuest: !txn.user_id,
-        status: "Order Cancelled",
-        customMessage: customMsg,
-        subjectOverride: `Order Cancelled: ${txn.product_name}`
-      })
-    } catch (e) {
-      console.error("Failed to send cancellation email:", e)
-    }
 
     return { success: true }
   } catch (error) {

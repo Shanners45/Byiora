@@ -303,21 +303,21 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">Admin Users</h1>
           <p className="text-[#4B5563]">Manage administrator accounts</p>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto">
           <Dialog open={isPromoteDialogOpen} onOpenChange={setIsPromoteDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="border-[#F59E0B] text-[#F59E0B] hover:bg-[#FEF7E0]">
-                <UserPlus className="mr-2 h-4 w-4" />
+              <Button variant="outline" className="border-[#F59E0B] text-[#92400E] hover:bg-[#FEF7E0] w-full sm:w-auto justify-center font-medium">
+                <UserPlus className="mr-2 h-4 w-4 text-[#F59E0B]" />
                 Add User as Sub-Admin
               </Button>
             </DialogTrigger>
-            <DialogContent className="border-none shadow-lg" aria-describedby={undefined}>
+            <DialogContent className="border-none shadow-xl w-[calc(100vw-2rem)] max-w-lg rounded-2xl bg-white p-4 sm:p-6 max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
               <DialogHeader>
                 <DialogTitle className="text-[#1F2937]">Promote User to Admin</DialogTitle>
                 <DialogDescription className="text-[#4B5563]">
@@ -371,15 +371,15 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
-              <DialogFooter>
+              <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0">
                 <Button
                   variant="outline"
                   onClick={() => setIsPromoteDialogOpen(false)}
-                  className="text-[#4B5563] border-[#E5E7EB]"
+                  className="text-[#4B5563] border-[#E5E7EB] w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
-                <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={handlePromoteUser}>
+                <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white w-full sm:w-auto" onClick={handlePromoteUser}>
                   Promote User
                 </Button>
               </DialogFooter>
@@ -388,12 +388,12 @@ export default function AdminUsersPage() {
 
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white">
+              <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white w-full sm:w-auto justify-center font-medium">
                 <UserPlus className="mr-2 h-4 w-4" />
                 Add Admin User
               </Button>
             </DialogTrigger>
-            <DialogContent className="border-none shadow-lg" aria-describedby={undefined}>
+            <DialogContent className="border-none shadow-xl w-[calc(100vw-2rem)] max-w-lg rounded-2xl bg-white p-4 sm:p-6 max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
               <DialogHeader>
                 <DialogTitle className="text-[#1F2937]">Add New Admin User</DialogTitle>
                 <DialogDescription className="text-[#4B5563]">
@@ -462,15 +462,15 @@ export default function AdminUsersPage() {
                 </div>
               </div>
 
-              <DialogFooter>
+              <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0">
                 <Button
                   variant="outline"
                   onClick={() => setIsAddDialogOpen(false)}
-                  className="text-[#4B5563] border-[#E5E7EB]"
+                  className="text-[#4B5563] border-[#E5E7EB] w-full sm:w-auto"
                 >
                   Cancel
                 </Button>
-                <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white" onClick={handleAddAdmin}>
+                <Button className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white w-full sm:w-auto" onClick={handleAddAdmin}>
                   Add Admin User
                 </Button>
               </DialogFooter>
@@ -480,24 +480,25 @@ export default function AdminUsersPage() {
       </div>
 
       <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
-        <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
+        <CardHeader className="px-4 sm:px-6 py-4 border-b border-[#F59E0B]/20">
           <CardTitle className="text-[#1F2937]">Admin Users</CardTitle>
           <CardDescription className="text-[#92400E]">
             Manage administrator accounts and their permissions
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-6">
-          <Table>
-            <TableHeader className="bg-white">
-              <TableRow>
-                <TableHead className="text-[#1F2937] font-medium">Name</TableHead>
-                <TableHead className="text-[#1F2937] font-medium">Email</TableHead>
-                <TableHead className="text-[#1F2937] font-medium">Role</TableHead>
-                <TableHead className="text-[#1F2937] font-medium">Status</TableHead>
-                <TableHead className="text-right text-[#1F2937] font-medium">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <CardContent className="p-3 sm:p-6">
+          <div className="overflow-x-auto rounded-lg border border-[#F59E0B]/20 bg-white">
+            <Table className="min-w-[620px]">
+              <TableHeader className="bg-white border-b border-[#F59E0B]/20">
+                <TableRow>
+                  <TableHead className="text-[#1F2937] font-medium">Name</TableHead>
+                  <TableHead className="text-[#1F2937] font-medium">Email</TableHead>
+                  <TableHead className="text-[#1F2937] font-medium">Role</TableHead>
+                  <TableHead className="text-[#1F2937] font-medium">Status</TableHead>
+                  <TableHead className="text-right text-[#1F2937] font-medium">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
               {adminUsers.map((user) => (
                 <TableRow key={user.id} className="hover:bg-[#FEF7E0]/50">
                   <TableCell className="font-medium text-[#1F2937]">{user.name}</TableCell>
@@ -584,7 +585,8 @@ export default function AdminUsersPage() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>

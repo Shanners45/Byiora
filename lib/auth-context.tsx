@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { loginWithPassword, signupWithPassword, logoutUser } from "@/app/actions/auth"
 import { addTransactionAction } from "@/app/actions/transactions"
+import * as Sentry from "@sentry/nextjs"
 
 interface User {
   id: string
@@ -81,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 name: existingUser.name,
               }
               setUser(updatedUser)
+              Sentry.setUser({ id: updatedUser.id, email: updatedUser.email })
               await loadTransactions(existingUser.id)
             }
           } catch (error) {
@@ -174,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
       
       setUser(userData);
+      Sentry.setUser({ id: userData.id, email: userData.email });
       await loadTransactions(userData.id);
       return true;
     } catch (error) {
@@ -248,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     setUser(null)
+    Sentry.setUser(null)
     setTransactions([])
     await logoutUser("/")
   }
