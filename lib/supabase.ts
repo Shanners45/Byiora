@@ -360,7 +360,51 @@ export interface Database {
         }
         Relationships: []
       }
+
+      gift_card_inventory: {
+        Row: {
+          id: string
+          product_id: string
+          denomination_label: string
+          encrypted_code: string
+          code_hash: string
+          status: "AVAILABLE" | "DELIVERED" | "REVOKED"
+          added_by: string | null
+          claimed_by_transaction_id: string | null
+          claimed_at: string | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          product_id: string
+          denomination_label: string
+          encrypted_code: string
+          code_hash: string
+          status?: "AVAILABLE" | "DELIVERED" | "REVOKED"
+          added_by?: string | null
+          claimed_by_transaction_id?: string | null
+          claimed_at?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          product_id?: string
+          denomination_label?: string
+          encrypted_code?: string
+          code_hash?: string
+          status?: "AVAILABLE" | "DELIVERED" | "REVOKED"
+          added_by?: string | null
+          claimed_by_transaction_id?: string | null
+          claimed_at?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
+
     Views: Record<string, never>
     Functions: Record<string, never>
     Enums: Record<string, never>

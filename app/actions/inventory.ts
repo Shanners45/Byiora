@@ -170,11 +170,13 @@ export async function deleteInventoryCodeAction(inventoryId: string) {
   const supabase = createServiceRoleClient()
 
   // 1. Verify code exists and is AVAILABLE
-  const { data: item, error: fetchErr } = await supabase
-    .from("gift_card_inventory")
+  const { data, error: fetchErr } = await (supabase
+    .from("gift_card_inventory") as any)
     .select("id, status, product_id, denomination_label")
     .eq("id", inventoryId)
     .single()
+
+  const item = data as any
 
   if (fetchErr || !item) {
     return { error: "Inventory code not found" }
@@ -185,8 +187,8 @@ export async function deleteInventoryCodeAction(inventoryId: string) {
   }
 
   // 2. Delete the record
-  const { error: deleteErr } = await supabase
-    .from("gift_card_inventory")
+  const { error: deleteErr } = await (supabase
+    .from("gift_card_inventory") as any)
     .delete()
     .eq("id", inventoryId)
     .eq("status", "AVAILABLE")
@@ -218,8 +220,8 @@ export async function deleteInventoryCodeByValueAction(productId: string, denomi
   const supabase = createServiceRoleClient()
 
   // Find the matching AVAILABLE code
-  const { data: item, error: findErr } = await supabase
-    .from("gift_card_inventory")
+  const { data, error: findErr } = await (supabase
+    .from("gift_card_inventory") as any)
     .select("id, status")
     .eq("product_id", productId)
     .eq("denomination_label", denominationLabel)
@@ -227,13 +229,15 @@ export async function deleteInventoryCodeByValueAction(productId: string, denomi
     .eq("status", "AVAILABLE")
     .maybeSingle()
 
+  const item = data as any
+
   if (findErr) return { error: findErr.message }
   if (!item) {
     return { error: "No matching available code found for this denomination. (It may have already been delivered or does not exist.)" }
   }
 
-  const { error: deleteErr } = await supabase
-    .from("gift_card_inventory")
+  const { error: deleteErr } = await (supabase
+    .from("gift_card_inventory") as any)
     .delete()
     .eq("id", item.id)
     .eq("status", "AVAILABLE")
