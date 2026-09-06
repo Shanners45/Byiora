@@ -960,7 +960,7 @@ export default function ProductEditPage() {
         {/* Denominations */}
         <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
         <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <CardTitle className="text-[#1F2937]">Product Denominations</CardTitle>
               <CardDescription className="text-[#92400E]">Add available denominations and prices</CardDescription>
@@ -970,7 +970,7 @@ export default function ProductEditPage() {
                 type="button"
                 size="sm"
                 variant="outline"
-                className={`text-xs font-semibold border-2 ${
+                className={`text-xs font-semibold border-2 self-start sm:self-auto shrink-0 ${
                   denominations.every(d => d.in_stock !== false)
                     ? "border-red-400 text-red-600 hover:bg-red-50 hover:text-red-700"
                     : "border-green-400 text-green-600 hover:bg-green-50 hover:text-green-700"
@@ -990,6 +990,7 @@ export default function ProductEditPage() {
             )}
           </div>
         </CardHeader>
+
         <CardContent className="p-6 space-y-6">
           {denominations.length > 0 && (
             <div className="rounded-md border border-[#E5E7EB] overflow-hidden">

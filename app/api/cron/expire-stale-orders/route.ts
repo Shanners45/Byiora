@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/app/actions/payment-credentials"
+import { fulfillOrderDirectly } from "@/lib/fulfillment"
 
 const PROXY_SECRET = process.env.INTERNAL_API_SECRET!
 if (!PROXY_SECRET) {
@@ -16,10 +17,13 @@ if (!PROXY_SECRET) {
  * 3. Discord alert for any suspicious expirations (had a validation_trace_id).
  */
 export async function GET(req: Request) {
-  // Verify cron secret (supports Authorization header and custom headers only — NOT query params to avoid log leakage)
+  // Verify cron secret (supports Authorization header, custom headers, or ?secret= query param for cron-job.org)
   const authHeader = req.headers.get("authorization")
   const customHeader = req.headers.get("x-cron-secret") || req.headers.get("x-internal-secret")
   
+  const url = new URL(req.url)
+  const querySecret = url.searchParams.get("secret") || url.searchParams.get("key")
+
   const cronSecret = process.env.CRON_SECRET || process.env.INTERNAL_API_SECRET
   const internalSecret = process.env.INTERNAL_API_SECRET
 
@@ -27,11 +31,14 @@ export async function GET(req: Request) {
     (cronSecret && authHeader === `Bearer ${cronSecret}`) ||
     (internalSecret && authHeader === `Bearer ${internalSecret}`) ||
     (cronSecret && customHeader === cronSecret) ||
-    (internalSecret && customHeader === internalSecret)
+    (internalSecret && customHeader === internalSecret) ||
+    (cronSecret && querySecret === cronSecret) ||
+    (internalSecret && querySecret === internalSecret)
   
   if (!isAuthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
+
 
   const supabase = createServiceRoleClient()
   const results = { expired: 0, recovered: 0, errors: 0 }
@@ -110,20 +117,11 @@ export async function GET(req: Request) {
                   // PAYMENT FOUND! Recover the order
                   console.log(`[CRON] 🎉 RECOVERED payment for ${txn.transaction_id}`)
 
-                  const INTERNAL_SECRET = PROXY_SECRET
-                  await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/api/webhooks/qstash`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      "x-internal-secret": INTERNAL_SECRET
-                    },
-                    body: JSON.stringify({
-                      transactionId: txn.transaction_id,
-                      validationTraceId: typedTxn.validation_trace_id,
-                      provider: category,
-                      bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
-                      internalTrigger: true
-                    })
+                  await fulfillOrderDirectly({
+                    transactionId: txn.transaction_id,
+                    validationTraceId: typedTxn.validation_trace_id,
+                    provider: category,
+                    bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
                   })
 
                   results.recovered++
