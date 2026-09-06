@@ -180,23 +180,46 @@ export async function GET(req: Request) {
       // Send Payment Failed email for nepalpay and fonepay
       if (typedTxn.payment_category === "nepalpay" || typedTxn.payment_category === "fonepay") {
         try {
-          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+          const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
+          const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
+
           const userName = typedTxn.guest_user_data?.name || typedTxn.user_email?.split('@')[0] || "Customer"
-          await fetch(`${siteUrl}/api/send-order-status`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "x-internal-secret": PROXY_SECRET },
-            body: JSON.stringify({
-              email: typedTxn.user_email,
-              userName: userName,
-              productName: typedTxn.product_name,
-              denomination: typedTxn.amount,
-              status: "Payment Failed",
-              transactionId: typedTxn.transaction_id,
-              remarks: "QR code expired without payment confirmation",
-              isGuest: !typedTxn.user_id,
-              isDynamic: true
-            })
+          let customMsg = "We noticed your payment session expired and your order has been marked as <strong>Payment Failed</strong>."
+          let actionBtn: { label: string; url: string; subtext?: string } | undefined = undefined
+
+          if (typedTxn.user_id) {
+            customMsg += "<br/><br/>If you have already paid but your order timed out, you can securely verify your payment from your Transaction History."
+            actionBtn = {
+              label: "Verify in Transaction History",
+              url: "https://www.byiora.com.np/transactions",
+              subtext: "Click the Verify Payment button next to this order within 24 hours."
+            }
+          } else {
+            const rawToken = await generateGuestVerificationToken(txn.transaction_id)
+            const token = encodeURIComponent(rawToken)
+            customMsg += "<br/><br/>If you have already paid but your order timed out, please click the secure link below to verify your payment and fulfill your order."
+            actionBtn = {
+              label: "Verify Payment Securely",
+              url: `https://www.byiora.com.np/verify-guest?token=${token}`,
+              subtext: "This secure link will expire in exactly 24 hours."
+            }
+          }
+
+          await sendOrderPlacedEmail({
+            email: typedTxn.user_email,
+            userName: userName,
+            productName: typedTxn.product_name,
+            denomination: typedTxn.amount,
+            transactionId: typedTxn.transaction_id,
+            price: typedTxn.price,
+            paymentMethod: typedTxn.payment_method,
+            isGuest: !typedTxn.user_id,
+            status: "Payment Failed",
+            customMessage: customMsg,
+            subjectOverride: `Order Failed: ${typedTxn.product_name}`,
+            actionButton: actionBtn
           })
+          console.log(`[CRON] ✅ Successfully sent Payment Failed email for ${txn.transaction_id}`)
         } catch (emailErr) {
           console.error(`[CRON] Failed to send Payment Failed email for ${txn.transaction_id}:`, emailErr)
         }

@@ -44,6 +44,13 @@ try {
 
 // ── Shared Utilities ─────────────────────────────────────────────────────────
 
+/** Mask sensitive values for logging (show first 2 + last 2 chars only) */
+function maskSensitive(val) {
+    if (!val || typeof val !== 'string') return '***';
+    if (val.length <= 4) return '***';
+    return val.slice(0, 2) + '*'.repeat(Math.min(val.length - 4, 6)) + val.slice(-2);
+}
+
 function parseJwt(token) {
     try {
         return JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString('utf8'));
@@ -115,6 +122,17 @@ function extractBearerToken(rawResponse) {
 // ── Shared State ─────────────────────────────────────────────────────────────
 
 const sessionCache = {};
+
+/**
+ * Credential Vault — caches decrypted bank credentials in-memory by provider key.
+ * Populated on QR generation (which requires credentials). Used by verify handlers
+ * to re-authenticate if the session token expires, without requiring the caller
+ * to re-send credentials on every poll request.
+ */
+const credentialVault = {};
+
+/** Maximum allowed request body size (64 KB) — prevents memory exhaustion DoS */
+const MAX_BODY_SIZE = 64 * 1024;
 
 // Periodic cleanup of expired JWT tokens from sessionCache (every 10 minutes)
 setInterval(() => {
@@ -278,7 +296,7 @@ async function handleNepalPayVerifyLogin(body, res) {
         const { username, password } = JSON.parse(body);
         const userKey = username.trim();
 
-        console.log("\n>>> [NEPALPAY] VERIFYING LOGIN FOR", userKey);
+        console.log(`\n>>> [NEPALPAY] VERIFYING LOGIN FOR ${maskSensitive(userKey)}`);
 
         const loginData = await makeBankRequest(
             'https://business.nepalpay.com.np/backend/api/auth/signin',
@@ -286,7 +304,7 @@ async function handleNepalPayVerifyLogin(body, res) {
         );
 
         if (loginData.status !== "SUCCESS") {
-            console.log("❌ Login Rejected:", loginData);
+            console.log("❌ Login Rejected");
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, message: "Login failed. Check credentials." }));
             return;
@@ -302,12 +320,15 @@ async function handleNepalPayVerifyLogin(body, res) {
             sessionCache[`nepalpay:${userKey}`] = accessToken;
         }
 
+        // Cache credentials in vault for session token architecture
+        credentialVault['nepalpay'] = { username: userKey, password: password.trim() };
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: "Credentials valid", merchantCode }));
     } catch (err) {
         console.error("🚨 CRASH:", err.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: "Crash: " + err.message }));
+        res.end(JSON.stringify({ success: false, message: "Internal server error" }));
     }
 }
 
@@ -318,6 +339,9 @@ async function handleNepalPayTriggerQR(body, res) {
         const { username, password, amount, remarks } = parsed;
         const userKey = username.trim();
 
+        // Cache credentials in vault for session token architecture
+        credentialVault['nepalpay'] = { username: userKey, password: password.trim() };
+
         let accessToken = null;
         let merchantCode = null;
 
@@ -326,7 +350,7 @@ async function handleNepalPayTriggerQR(body, res) {
             const decoded = parseJwt(parsed.token);
             const now = Math.floor(Date.now() / 1000);
             if (decoded && decoded.exp && (decoded.exp > now + 300)) {
-                console.log("\n⚡ Using DB cached NepalPay session for", userKey);
+                console.log(`\n⚡ Using DB cached NepalPay session for ${maskSensitive(userKey)}`);
                 accessToken = parsed.token;
                 merchantCode = decoded.merchantCode;
                 sessionCache[`nepalpay:${userKey}`] = accessToken;
@@ -339,14 +363,14 @@ async function handleNepalPayTriggerQR(body, res) {
             const decoded = parseJwt(cachedToken);
             const now = Math.floor(Date.now() / 1000);
             if (decoded && decoded.exp && (decoded.exp > now + 300)) {
-                console.log("\n⚡ Using cached NepalPay session for", userKey);
+                console.log(`\n⚡ Using cached NepalPay session for ${maskSensitive(userKey)}`);
                 accessToken = cachedToken;
                 merchantCode = decoded.merchantCode;
             }
         }
 
         if (!accessToken) {
-            console.log("\n>>> NEPALPAY LOGIN (VIA CURL)...");
+            console.log(`\n>>> NEPALPAY LOGIN for ${maskSensitive(userKey)}...`);
 
             const loginData = await makeBankRequest(
                 'https://business.nepalpay.com.np/backend/api/auth/signin',
@@ -354,22 +378,21 @@ async function handleNepalPayTriggerQR(body, res) {
             );
 
             if (loginData.status !== "SUCCESS") {
-                console.log("❌ Login Rejected:", loginData);
+                console.log("❌ Login Rejected");
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, message: "Login failed. Check credentials." }));
                 return;
             }
 
-            console.log("LOGIN DATA: status:", loginData.status, "merchantCode:", loginData.data?.merchantCode);
             accessToken = loginData.data.accessToken;
             const decoded = parseJwt(accessToken);
             merchantCode = decoded.merchantCode;
 
             sessionCache[`nepalpay:${userKey}`] = accessToken;
-            console.log("✅ Login Success! Merchant Code:", merchantCode);
+            console.log(`✅ Login Success! Merchant: ${maskSensitive(String(merchantCode))}`);
         }
 
-        console.log(">>> GENERATING QR FOR Rs.", amount, "...");
+        console.log(`>>> GENERATING QR FOR Rs. ${amount}...`);
 
         const qrPayload = {
             merchantCode,
@@ -385,8 +408,6 @@ async function handleNepalPayTriggerQR(body, res) {
                 subIdentificationCode: merchantCode
             }
         };
-
-
 
         const qrData = await makeBankRequest(
             'https://business.nepalpay.com.np/backend/api/nqr/generate',
@@ -404,7 +425,7 @@ async function handleNepalPayTriggerQR(body, res) {
                 accessToken: accessToken // Return for DB caching
             }));
         } else {
-            console.log("❌ QR Failed:", qrData);
+            console.log("❌ QR Generation Failed");
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, message: "QR Generation Failed" }));
         }
@@ -412,38 +433,76 @@ async function handleNepalPayTriggerQR(body, res) {
     } catch (err) {
         console.error("🚨 CRASH:", err.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: "Crash: " + err.message }));
+        res.end(JSON.stringify({ success: false, message: "Internal server error" }));
     }
 }
 
 // NepalPay: Verify Transaction
 async function handleNepalPayVerifyTransaction(body, res) {
     try {
-        const { nqrTxnId, username, password, phoneNumber, amount, remarks } = JSON.parse(body);
-        const userKey = username.trim();
+        const parsed = JSON.parse(body);
+        const { nqrTxnId, phoneNumber, bankReference, amount, remarks, orderCreatedAt } = parsed;
+        // Session Token Architecture: Accept sessionToken OR username/password, fall back to credential vault
+        let username = parsed.username ? parsed.username.trim() : null;
+        let password = parsed.password ? parsed.password.trim() : null;
 
-        const maskedPhone = phoneNumber ? '***' + phoneNumber.slice(-4) : 'N/A';
-        console.log(`\n🔍 [NEPALPAY VERIFY] Checking nqrTxnId: ${nqrTxnId} or phone: ${maskedPhone} for user ${userKey}`);
+        const rawRef = String(bankReference || phoneNumber || "").trim();
+        const maskedPhone = rawRef ? '***' + rawRef.slice(-4) : 'N/A';
+        console.log(`\n🔍 [NEPALPAY VERIFY] Checking nqrTxnId: ${nqrTxnId || 'N/A'}, ref: ${maskedPhone}`);
 
         let accessToken = null;
         let merchantCode = null;
 
-        // Check cache
-        if (sessionCache[`nepalpay:${userKey}`]) {
-            const cachedToken = sessionCache[`nepalpay:${userKey}`];
-            const decoded = parseJwt(cachedToken);
+        // 1. Try session token from request (preferred — no credentials needed)
+        if (parsed.sessionToken) {
+            const decoded = parseJwt(parsed.sessionToken);
             const now = Math.floor(Date.now() / 1000);
-            if (decoded && decoded.exp && (decoded.exp > now + 300)) {
-                accessToken = cachedToken;
+            if (decoded && decoded.exp && (decoded.exp > now + 60)) {
+                accessToken = parsed.sessionToken;
                 merchantCode = decoded.merchantCode;
+                // Refresh session cache with the provided token
+                if (decoded.sub || username) {
+                    sessionCache[`nepalpay:${decoded.sub || username}`] = accessToken;
+                }
             }
         }
 
+        // 2. Try in-memory session cache (keyed by username from vault if needed)
         if (!accessToken) {
-            console.log("\n>>> NEPALPAY LOGIN (VERIFICATION)...");
+            const resolvedUser = username || (credentialVault['nepalpay'] && credentialVault['nepalpay'].username);
+            if (resolvedUser && sessionCache[`nepalpay:${resolvedUser}`]) {
+                const cachedToken = sessionCache[`nepalpay:${resolvedUser}`];
+                const decoded = parseJwt(cachedToken);
+                const now = Math.floor(Date.now() / 1000);
+                if (decoded && decoded.exp && (decoded.exp > now + 60)) {
+                    accessToken = cachedToken;
+                    merchantCode = decoded.merchantCode;
+                    if (!username) username = resolvedUser;
+                }
+            }
+        }
+
+        // 3. Re-login using credential vault or provided credentials
+        if (!accessToken) {
+            if (!username || !password) {
+                // Try credential vault
+                const vaultCreds = credentialVault['nepalpay'];
+                if (vaultCreds) {
+                    username = vaultCreds.username;
+                    password = vaultCreds.password;
+                    console.log(`🔑 [NEPALPAY] Using credential vault for re-login`);
+                } else {
+                    // No credentials available — caller must re-send
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, sessionExpired: true, message: "Session expired. Please retry." }));
+                    return;
+                }
+            }
+
+            console.log(`>>> NEPALPAY LOGIN (VERIFY) for ${maskSensitive(username)}...`);
             const loginData = await makeBankRequest(
                 'https://business.nepalpay.com.np/backend/api/auth/signin',
-                { username: userKey, password: password.trim() }
+                { username, password }
             );
 
             if (loginData.status !== "SUCCESS") {
@@ -455,7 +514,9 @@ async function handleNepalPayVerifyTransaction(body, res) {
             accessToken = loginData.data.accessToken;
             const decoded = parseJwt(accessToken);
             merchantCode = decoded.merchantCode;
-            sessionCache[`nepalpay:${userKey}`] = accessToken;
+            sessionCache[`nepalpay:${username}`] = accessToken;
+            // Refresh vault with working credentials
+            credentialVault['nepalpay'] = { username, password };
         }
 
         const today = new Date().toISOString().split('T')[0];
@@ -470,13 +531,13 @@ async function handleNepalPayVerifyTransaction(body, res) {
             payerMobileNumber: "",
             issuerNetwork: "",
             userDetail: {
-                user: userKey,
+                user: username,
                 identificationCode: merchantCode,
                 subIdentificationCode: merchantCode
             },
             pageable: {
                 currentPage: 1,
-                rowPerPage: 10,
+                rowPerPage: 50,
                 paginated: true,
                 enable: true
             }
@@ -494,63 +555,108 @@ async function handleNepalPayVerifyTransaction(body, res) {
         if (listData.status === "SUCCESS" && listData.data) {
             const resultArr = listData.data.result;
             if (Array.isArray(resultArr) && resultArr.length > 0) {
-                const cleanReqPhone = phoneNumber ? String(phoneNumber).replace(/\D/g, "") : "";
-                const isPhoneVerification = cleanReqPhone.length >= 10;
+                const cleanDigitsRef = rawRef.replace(/\D/g, "");
+                const isManualVerification = rawRef.length >= 6;
+                const isPhoneFormat = cleanDigitsRef.length === 10 && (cleanDigitsRef.startsWith("98") || cleanDigitsRef.startsWith("97") || cleanDigitsRef.startsWith("96"));
                 const expectedAmount = (amount !== undefined && amount !== null) ? Math.round(parseFloat(String(amount).replace(/,/g, ''))) : 0;
 
-                const matchingTxn = resultArr.find(txn => {
+                let matchingTxn = resultArr.find(txn => {
                     const isSuccess = txn.status === "SUCCESS" || txn.paymentStatus === "Success" || txn.status === "Success";
                     if (!isSuccess && txn.status !== undefined) return false;
 
-                    // 1. COMPULSORY AMOUNT CHECK:
-                    // If expectedAmount is specified, paid amount MUST be >= expectedAmount
+                    // 1. AMOUNT CHECK:
                     const rawAmount = txn.amount || txn.transactionAmount || "0";
                     const paidAmount = Math.round(parseFloat(String(rawAmount).replace(/,/g, '')));
-                    if (expectedAmount > 0) {
-                        if (paidAmount < expectedAmount) {
-                            console.warn(`[NEPALPAY VERIFY] Underpayment rejected: Paid ${paidAmount} < Expected ${expectedAmount}`);
-                            return false; // Underpayment -> REJECT
-                        }
+                    if (expectedAmount > 0 && paidAmount < expectedAmount) {
+                        return false; // Underpayment -> REJECT
                     }
 
                     // 2. Tracking match (QR Trace ID or Remarks/Order ID)
                     const isTraceMatch = nqrTxnId && (txn.validationTraceId === nqrTxnId || txn.nqrTxnId === nqrTxnId);
                     const isRemarksMatch = remarks && txn.remarks && txn.remarks.includes(remarks);
 
-                    if (isPhoneVerification) {
-                        // 3. COMPULSORY PHONE CHECK (for post-expiry/phone verification):
-                        const txnPhoneRaw = txn.payerMobileNumber || txn.customerMobileNumber || txn.payerMobile || txn.mobileNumber || txn.mobileNo || txn.contactNumber || txn.initiator || "";
-                        const cleanTxnPhone = txnPhoneRaw.replace(/\D/g, "");
-                        const isPhoneMatch = cleanTxnPhone.length >= 10 && cleanTxnPhone.endsWith(cleanReqPhone.slice(-10));
+                    if (isManualVerification) {
+                        // Check Bank Transaction ID / Instruction ID / RRN match
+                        const txnBankId = String(txn.nqrTxnId || txn.transactionId || txn.instructionId || "").trim();
+                        const txnRrn = String(txn.retrievalReferenceNumber || txn.rrn || "").trim();
 
-                        if (!isPhoneMatch) {
-                            return false; // Phone mismatch -> REJECT
+                        const isBankRefMatch = rawRef.length >= 6 && (
+                            (txnBankId && (txnBankId === rawRef || txnBankId === cleanDigitsRef)) ||
+                            (txnRrn && (txnRrn === rawRef || txnRrn === cleanDigitsRef))
+                        );
+
+                        if (isBankRefMatch) {
+                            console.log(`🎯 [NEPALPAY] Bank Receipt Ref matched: ${maskedPhone}`);
+                            return true;
                         }
 
-                        // Must match: Phone AND Amount AND (Trace ID OR Remarks)
-                        return isTraceMatch || isRemarksMatch;
+                        // Check Phone Match
+                        if (isPhoneFormat) {
+                            const txnPhoneRaw = txn.payerMobileNumber || txn.customerMobileNumber || txn.payerMobile || txn.mobileNumber || txn.mobileNo || txn.contactNumber || txn.initiator || "";
+                            const cleanTxnPhone = txnPhoneRaw.replace(/\D/g, "");
+                            const isPhoneMatch = cleanTxnPhone.length >= 10 && cleanTxnPhone.endsWith(cleanDigitsRef.slice(-10));
+
+                            if (isPhoneMatch && (isTraceMatch || isRemarksMatch)) {
+                                return true;
+                            }
+                        }
+
+                        return false;
                     } else {
-                        // ACTIVE CHECKOUT POLLING (no phone provided):
-                        // Must match: Amount AND (Trace ID OR Remarks)
+                        // Active checkout polling
                         return isTraceMatch || isRemarksMatch;
                     }
                 });
 
+                // Tier 2 Smart Fallback for NepalPay active checkout
+                if (!matchingTxn && !isManualVerification && expectedAmount > 0 && orderCreatedAt) {
+                    const orderCreatedMs = new Date(orderCreatedAt).getTime();
+                    if (!isNaN(orderCreatedMs)) {
+                        const windowStartMs = orderCreatedMs - (60 * 1000);
+                        const windowEndMs = orderCreatedMs + (6 * 60 * 1000);
+
+                        matchingTxn = resultArr.find(txn => {
+                            const isSuccess = txn.status === "SUCCESS" || txn.paymentStatus === "Success" || txn.status === "Success";
+                            if (!isSuccess && txn.status !== undefined) return false;
+
+                            const rawAmount = txn.amount || txn.transactionAmount || "0";
+                            const paidAmount = Math.round(parseFloat(String(rawAmount).replace(/,/g, '')));
+                            if (paidAmount !== expectedAmount) return false;
+
+                            const rem = txn.remarks ? String(txn.remarks).trim() : "";
+                            const isStripped = !rem || rem === "null" || rem === "N/A" || rem === String(expectedAmount);
+                            if (!isStripped) return false;
+
+                            const txnTimeStr = txn.transactionDate || txn.paymentDate || txn.createdDate || txn.transmissionDateTime;
+                            if (txnTimeStr) {
+                                const txnTimeMs = new Date(txnTimeStr).getTime();
+                                if (!isNaN(txnTimeMs)) {
+                                    return txnTimeMs >= windowStartMs && txnTimeMs <= windowEndMs;
+                                }
+                            }
+                            return false;
+                        });
+                    }
+                }
+
                 if (matchingTxn) {
-                    console.log(`✅ [VERIFY] MATCH FOUND! Final Txn ID:`, matchingTxn.nqrTxnId || matchingTxn.transactionId);
+                    const resolvedTxnId = matchingTxn.nqrTxnId || matchingTxn.transactionId || matchingTxn.instructionId;
+                    const resolvedBankTxnId = matchingTxn.nqrTxnId || matchingTxn.transactionId || matchingTxn.retrievalReferenceNumber;
+                    console.log(`✅ [VERIFY] MATCH FOUND! Txn ID: ${maskSensitive(String(resolvedTxnId))}`);
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({
                         success: true,
                         data: {
                             status: "SUCCESS",
-                            txnId: matchingTxn.nqrTxnId || matchingTxn.transactionId || matchingTxn.instructionId,
-                            bankTxnId: matchingTxn.nqrTxnId || matchingTxn.transactionId,
-                            raw: matchingTxn
+                            txnId: resolvedTxnId,
+                            bankTxnId: resolvedBankTxnId,
+                            paidAmount: matchingTxn.amount || matchingTxn.transactionAmount,
+                            paymentDate: matchingTxn.transactionDate || matchingTxn.paymentDate || matchingTxn.transmissionDateTime
                         }
                     }));
                     return;
                 } else {
-                    console.log(`⏳ [VERIFY] No match yet for validationTraceId: ${nqrTxnId}`);
+                    console.log(`⏳ [VERIFY] No match yet for nqrTxnId: ${nqrTxnId || 'N/A'}`);
                 }
             }
         }
@@ -561,7 +667,7 @@ async function handleNepalPayVerifyTransaction(body, res) {
     } catch (err) {
         console.error("🚨 VERIFY CRASH:", err.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: "Crash: " + err.message }));
+        res.end(JSON.stringify({ success: false, message: "Internal server error" }));
     }
 }
 
@@ -571,7 +677,7 @@ async function handleFonepayVerifyLogin(body, res) {
         const { username, password } = JSON.parse(body);
         const userKey = username.trim();
 
-        console.log("\n>>> [FONEPAY] VERIFYING LOGIN FOR", userKey);
+        console.log(`\n>>> [FONEPAY] VERIFYING LOGIN FOR ${maskSensitive(userKey)}`);
 
         // First check if login is valid via body response
         const loginData = await makeBankRequest(
@@ -580,7 +686,7 @@ async function handleFonepayVerifyLogin(body, res) {
         );
 
         if (!loginData || !loginData.navigationResponse) {
-            console.log("❌ Login Rejected:", loginData);
+            console.log("❌ Login Rejected");
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, message: "Login failed. Check credentials." }));
             return;
@@ -591,12 +697,15 @@ async function handleFonepayVerifyLogin(body, res) {
         // Now do the login again with -i to extract the auth header token
         await fonepayLogin(userKey, password);
 
+        // Cache credentials in vault for session token architecture
+        credentialVault['fonepay'] = { username: userKey, password: password.trim() };
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: "Credentials valid" }));
     } catch (err) {
         console.error("🚨 CRASH:", err.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: "Crash: " + err.message }));
+        res.end(JSON.stringify({ success: false, message: "Internal server error" }));
     }
 }
 
@@ -606,10 +715,13 @@ async function handleFonepayTriggerQR(body, res) {
         const { username, password, amount, remarks } = JSON.parse(body);
         const userKey = username.trim();
 
+        // Cache credentials in vault for session token architecture
+        credentialVault['fonepay'] = { username: userKey, password: password.trim() };
+
         let accessToken = sessionCache[`fonepay:${userKey}`];
 
         if (!accessToken) {
-            console.log("\n>>> FONEPAY LOGIN...");
+            console.log(`\n>>> FONEPAY LOGIN for ${maskSensitive(userKey)}...`);
             accessToken = await fonepayLogin(userKey, password);
 
             if (!accessToken) {
@@ -657,7 +769,7 @@ async function handleFonepayTriggerQR(body, res) {
             return;
         }
 
-        console.log(">>> GENERATING FONEPAY QR FOR Rs.", amount, " TERMINAL:", terminalId);
+        console.log(`>>> GENERATING FONEPAY QR FOR Rs. ${amount}`);
 
         // Append a random short ID to remarks to guarantee uniqueness.
         const uniqueId = crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -698,7 +810,7 @@ async function handleFonepayTriggerQR(body, res) {
                 websocketId: qrData.websocketId
             }));
         } else {
-            console.log("❌ QR Failed:", qrData);
+            console.log("❌ Fonepay QR Generation Failed");
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ success: false, message: "Fonepay QR Generation Failed" }));
         }
@@ -706,33 +818,69 @@ async function handleFonepayTriggerQR(body, res) {
     } catch (err) {
         console.error("🚨 CRASH:", err.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: "Crash: " + err.message }));
+        res.end(JSON.stringify({ success: false, message: "Internal server error" }));
     }
 }
 
 // Fonepay: Verify Transaction
 async function handleFonepayVerifyTransaction(body, res) {
     try {
-        const { nqrTxnId, username, password, phoneNumber, amount, remarks } = JSON.parse(body);
-        const userKey = username.trim();
+        const parsed = JSON.parse(body);
+        const { nqrTxnId, phoneNumber, bankReference, amount, remarks, orderCreatedAt } = parsed;
+        // Session Token Architecture: Accept sessionToken OR username/password, fall back to credential vault
+        let username = parsed.username ? parsed.username.trim() : null;
+        let password = parsed.password ? parsed.password.trim() : null;
 
-        console.log(`\n🔍 [FONEPAY VERIFY] Checking for order: ${remarks} or ${nqrTxnId}`);
+        const rawRef = String(bankReference || phoneNumber || "").trim();
+        const maskedRef = rawRef ? '***' + rawRef.slice(-4) : 'N/A';
+        console.log(`\n🔍 [FONEPAY VERIFY] order: ${remarks || 'N/A'}, ref: ${maskedRef}, amount: ${amount}`);
 
-        let accessToken = sessionCache[`fonepay:${userKey}`];
+        let accessToken = null;
 
+        // 1. Try session token from request (preferred — no credentials needed)
+        if (parsed.sessionToken) {
+            // Fonepay tokens are opaque (not JWT), so just use directly
+            accessToken = parsed.sessionToken;
+        }
+
+        // 2. Try in-memory session cache
         if (!accessToken) {
-            accessToken = await fonepayLogin(userKey, password);
+            const resolvedUser = username || (credentialVault['fonepay'] && credentialVault['fonepay'].username);
+            if (resolvedUser && sessionCache[`fonepay:${resolvedUser}`]) {
+                accessToken = sessionCache[`fonepay:${resolvedUser}`];
+                if (!username) username = resolvedUser;
+            }
+        }
+
+        // 3. Re-login using credential vault or provided credentials
+        if (!accessToken) {
+            if (!username || !password) {
+                const vaultCreds = credentialVault['fonepay'];
+                if (vaultCreds) {
+                    username = vaultCreds.username;
+                    password = vaultCreds.password;
+                    console.log(`🔑 [FONEPAY] Using credential vault for re-login`);
+                } else {
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, sessionExpired: true, message: "Session expired. Please retry." }));
+                    return;
+                }
+            }
+
+            accessToken = await fonepayLogin(username, password);
             if (!accessToken) {
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ success: false, message: "Login failed" }));
                 return;
             }
+            // Refresh vault with working credentials
+            credentialVault['fonepay'] = { username, password };
         }
 
         const today = new Date().toISOString().split('T')[0];
 
         // Using the Settlement Report API
-        const reportUrl = `https://merchantapi.fonepay.com/report/merchant-Settlement-report?pageNumber=1&pageSize=25&fromTransmissionDateTime=${today}&toTransmissionDateTime=${today}`;
+        const reportUrl = `https://merchantapi.fonepay.com/report/merchant-Settlement-report?pageNumber=1&pageSize=50&fromTransmissionDateTime=${today}&toTransmissionDateTime=${today}`;
 
         const listData = await makeBankRequest(
             reportUrl,
@@ -745,61 +893,131 @@ async function handleFonepayVerifyTransaction(body, res) {
 
             const resultArr = listData.searchedDataList;
             const searchBillId = nqrTxnId || remarks;
-            const cleanReqPhone = phoneNumber ? String(phoneNumber).replace(/\D/g, "") : "";
-            const isPhoneVerification = cleanReqPhone.length >= 10;
+            
+            const cleanDigitsRef = rawRef.replace(/\D/g, "");
+            const isManualVerification = rawRef.length >= 6;
+            const isPhoneFormat = cleanDigitsRef.length === 10 && (cleanDigitsRef.startsWith("98") || cleanDigitsRef.startsWith("97") || cleanDigitsRef.startsWith("96"));
+
             const expectedAmount = (amount !== undefined && amount !== null) ? Math.round(parseFloat(String(amount).replace(/,/g, ''))) : 0;
 
-            const matchingTxn = resultArr.find(txn => {
+            // ====================================================================
+            // TIER 1: EXACT MATCH (Standard Bill ID / Remarks OR Bank Txn ID / Phone)
+            // ====================================================================
+            let matchingTxn = resultArr.find(txn => {
                 const isSuccess = txn.paymentStatus === "Success" || txn.status === "SUCCESS" || txn.status === "Success";
                 if (!isSuccess) return false;
 
-                // 1. COMPULSORY AMOUNT CHECK:
+                // 1. AMOUNT CHECK:
                 const rawAmount = txn.transactionAmount || txn.amount || "0";
                 const paidAmount = Math.round(parseFloat(String(rawAmount).replace(/,/g, '')));
-                if (expectedAmount > 0) {
-                    if (paidAmount < expectedAmount) {
-                        console.warn(`[FONEPAY VERIFY] Underpayment rejected: Paid ${paidAmount} < Expected ${expectedAmount}`);
-                        return false; // Underpayment -> REJECT
-                    }
+                if (expectedAmount > 0 && paidAmount < expectedAmount) {
+                    return false; // Underpayment -> REJECT
                 }
 
-                // 2. Tracking match (Bill ID or Remarks/Order ID)
-                const isTrackingMatch = searchBillId && (txn.billId === searchBillId || txn.remarks1 === searchBillId || (txn.remarks1 && txn.remarks1.includes(searchBillId)));
+                // 2. Exact Tracking Match (Bill ID or Remarks/Order ID)
+                const isTrackingMatch = searchBillId && (
+                    txn.billId === searchBillId || 
+                    txn.remarks1 === searchBillId || 
+                    (txn.remarks1 && txn.remarks1.includes(searchBillId))
+                );
 
-                if (isPhoneVerification) {
-                    // 3. COMPULSORY PHONE CHECK (for post-expiry/phone verification):
-                    const txnPhoneRaw = txn.initiator || txn.mobileNumber || txn.payerMobileNumber || txn.customerMobileNumber || txn.mobileNo || "";
-                    const cleanTxnPhone = txnPhoneRaw.replace(/\D/g, "");
-                    const isPhoneMatch = cleanTxnPhone.length >= 10 && cleanTxnPhone.endsWith(cleanReqPhone.slice(-10));
+                if (isManualVerification) {
+                    // PILLAR 2: Check if rawRef matches Bank Transaction ID or Retrieval Reference Number (from receipt)
+                    const txnBankId = String(txn.fonepayTransactionId || txn.id || "").trim();
+                    const txnRrn = String(txn.retrievalReferenceNumber || txn.rrn || "").trim();
+                    const txnPrn = String(txn.prnNumber || txn.prn || "").trim();
 
-                    if (!isPhoneMatch) {
-                        return false; // Phone mismatch -> REJECT
+                    const isBankRefMatch = rawRef.length >= 6 && (
+                        (txnBankId && (txnBankId === rawRef || txnBankId === cleanDigitsRef)) ||
+                        (txnRrn && (txnRrn === rawRef || txnRrn === cleanDigitsRef)) ||
+                        (txnPrn && (txnPrn === rawRef || txnPrn === cleanDigitsRef))
+                    );
+
+                    if (isBankRefMatch) {
+                        console.log(`🎯 [FONEPAY] Bank Receipt Ref matched: ${maskedRef}`);
+                        return true;
                     }
 
-                    // Must match: Phone AND Amount AND Tracking
-                    return isTrackingMatch;
+                    // Check Phone Match if input is 10-digit phone
+                    if (isPhoneFormat) {
+                        const txnPhoneRaw = txn.initiator || txn.mobileNumber || txn.payerMobileNumber || txn.customerMobileNumber || txn.mobileNo || "";
+                        const cleanTxnPhone = txnPhoneRaw.replace(/\D/g, "");
+                        const isPhoneMatch = cleanTxnPhone.length >= 10 && cleanTxnPhone.endsWith(cleanDigitsRef.slice(-10));
+
+                        if (isPhoneMatch && isTrackingMatch) {
+                            return true;
+                        }
+                    }
+
+                    return false;
                 } else {
-                    // ACTIVE CHECKOUT POLLING (no phone provided):
-                    // Must match: Amount AND Tracking
+                    // Active checkout polling
                     return isTrackingMatch;
                 }
             });
 
+            // ====================================================================
+            // TIER 2: PILLAR 1 ACTIVE-WINDOW SMART FALLBACK (For YONO SBI / stripped apps)
+            // ====================================================================
+            if (!matchingTxn && !isManualVerification && expectedAmount > 0 && orderCreatedAt) {
+                const orderCreatedMs = new Date(orderCreatedAt).getTime();
+                if (!isNaN(orderCreatedMs)) {
+                    const windowStartMs = orderCreatedMs - (60 * 1000); // 1 min clock drift
+                    const windowEndMs = orderCreatedMs + (6 * 60 * 1000); // 5m checkout + 1m grace
+
+                    matchingTxn = resultArr.find(txn => {
+                        const isSuccess = txn.paymentStatus === "Success" || txn.status === "SUCCESS" || txn.status === "Success";
+                        if (!isSuccess) return false;
+
+                        // 1. Exact Amount Match
+                        const rawAmount = txn.transactionAmount || txn.amount || "0";
+                        const paidAmount = Math.round(parseFloat(String(rawAmount).replace(/,/g, '')));
+                        if (paidAmount !== expectedAmount) return false;
+
+                        // 2. Stripped Remarks Verification: must be null, empty, or equal to amount (e.g. "1360")
+                        const r1 = txn.remarks1 ? String(txn.remarks1).trim() : "";
+                        const isStripped = !r1 || r1 === "null" || r1 === "N/A" || r1 === String(expectedAmount);
+                        if (!isStripped) {
+                            // Contains another order's distinct ID -> REJECT to avoid collisions
+                            return false;
+                        }
+
+                        // 3. Time Window Check (must have occurred during active 5-min checkout)
+                        const txnTimeStr = txn.dateTransmissionDateTime || txn.transmissionDateTime || txn.paymentDate || txn.createdDate;
+                        if (txnTimeStr) {
+                            const txnTimeMs = new Date(txnTimeStr).getTime();
+                            if (!isNaN(txnTimeMs)) {
+                                const inWindow = txnTimeMs >= windowStartMs && txnTimeMs <= windowEndMs;
+                                if (inWindow) {
+                                    console.log(`⚡ [FONEPAY SMART FALLBACK] Matched stripped-remarks payment within active window`);
+                                    return true;
+                                }
+                            }
+                        }
+
+                        return false;
+                    });
+                }
+            }
+
             if (matchingTxn) {
-                console.log(`✅ [VERIFY] MATCH FOUND! Final Txn ID:`, matchingTxn.fonepayTransactionId || matchingTxn.id);
+                const resolvedTxnId = matchingTxn.fonepayTransactionId || matchingTxn.id;
+                const resolvedBankTxnId = matchingTxn.fonepayTransactionId || matchingTxn.retrievalReferenceNumber || matchingTxn.id;
+                console.log(`✅ [VERIFY] MATCH FOUND! Txn ID: ${maskSensitive(String(resolvedTxnId))}`);
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                     success: true,
                     data: {
                         status: "SUCCESS",
-                        txnId: matchingTxn.fonepayTransactionId || matchingTxn.id,
-                        bankTxnId: matchingTxn.fonepayTransactionId || matchingTxn.retrievalReferenceNumber,
-                        raw: matchingTxn
+                        txnId: resolvedTxnId,
+                        bankTxnId: resolvedBankTxnId,
+                        paidAmount: matchingTxn.transactionAmount || matchingTxn.amount,
+                        paymentDate: matchingTxn.dateTransmissionDateTime || matchingTxn.transmissionDateTime || matchingTxn.paymentDate
                     }
                 }));
                 return;
             } else {
-                console.log(`⏳ [VERIFY] No match found yet for ${searchBillId}`);
+                console.log(`⏳ [VERIFY] No match found yet for ${remarks || nqrTxnId || 'N/A'}`);
             }
         }
 
@@ -809,7 +1027,7 @@ async function handleFonepayVerifyTransaction(body, res) {
     } catch (err) {
         console.error("🚨 VERIFY CRASH:", err.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: "Crash: " + err.message }));
+        res.end(JSON.stringify({ success: false, message: "Internal server error" }));
     }
 }
 
@@ -839,21 +1057,23 @@ const ROUTE_TABLE = {
 const server = http.createServer(async (req, res) => {
     const url = req.url;
 
-    // --- INTERNAL SECURITY CHECK ---
-    if (url.startsWith('/api/') && req.headers['x-internal-secret'] !== INTERNAL_SECRET) {
+    // --- SECURITY: Reject browser-origin requests (this is a server-to-server proxy only) ---
+    if (req.headers['origin'] || req.headers['referer']) {
         res.writeHead(403, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: "Forbidden: Invalid internal secret" }));
+        res.end(JSON.stringify({ success: false, message: "Forbidden" }));
         return;
     }
 
-    // CORS
-    const allowedOrigin = process.env.ALLOWED_ORIGIN || 'http://localhost:3000';
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
-    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-internal-secret');
+    // --- INTERNAL SECRET AUTHENTICATION ---
+    if (url.startsWith('/api/') && req.headers['x-internal-secret'] !== INTERNAL_SECRET) {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: "Forbidden" }));
+        return;
+    }
 
+    // Reject CORS preflight (no browser should be calling this)
     if (req.method === 'OPTIONS') {
-        res.writeHead(200);
+        res.writeHead(405);
         res.end();
         return;
     }
@@ -865,11 +1085,30 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // Route matching
+    // Route matching with body size limit
     if (req.method === 'POST' && ROUTE_TABLE[url]) {
         let body = '';
-        req.on('data', chunk => { body += chunk; });
-        req.on('end', () => ROUTE_TABLE[url](body, res));
+        let bodySize = 0;
+        let destroyed = false;
+
+        req.on('data', chunk => {
+            bodySize += chunk.length;
+            if (bodySize > MAX_BODY_SIZE) {
+                if (!destroyed) {
+                    destroyed = true;
+                    res.writeHead(413, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ success: false, message: "Payload too large" }));
+                    req.destroy();
+                }
+                return;
+            }
+            body += chunk;
+        });
+        req.on('end', () => {
+            if (!destroyed) {
+                ROUTE_TABLE[url](body, res);
+            }
+        });
         return;
     }
 

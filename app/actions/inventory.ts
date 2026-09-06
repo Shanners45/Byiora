@@ -1,7 +1,7 @@
 "use server"
 
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { encryptInventoryCode, decryptInventoryCode } from "./inventory-encryption"
+import { encryptInventoryCode, decryptInventoryCode, generateCodeHash } from "./inventory-encryption"
 import { verifyAdmin, getAdminSessionAction } from "./admin-utils"
 import { revalidatePath } from "next/cache"
 
@@ -112,6 +112,141 @@ export async function addInventoryCodesAction(productId: string, denominationLab
 }
 
 /**
+ * Fetches all codes for a specific denomination with masked previews
+ * Sorted newest first so recently added codes appear at the top.
+ */
+export async function getDenominationCodesAction(productId: string, denominationLabel: string) {
+  if (!(await verifyAdmin())) return { error: "Unauthorized" }
+
+  const supabase = createServiceRoleClient()
+  const { data, error } = await supabase
+    .from("gift_card_inventory")
+    .select("id, status, created_at, encrypted_code, added_by")
+    .eq("product_id", productId)
+    .eq("denomination_label", denominationLabel)
+    .order("created_at", { ascending: false })
+
+  if (error) return { error: error.message }
+
+  // Decrypt in memory to generate safe masked previews
+  const codesWithMask = await Promise.all(
+    (data || []).map(async (item: any) => {
+      let masked = "••••-••••"
+      try {
+        const decrypted = await decryptInventoryCode(item.encrypted_code)
+        if (decrypted.success && decrypted.decrypted) {
+          const raw = decrypted.decrypted.trim()
+          if (raw.length <= 8) {
+            masked = raw.slice(0, 2) + "••••" + raw.slice(-2)
+          } else {
+            masked = raw.slice(0, 4) + "-••••-••••-" + raw.slice(-4)
+          }
+        }
+      } catch (e) {}
+
+      return {
+        id: item.id,
+        status: item.status,
+        createdAt: item.created_at,
+        addedBy: item.added_by,
+        maskedCode: masked
+      }
+    })
+  )
+
+  return { success: true, codes: codesWithMask }
+}
+
+/**
+ * Deletes an inventory code by ID.
+ * Security rule: Only AVAILABLE codes can be deleted. Delivered codes are immutable.
+ */
+export async function deleteInventoryCodeAction(inventoryId: string) {
+  if (!(await verifyAdmin())) return { error: "Unauthorized" }
+
+  const adminSession = await getAdminSessionAction()
+  const adminUserId = adminSession.success ? adminSession.data?.id : "unknown-admin"
+
+  const supabase = createServiceRoleClient()
+
+  // 1. Verify code exists and is AVAILABLE
+  const { data: item, error: fetchErr } = await supabase
+    .from("gift_card_inventory")
+    .select("id, status, product_id, denomination_label")
+    .eq("id", inventoryId)
+    .single()
+
+  if (fetchErr || !item) {
+    return { error: "Inventory code not found" }
+  }
+
+  if (item.status === "DELIVERED") {
+    return { error: "Cannot delete a code that has already been delivered to a customer." }
+  }
+
+  // 2. Delete the record
+  const { error: deleteErr } = await supabase
+    .from("gift_card_inventory")
+    .delete()
+    .eq("id", inventoryId)
+    .eq("status", "AVAILABLE")
+
+  if (deleteErr) {
+    return { error: deleteErr.message }
+  }
+
+  console.log(`[AUDIT] Admin ${adminUserId} deleted inventory code ID ${inventoryId} for product ${item.product_id} (${item.denomination_label})`)
+
+  revalidatePath("/admin/dashboard/inventory")
+  return { success: true }
+}
+
+/**
+ * Deletes an inventory code by exact matching value.
+ * Used when an admin enters a typo and wants to burn/remove it immediately by pasting the code.
+ */
+export async function deleteInventoryCodeByValueAction(productId: string, denominationLabel: string, rawCode: string) {
+  if (!(await verifyAdmin())) return { error: "Unauthorized" }
+
+  const trimmed = rawCode.trim()
+  if (!trimmed) return { error: "Please provide a valid code" }
+
+  const adminSession = await getAdminSessionAction()
+  const adminUserId = adminSession.success ? adminSession.data?.id : "unknown-admin"
+
+  const codeHash = generateCodeHash(trimmed)
+  const supabase = createServiceRoleClient()
+
+  // Find the matching AVAILABLE code
+  const { data: item, error: findErr } = await supabase
+    .from("gift_card_inventory")
+    .select("id, status")
+    .eq("product_id", productId)
+    .eq("denomination_label", denominationLabel)
+    .eq("code_hash", codeHash)
+    .eq("status", "AVAILABLE")
+    .maybeSingle()
+
+  if (findErr) return { error: findErr.message }
+  if (!item) {
+    return { error: "No matching available code found for this denomination. (It may have already been delivered or does not exist.)" }
+  }
+
+  const { error: deleteErr } = await supabase
+    .from("gift_card_inventory")
+    .delete()
+    .eq("id", item.id)
+    .eq("status", "AVAILABLE")
+
+  if (deleteErr) return { error: deleteErr.message }
+
+  console.log(`[AUDIT] Admin ${adminUserId} burned/deleted matching inventory code ID ${item.id} for product ${productId} (${denominationLabel})`)
+
+  revalidatePath("/admin/dashboard/inventory")
+  return { success: true }
+}
+
+/**
  * Reveals a code (Admin Audit only)
  */
 export async function revealAdminCodeAction(inventoryId: string) {
@@ -134,3 +269,4 @@ export async function revealAdminCodeAction(inventoryId: string) {
 
   return { success: true, code: decryptResult.decrypted }
 }
+

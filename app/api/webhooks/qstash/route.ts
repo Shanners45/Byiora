@@ -45,28 +45,54 @@ async function handler(req: Request) {
       const PROXY_URL = process.env.PAYMENT_PROXY_URL || "http://localhost:3001"
       const PROXY_SECRET = process.env.INTERNAL_API_SECRET!
 
-      const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", provider).single() as any
-      if (!credsRes.data) return NextResponse.json({ error: "Credentials missing" }, { status: 500 })
-
-      const username = await decryptBankCredentials((credsRes.data as any).encrypted_username)
-      const password = await decryptBankCredentials((credsRes.data as any).encrypted_password)
-      if (!username || !password) return NextResponse.json({ error: "Decrypt failed" }, { status: 500 })
-
       const endpoint = provider === "nepalpay" ? "/api/verify-nepalpay-transaction" : "/api/verify-fonepay-transaction"
 
-      const response = await fetch(`${PROXY_URL}${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-internal-secret": PROXY_SECRET },
-        body: JSON.stringify({
-          nqrTxnId: validationTraceId,
-          username,
-          password,
-          remarks: transactionId,
-          amount: Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
-        }),
-      })
+      // Session Token Architecture: Try cached session token first
+      let sessionToken: string | null = null
+      if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+        try {
+          const { Redis } = await import("@upstash/redis")
+          const redis = new Redis({
+            url: process.env.UPSTASH_REDIS_REST_URL,
+            token: process.env.UPSTASH_REDIS_REST_TOKEN,
+          })
+          sessionToken = await redis.get<string>(`payment_token:${provider}`)
+        } catch {}
+      }
 
-      const proxyData = await response.json()
+      const verifyPayload: any = {
+        nqrTxnId: validationTraceId,
+        remarks: transactionId,
+        amount: Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
+      }
+      if (sessionToken) {
+        verifyPayload.sessionToken = sessionToken
+      }
+
+      const makeRequest = async (payload: any) => {
+        const resp = await fetch(`${PROXY_URL}${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-internal-secret": PROXY_SECRET },
+          body: JSON.stringify(payload),
+        })
+        return await resp.json()
+      }
+
+      let proxyData = await makeRequest(verifyPayload)
+
+      // If session expired, fall back to credentials
+      if (proxyData.sessionExpired) {
+        const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", provider).single() as any
+        if (credsRes.data) {
+          const username = await decryptBankCredentials((credsRes.data as any).encrypted_username)
+          const password = await decryptBankCredentials((credsRes.data as any).encrypted_password)
+          if (username && password) {
+            verifyPayload.username = username
+            verifyPayload.password = password
+            proxyData = await makeRequest(verifyPayload)
+          }
+        }
+      }
 
       if (!proxyData.success || proxyData.data?.status !== "SUCCESS") {
         console.log(`[QSTASH] Payment not yet verified for ${transactionId}. Retrying later...`)
@@ -74,7 +100,7 @@ async function handler(req: Request) {
       }
 
       // SECURITY: Validate paid amount matches order amount (anti-underpayment fraud)
-      const rawPaidAmount = proxyData.data.raw?.amount || proxyData.data.raw?.transactionAmount
+      const rawPaidAmount = proxyData.data.paidAmount
       if (rawPaidAmount) {
         const paidAmount = parseInt(rawPaidAmount)
         const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))

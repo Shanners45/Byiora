@@ -28,8 +28,9 @@ export function VerifyGuestPaymentClient({
   const router = useRouter()
 
   const handleVerify = async () => {
-    if (!phoneNumber || phoneNumber.length < 10) {
-      toast.error("Please enter a valid phone number")
+    const trimmed = phoneNumber.trim()
+    if (!trimmed || trimmed.length < 6) {
+      toast.error("Please enter a valid 10-digit phone number or bank Transaction ID")
       return
     }
     if (!captchaToken) {
@@ -39,7 +40,7 @@ export function VerifyGuestPaymentClient({
 
     setIsVerifying(true)
     try {
-      const res = await verifyPaymentByPhoneAction(transactionId, phoneNumber, captchaToken)
+      const res = await verifyPaymentByPhoneAction(transactionId, trimmed, captchaToken)
       if (res.success) {
         setIsSuccess(true)
         toast.success("Payment verified successfully! Your order is being fulfilled.")
@@ -84,7 +85,7 @@ export function VerifyGuestPaymentClient({
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight leading-tight">Verify Your Payment</h2>
             <p className="text-purple-100 text-xs mt-0.5">
-              Enter the phone number used during checkout.
+              Enter your phone number or the Transaction ID from your bank receipt.
             </p>
           </div>
         </div>
@@ -103,22 +104,22 @@ export function VerifyGuestPaymentClient({
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-gray-700">Payer Phone Number</label>
+            <label className="text-xs font-bold text-gray-700">Phone Number or Bank Transaction ID</label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                 <Phone className="h-4 w-4 text-gray-400" />
               </div>
               <Input
-                type="tel"
-                placeholder="e.g. 98XXXXXXXX"
+                type="text"
+                placeholder="e.g. 98XXXXXXXX or 1236059374"
                 value={phoneNumber}
                 onChange={(e) => setPhoneNumber(e.target.value)}
-                className="pl-10 h-12 text-base bg-gray-50 border-gray-200 focus:bg-white focus:border-[#6B3FA0] focus:ring-[#6B3FA0] rounded-xl transition-colors placeholder:text-gray-400 text-gray-900"
-                maxLength={15}
+                className="pl-10 h-12 text-sm bg-gray-50 border-gray-200 focus:bg-white focus:border-[#6B3FA0] focus:ring-[#6B3FA0] rounded-xl transition-colors placeholder:text-gray-400 text-gray-900"
+                maxLength={30}
               />
             </div>
             <p className="text-[11px] text-gray-500">
-              Must match the mobile number used in your banking or wallet app.
+              Enter your mobile banking phone number or the 10-digit Transaction/Reference ID from your payment receipt (SBI, eSewa, Nabil, etc).
             </p>
           </div>
 
@@ -194,27 +195,30 @@ export function VerifyGuestPaymentClient({
               <div>
                 <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">Verify Your Payment</h2>
                 <p className="text-purple-100 text-sm leading-relaxed">
-                  Enter the exact phone number you used to make the payment. We will securely check the banking records to fulfill your order.
+                  Enter your mobile number or the Bank Transaction ID / Reference No. from your payment receipt. We will securely verify the banking ledger to fulfill your order.
                 </p>
               </div>
             </div>
 
             <div className="p-6 md:p-10 space-y-6">
               <div className="space-y-3">
-                <label className="text-sm font-bold text-gray-700">Phone Number</label>
+                <label className="text-sm font-bold text-gray-700">Phone Number or Bank Transaction ID</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <Phone className="h-5 w-5 text-gray-400" />
                   </div>
                   <Input
-                    type="tel"
-                    placeholder="e.g. 98XXXXXXXX"
+                    type="text"
+                    placeholder="e.g. 98XXXXXXXX or 1236059374 from receipt"
                     value={phoneNumber}
                     onChange={(e) => setPhoneNumber(e.target.value)}
-                    className="pl-12 h-14 text-lg bg-gray-50 border-gray-300 focus:bg-white focus:border-[#6B3FA0] focus:ring-[#6B3FA0] rounded-xl transition-colors placeholder:text-gray-500 text-gray-900"
-                    maxLength={15}
+                    className="pl-12 h-14 text-base bg-gray-50 border-gray-300 focus:bg-white focus:border-[#6B3FA0] focus:ring-[#6B3FA0] rounded-xl transition-colors placeholder:text-gray-500 text-gray-900"
+                    maxLength={30}
                   />
                 </div>
+                <p className="text-xs text-gray-500">
+                  Accepts 10-digit phone numbers or the Transaction ID / Reference Number shown on your banking app receipt.
+                </p>
               </div>
 
               <div className="flex justify-center py-2">

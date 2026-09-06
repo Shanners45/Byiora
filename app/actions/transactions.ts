@@ -212,6 +212,26 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         console.error("Discord Webhook Error:", webhookError)
       }
     }
+    // For static QR payments, send order placed confirmation email (no code)
+    if (paymentCategory === "static") {
+      try {
+        const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
+        const userName = transactionData.guestData?.name || transactionData.email?.split('@')[0] || "Customer"
+        await sendOrderPlacedEmail({
+          email: transactionData.email,
+          userName: userName,
+          productName: transactionData.product,
+          denomination: transactionData.amount,
+          transactionId: transactionId,
+          price: verifiedPrice,
+          paymentMethod: transactionData.paymentMethod,
+          isGuest: !actualUserId,
+          status: "Order Placed: Processing"
+        })
+      } catch (emailErr) {
+        console.error("Failed to send static order confirmation email:", emailErr)
+      }
+    }
 
     let paymentUrl: string | undefined = undefined
     

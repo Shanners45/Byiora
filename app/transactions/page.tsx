@@ -146,9 +146,9 @@ export default function TransactionsPage() {
   const [captchaToken, setCaptchaToken] = useState("");
 
   const handleVerifyPhone = async (transactionId: string) => {
-    const cleanPhone = phoneNumber.replace(/\D/g, "");
-    if (cleanPhone.length !== 10 || !cleanPhone.startsWith("9")) {
-      toast.error("Please enter a valid 10-digit phone number starting with 9");
+    const trimmed = phoneNumber.trim();
+    if (!trimmed || trimmed.length < 6) {
+      toast.error("Please enter a valid 10-digit phone number or bank Transaction ID");
       return;
     }
     if (!captchaToken) {
@@ -158,7 +158,7 @@ export default function TransactionsPage() {
 
     setIsPhoneVerifying(true);
     try {
-      const res = await verifyPaymentByPhoneAction(transactionId, cleanPhone, captchaToken);
+      const res = await verifyPaymentByPhoneAction(transactionId, trimmed, captchaToken);
       if (res.success) {
         toast.success("Payment verified successfully! Your order is being fulfilled.");
         setVerifyingPhoneId(null);
@@ -662,33 +662,26 @@ export default function TransactionsPage() {
                     <DialogHeader>
                       <DialogTitle className="flex items-center gap-2 text-gray-800">
                         <Phone className="h-5 w-5 text-[#0ea5e9]" />
-                        Verify Mobile Payment
+                        Verify Payment
                       </DialogTitle>
-                      <DialogDescription className="text-gray-500">
-                        If you already paid but the session expired, enter the phone number you used to pay. We will verify it with the bank.
+                      <DialogDescription className="text-gray-500 text-xs">
+                        Enter your mobile banking phone number or the 10-digit Transaction ID from your payment receipt (e.g. YONO SBI, eSewa, etc).
                       </DialogDescription>
                     </DialogHeader>
                     <div className="flex flex-col gap-4 mt-4">
                       <div className="flex gap-3">
                         <Input
-                          type="tel"
-                          placeholder="e.g. 98XXXXXXXX"
+                          type="text"
+                          placeholder="e.g. 98XXXXXXXX or 1236059374"
                           value={phoneNumber}
-                          onChange={(e) => {
-                            let val = e.target.value.replace(/\D/g, "");
-                            if (val.length > 0 && val[0] !== "9") {
-                              val = ""; // Force starting with 9
-                            }
-                            if (val.length <= 10) {
-                              setPhoneNumber(val);
-                            }
-                          }}
-                          className="flex-1 border-gray-300 focus:border-[#0ea5e9] bg-white/70 placeholder:text-gray-400"
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          maxLength={30}
+                          className="flex-1 border-gray-300 focus:border-[#0ea5e9] bg-white/70 placeholder:text-gray-400 text-sm"
                         />
                         <Button
                           type="button"
                           onClick={() => handleVerifyPhone(transaction.transactionId)}
-                          disabled={isPhoneVerifying || !phoneNumber || !captchaToken}
+                          disabled={isPhoneVerifying || !phoneNumber.trim() || !captchaToken}
                           className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white shadow-md"
                         >
                           {isPhoneVerifying ? (

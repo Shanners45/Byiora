@@ -23,6 +23,7 @@ import { toast } from "sonner"
 import Image from "next/image"
 import CheckoutOverlay from "@/components/checkout-overlay"
 import { createClient } from "@/lib/supabase/client"
+import * as Sentry from "@sentry/nextjs"
 
 import { use } from "react"
 
@@ -109,7 +110,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
         if (res.status === "Completed" || res.status === "Paid") {
           setIsCompleted(true)
-        } else if (res.status === "Cancelled") {
+        } else if (res.status === "Cancelled" || (res as any).isCancelled || (res as any).failureRemarks === "Cancelled by user") {
           setIsCancelled(true)
           setOverlayType("cancelled")
         } else if (res.status === "Processing" || (res as any).failureRemarks === "QR Scanned") {
@@ -119,18 +120,27 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       } else {
         if (res.status === "Completed" || res.status === "Paid") {
           setIsCompleted(true)
-        } else if (res.status === "Cancelled") {
+        } else if (res.status === "Cancelled" || (res as any).isCancelled || (res as any).failureRemarks === "Cancelled by user") {
           setIsCancelled(true)
           setOverlayType("cancelled")
         } else if (res.status === "Payment Failed") {
           setIsExpired(true)
           setQrData(normalized)
         } else {
-          setError("Checkout unavailable")
+          setError(res.error || "Checkout unavailable")
+          Sentry.captureMessage(`[Checkout Alert] Checkout showed unavailable for ${transaction_id}: ${res.error || "Unknown reason"}`, {
+            level: "error",
+            tags: { transactionId: transaction_id },
+            extra: { transactionId: transaction_id, res }
+          })
         }
       }
     } catch (err: any) {
-      setError("Checkout unavailable")
+      setError(err?.message || "Checkout unavailable")
+      Sentry.captureException(err, {
+        tags: { transactionId: transaction_id, section: "checkout_client_loadqr" },
+        extra: { transactionId: transaction_id, errorMessage: err?.message }
+      })
     } finally {
       setLoading(false)
     }

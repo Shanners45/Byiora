@@ -200,19 +200,7 @@ export async function sendGiftcardCodeEmail(input: {
         </div>
       </div>
 
-      <div style="margin: 25px 0; border-radius: 10px; overflow: hidden; border: 1px solid #e5e7eb;">
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 10px 16px; font-size: 13px; color: #6b7280; font-weight: 600; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb; width: 35%;">Order ID</td>
-            <td style="padding: 10px 16px; font-size: 13px; color: #1f2937; border-bottom: 1px solid #e5e7eb; font-family: ui-monospace, monospace;">${transactionId || '—'}</td>
-          </tr>
-          ${price ? `
-          <tr>
-            <td style="padding: 10px 16px; font-size: 13px; color: #6b7280; font-weight: 600; background-color: #f9fafb; width: 35%;">Amount Paid</td>
-            <td style="padding: 10px 16px; font-size: 13px; color: #1f2937;">NPR ${price}${paymentMethod ? ` via ${paymentMethod}` : ''}</td>
-          </tr>` : ''}
-        </table>
-      </div>
+
 
       <p style="color: #6b7280; font-size: 13px; line-height: 1.6; text-align: center; margin: 0 0 25px 0;">
         For instructions on how to activate your ${productName}, please check the description section on the Byiora product page.
@@ -303,13 +291,13 @@ export async function sendOrderRefundedEmail(input: {
           ${paymentMethod ? row("Payment Method", paymentMethod) : ''}
           ${row("Order ID", transactionId || "—")}
           ${row("Status", '<span style="color: #7E3AF2; font-weight: 700; text-transform: uppercase;">Refunded</span>')}
-          ${remarks ? row("Refund Details", remarks) : ''}
+
           ${row("Date", orderDate)}
         </table>
       </div>
 
       <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0 0 25px 0; text-align: center;">
-        The refund amount has been returned to your original payment method. Depending on your bank or payment provider, it may take a few moments to reflect in your account.
+        The refund amount has been returned to your original payment method. Depending on your bank or payment provider, it may take 2-4 working days to reflect in your account.
       </p>
 
       <div style="text-align: center;">

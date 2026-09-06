@@ -50,7 +50,7 @@ export async function fulfillOrderDirectly({
           token: process.env.UPSTASH_REDIS_REST_TOKEN,
         })
         const lockKey = `fulfill-lock:${transactionId}`
-        const acquired = await redis.set(lockKey, "1", { nx: true, ex: 60 })
+        const acquired = await redis.set(lockKey, "1", { nx: true, ex: 300 })
         if (!acquired) {
           console.log(`[FULFILLMENT] Idempotency lock already held for ${transactionId}, skipping`)
           return { success: true, message: "Already being processed" }
@@ -60,7 +60,8 @@ export async function fulfillOrderDirectly({
       }
     }
 
-    // 3. Mark as Paid (Manual delivery baseline) + record bank txn ID
+    // 3. Optimistic DB Lock: Atomically update status to Paid ONLY if eligible
+    // This prevents TOCTOU race conditions — two concurrent calls can't both succeed
     const updatePayload: any = { 
       status: "Paid",
       failure_remarks: null
@@ -68,13 +69,21 @@ export async function fulfillOrderDirectly({
     if (bankTxnId) {
       updatePayload.bank_txn_id = bankTxnId
     }
-    const { error: updateError } = await supabase
+    const { data: updatedRows, error: updateError } = await supabase
       .from("transactions")
       .update(updatePayload)
       .eq("transaction_id", transactionId)
+      .in("status", ["Payment Pending", "Processing", "Payment Failed"])
+      .select("transaction_id")
 
     if (updateError) {
       console.error(`[FULFILLMENT ERROR] Failed to update status to Paid for ${transactionId}:`, updateError)
+    }
+
+    // If no rows were updated, the order was already processed by another concurrent call
+    if (!updatedRows || updatedRows.length === 0) {
+      console.log(`[FULFILLMENT] Optimistic lock: ${transactionId} already processed, skipping`)
+      return { success: true, message: "Already processed", alreadyProcessed: true }
     }
 
     // 4. Fulfillment: Claim inventory gift card code if applicable

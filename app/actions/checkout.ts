@@ -7,6 +7,7 @@ import { fulfillOrderDirectly } from "@/lib/fulfillment"
 import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 import { headers } from "next/headers"
+import * as Sentry from "@sentry/nextjs"
 
 // Rate limit for polling (30 req/min)
 let ratelimit: Ratelimit | null = null
@@ -102,7 +103,23 @@ export async function getOrGenerateQRAction(transactionId: string) {
     }
 
     const currentStatus = txn.status as string;
-    if (["Failed", "Cancelled", "Payment Failed", "Refunded"].includes(currentStatus)) {
+    const isCancelledByUser = currentStatus === "Cancelled" || (currentStatus === "Payment Failed" && txn.failure_remarks?.includes("Cancelled by user"));
+    if (isCancelledByUser) {
+      return { 
+        success: true, 
+        status: "Cancelled", 
+        isCancelled: true,
+        failureRemarks: "Cancelled by user",
+        isGuest: !txn.user_id,
+        product: txn.product_name,
+        productName: txn.product_name,
+        denomination: txn.amount,
+        amount: txn.price,
+        price: txn.price
+      }
+    }
+
+    if (["Failed", "Payment Failed", "Refunded"].includes(currentStatus)) {
       return { 
         success: false, 
         error: `Transaction is ${currentStatus.toLowerCase()}`, 
@@ -233,6 +250,10 @@ export async function getOrGenerateQRAction(transactionId: string) {
 
     if (credsRes.error || !credsRes.data) {
       await supabase.from("transactions").delete().eq("transaction_id", transactionId)
+      Sentry.captureException(new Error(`[Checkout Alert] ${paymentCategory} credentials not configured by Admin`), {
+        tags: { section: "checkout_qr", transactionId, paymentCategory },
+        extra: { transactionId, paymentCategory }
+      })
       return { success: false, error: `${paymentCategory} credentials not configured by Admin` }
     }
 
@@ -241,6 +262,10 @@ export async function getOrGenerateQRAction(transactionId: string) {
 
     if (!username || !password) {
       await supabase.from("transactions").delete().eq("transaction_id", transactionId)
+      Sentry.captureException(new Error(`[Checkout Alert] Failed to decrypt bank credentials for ${paymentCategory}`), {
+        tags: { section: "checkout_qr", transactionId, paymentCategory },
+        extra: { transactionId, paymentCategory }
+      })
       return { success: false, error: "Failed to decrypt bank credentials" }
     }
 
@@ -280,16 +305,22 @@ export async function getOrGenerateQRAction(transactionId: string) {
     console.log(`[QR GENERATION] Triggering proxy for ${transactionId} via ${paymentCategory}...`)
 
     const tryGenerateQR = async (payload: any) => {
-      const resp = await fetch(`${proxyUrl}${endpoints.qr}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-internal-secret": PROXY_SECRET
-        },
-        body: JSON.stringify(payload),
-        cache: 'no-store'
-      })
-      return await resp.json()
+      try {
+        const resp = await fetch(`${proxyUrl}${endpoints.qr}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-internal-secret": PROXY_SECRET
+          },
+          body: JSON.stringify(payload),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(35000) // 35-second timeout for cold Render proxy instances
+        })
+        return await resp.json()
+      } catch (fetchErr: any) {
+        console.error("[QR GENERATION FETCH ERROR]:", fetchErr)
+        return { success: false, message: `Proxy connection error: ${fetchErr.message}` }
+      }
     }
 
     let proxyData = await tryGenerateQR(proxyPayload)
@@ -302,8 +333,22 @@ export async function getOrGenerateQRAction(transactionId: string) {
     }
 
     if (!proxyData.success) {
-      // Clean up the abandoned transaction row so it doesn't clutter the DB
+      // Clean up the abandoned transaction row so it doesn't clutter the DB or Admin Dashboard
       await supabase.from("transactions").delete().eq("transaction_id", transactionId)
+      
+      // SENTRY ALERT: Inform admin immediately
+      Sentry.captureMessage(`[Checkout Alert] Checkout QR generation failed for ${transactionId}: ${proxyData.message || "Proxy failed to generate QR"}`, {
+        level: "error",
+        tags: { section: "checkout_qr_failed", transactionId, paymentCategory },
+        extra: {
+          transactionId,
+          paymentCategory,
+          userEmail: txn.user_email,
+          proxyMessage: proxyData.message,
+          proxyUrl
+        }
+      })
+
       return { success: false, error: proxyData.message || "Proxy failed to generate QR" }
     }
 
@@ -394,12 +439,22 @@ export async function getOrGenerateQRAction(transactionId: string) {
 
   } catch (error: any) {
     console.error("QR Generation error:", error)
+    try {
+      const supabase = createServiceRoleClient()
+      await supabase.from("transactions").delete().eq("transaction_id", transactionId)
+    } catch {}
+    Sentry.captureException(error, {
+      tags: { section: "checkout_qr_unhandled", transactionId },
+      extra: { transactionId, errorMessage: error?.message }
+    })
     return { success: false, error: error.message || "Failed to generate QR" }
   }
 }
 
 /**
- * Checks payment status via Proxy server
+ * Checks payment status via Proxy server.
+ * Uses Session Token Architecture: sends cached session token instead of bank credentials.
+ * Falls back to credentials only if proxy reports session expired (e.g. after proxy restart).
  */
 export async function verifyPaymentAction(transactionId: string, validationTraceId: string, provider: string) {
   try {
@@ -415,7 +470,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
     const supabase = createServiceRoleClient()
 
     // Ensure it exists and not already completed
-    const { data: txn } = await supabase.from("transactions").select("status, price").eq("transaction_id", transactionId).single()
+    const { data: txn } = await supabase.from("transactions").select("status, price, created_at").eq("transaction_id", transactionId).single()
     if (!txn) {
       return { success: false, error: "Transaction not found" }
     }
@@ -423,38 +478,69 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
       return { success: true, completed: true }
     }
 
-    const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", provider).single() as any
-    if (!credsRes.data) return { success: false, error: "Credentials missing" }
-
-    const username = await decryptBankCredentials(credsRes.data.encrypted_username)
-    const password = await decryptBankCredentials(credsRes.data.encrypted_password)
-
-    if (!username || !password) return { success: false, error: "Failed to decrypt bank credentials" }
-
     const proxyUrl = PAYMENT_PROXY_URL
     const endpoints = getProxyEndpoints(provider)
 
-    const response = await fetch(`${proxyUrl}${endpoints.verify}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-internal-secret": PROXY_SECRET
-      },
-      body: JSON.stringify({
-        nqrTxnId: validationTraceId,
-        username,
-        password,
-        remarks: transactionId,
-        amount: Math.round(parseFloat(String(txn.price || "0").replace(/,/g, '')))
-      }),
-      cache: 'no-store'
-    })
+    // Session Token Architecture: Try cached session token first (no credentials needed)
+    let sessionToken: string | null = null
+    let redisClient: Redis | null = null
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      redisClient = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      })
+      try {
+        sessionToken = await redisClient.get<string>(`payment_token:${provider}`)
+      } catch (e) {
+        console.error("Redis session token fetch error:", e)
+      }
+    }
 
-    const proxyData = await response.json()
+    // Build verify payload WITHOUT credentials
+    const verifyPayload: any = {
+      nqrTxnId: validationTraceId,
+      remarks: transactionId,
+      amount: Math.round(parseFloat(String(txn.price || "0").replace(/,/g, ''))),
+      orderCreatedAt: txn.created_at
+    }
+
+    // Attach session token if available
+    if (sessionToken) {
+      verifyPayload.sessionToken = sessionToken
+    }
+
+    const makeVerifyRequest = async (payload: any) => {
+      const resp = await fetch(`${proxyUrl}${endpoints.verify}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": PROXY_SECRET
+        },
+        body: JSON.stringify(payload),
+        cache: 'no-store'
+      })
+      return await resp.json()
+    }
+
+    let proxyData = await makeVerifyRequest(verifyPayload)
+
+    // If session expired on proxy side, re-send with credentials (one-time fallback)
+    if (proxyData.sessionExpired) {
+      const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", provider).single() as any
+      if (credsRes.data) {
+        const username = await decryptBankCredentials(credsRes.data.encrypted_username)
+        const password = await decryptBankCredentials(credsRes.data.encrypted_password)
+        if (username && password) {
+          verifyPayload.username = username
+          verifyPayload.password = password
+          proxyData = await makeVerifyRequest(verifyPayload)
+        }
+      }
+    }
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
       // SECURITY: Validate paid amount matches order amount (anti-underpayment fraud)
-      const rawPaidAmount = proxyData.data.raw?.amount || proxyData.data.raw?.transactionAmount
+      const rawPaidAmount = proxyData.data.paidAmount
       if (rawPaidAmount && txn?.price) {
         const paidAmount = parseInt(rawPaidAmount)
         const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
@@ -491,19 +577,19 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
 }
 
 /**
- * User-initiated payment verification using their phone number.
- * Server-side only — searches NepalPay/Fonepay transaction list by phone + amount + remarks.
- * Used when QR expires but user believes they already paid.
+ * User-initiated payment verification using their Phone Number OR Bank Receipt Transaction ID / RRN.
+ * Server-side only — searches NepalPay/Fonepay settlement records.
+ * Used when QR expires but user believes they already paid (e.g. YONO SBI remarks stripped).
  */
-export async function verifyPaymentByPhoneAction(transactionId: string, phoneNumber: string, captchaToken?: string) {
+export async function verifyPaymentByPhoneAction(transactionId: string, phoneNumberOrReference: string, captchaToken?: string) {
   try {
-    // Rate limit
+    // Rate limit (max 5 attempts per 10 mins per IP)
     const headersList = await headers()
     const ip = headersList.get("x-forwarded-for") ?? "127.0.0.1"
     if (ratelimit) {
       const { success } = await ratelimit.limit(`phone-verify:${ip}`)
       if (!success) {
-        return { success: false, error: "Too many attempts. Please wait a moment." }
+        return { success: false, error: "Too many verification attempts. Please wait a few minutes and try again." }
       }
     }
 
@@ -513,13 +599,14 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
     }
     const isCaptchaValid = await verifyTurnstileToken(captchaToken, ip)
     if (!isCaptchaValid) {
-      return { success: false, error: "Security validation failed" }
+      return { success: false, error: "Security validation failed. Please refresh and try again." }
     }
 
-    // Validate phone
-    const cleanPhone = phoneNumber.replace(/\D/g, "")
-    if (cleanPhone.length < 10 || cleanPhone.length > 15) {
-      return { success: false, error: "Invalid phone number" }
+    // Validate reference input (phone number or receipt transaction ID)
+    const rawRef = String(phoneNumberOrReference || "").trim()
+    const cleanDigits = rawRef.replace(/\D/g, "")
+    if (rawRef.length < 6 || rawRef.length > 30) {
+      return { success: false, error: "Please enter a valid 10-digit phone number or bank receipt Transaction ID" }
     }
 
     const supabase = createServiceRoleClient()
@@ -552,44 +639,72 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
     const paymentCategory = typedTxn.payment_category || "nepalpay"
 
     if (paymentCategory === "static") {
-      return { success: false, error: "Phone verification is only available for NepalPay/Fonepay payments" }
+      return { success: false, error: "Verification is only available for NepalPay/Fonepay QR payments" }
     }
 
-    // Get credentials
-    const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", paymentCategory).single() as any
-    if (!credsRes.data) return { success: false, error: "Payment provider credentials not found" }
-
-    const username = await decryptBankCredentials(credsRes.data.encrypted_username)
-    const password = await decryptBankCredentials(credsRes.data.encrypted_password)
-    if (!username || !password) return { success: false, error: "Decryption failed" }
-
-    // Call proxy to get transaction list and search by phone + amount + remarks
+    // Session Token Architecture: Try cached session token first (no credentials needed)
     const proxyUrl = PAYMENT_PROXY_URL
     const endpoints = getProxyEndpoints(paymentCategory)
 
-    const response = await fetch(`${proxyUrl}${endpoints.verify}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-internal-secret": PROXY_SECRET
-      },
-      body: JSON.stringify({
-        nqrTxnId: typedTxn.validation_trace_id || "",
-        username,
-        password,
-        // Extra fields for phone-based matching
-        phoneNumber: cleanPhone,
-        amount: Math.round(parseFloat(String(txn.price || "0").replace(/,/g, ''))),
-        remarks: transactionId
-      }),
-      cache: 'no-store'
-    })
+    let sessionToken: string | null = null
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        const redisClient = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        })
+        sessionToken = await redisClient.get<string>(`payment_token:${paymentCategory}`)
+      } catch (e) {
+        console.error("Redis session token fetch error:", e)
+      }
+    }
 
-    const proxyData = await response.json()
+    // Build verify payload WITHOUT credentials
+    const verifyPayload: any = {
+      nqrTxnId: typedTxn.validation_trace_id || "",
+      // Dual reference fields
+      phoneNumber: cleanDigits.length === 10 ? cleanDigits : "",
+      bankReference: rawRef,
+      amount: Math.round(parseFloat(String(txn.price || "0").replace(/,/g, ''))),
+      remarks: transactionId,
+      orderCreatedAt: txn.created_at
+    }
+    if (sessionToken) {
+      verifyPayload.sessionToken = sessionToken
+    }
+
+    const makeVerifyRequest = async (payload: any) => {
+      const resp = await fetch(`${proxyUrl}${endpoints.verify}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-internal-secret": PROXY_SECRET
+        },
+        body: JSON.stringify(payload),
+        cache: 'no-store'
+      })
+      return await resp.json()
+    }
+
+    let proxyData = await makeVerifyRequest(verifyPayload)
+
+    // If session expired on proxy side, re-send with credentials (one-time fallback)
+    if (proxyData.sessionExpired) {
+      const credsRes = await supabase.from("payment_credentials").select("*").eq("provider", paymentCategory).single() as any
+      if (credsRes.data) {
+        const username = await decryptBankCredentials(credsRes.data.encrypted_username)
+        const password = await decryptBankCredentials(credsRes.data.encrypted_password)
+        if (username && password) {
+          verifyPayload.username = username
+          verifyPayload.password = password
+          proxyData = await makeVerifyRequest(verifyPayload)
+        }
+      }
+    }
 
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
       // SECURITY: Validate paid amount matches order amount (anti-underpayment fraud)
-      const rawPaidAmount = proxyData.data.raw?.amount || proxyData.data.raw?.transactionAmount
+      const rawPaidAmount = proxyData.data.paidAmount
       if (rawPaidAmount && txn?.price) {
         const paidAmount = Math.round(parseFloat(String(rawPaidAmount).replace(/,/g, '')))
         const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
@@ -603,11 +718,27 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
         }
       }
 
+      // SECURITY: Anti-replay / duplicate claim check
+      const candidateBankTxnId = proxyData.data.bankTxnId || proxyData.data.txnId
+      if (candidateBankTxnId) {
+        const { data: existingClaims } = await supabase
+          .from("transactions")
+          .select("transaction_id")
+          .eq("bank_txn_id", String(candidateBankTxnId))
+          .neq("transaction_id", transactionId)
+          .limit(1)
+
+        if (existingClaims && existingClaims.length > 0) {
+          console.error(`[FRAUD REPLAY BLOCKED] Bank transaction ${candidateBankTxnId} already claimed by ${existingClaims[0].transaction_id}`)
+          return { success: false, error: "This bank payment has already been claimed by another order." }
+        }
+      }
+
       const fulfillResult = await fulfillOrderDirectly({
         transactionId,
         validationTraceId: typedTxn.validation_trace_id,
         provider: paymentCategory,
-        bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
+        bankTxnId: candidateBankTxnId,
       })
 
       if (fulfillResult.success) {
@@ -620,10 +751,10 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
 
     return {
       success: false,
-      error: "No matching payment found."
+      error: "No matching payment found. Please double-check your phone number or the Transaction ID from your banking app receipt."
     }
   } catch (error: any) {
-    console.error("Phone verification error:", error)
+    console.error("Payment verification error:", error)
     return { success: false, error: "Verification failed. Please try again." }
   }
 }
@@ -754,7 +885,7 @@ export async function cancelTransactionAction(transactionId: string) {
     const { error: cancelError } = await supabase
       .from("transactions")
       .update({
-        status: "Payment Failed",
+        status: "Cancelled",
         failure_remarks: "Cancelled by user",
         encrypted_checkout_data: null
       } as any)

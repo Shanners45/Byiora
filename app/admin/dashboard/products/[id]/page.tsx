@@ -960,8 +960,35 @@ export default function ProductEditPage() {
         {/* Denominations */}
         <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md lg:col-span-3">
         <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
-          <CardTitle className="text-[#1F2937]">Product Denominations</CardTitle>
-          <CardDescription className="text-[#92400E]">Add available denominations and prices</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-[#1F2937]">Product Denominations</CardTitle>
+              <CardDescription className="text-[#92400E]">Add available denominations and prices</CardDescription>
+            </div>
+            {denominations.length > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className={`text-xs font-semibold border-2 ${
+                  denominations.every(d => d.in_stock !== false)
+                    ? "border-red-400 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    : "border-green-400 text-green-600 hover:bg-green-50 hover:text-green-700"
+                }`}
+                onClick={() => {
+                  const allInStock = denominations.every(d => d.in_stock !== false)
+                  setDenominations(prev => prev.map(d => ({
+                    ...d,
+                    in_stock: !allInStock,
+                    bestseller: !allInStock ? d.bestseller : false,
+                  })))
+                  toast.success(allInStock ? "All denominations marked out of stock" : "All denominations marked in stock")
+                }}
+              >
+                {denominations.every(d => d.in_stock !== false) ? "Mark All Out of Stock" : "Mark All In Stock"}
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
           {denominations.length > 0 && (
