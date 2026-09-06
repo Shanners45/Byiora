@@ -91,7 +91,7 @@ export async function GET(req: Request) {
       <g:title>${escapeXml(itemTitle)}</g:title>
       <g:description>${escapeXml(productDescription)}</g:description>
       <g:link>${escapeXml(productLink)}</g:link>
-      <g:image_link>${escapeXml(denom.icon_url || imageLink)}</g:image_link>
+      <g:image_link>${escapeXml(imageLink)}</g:image_link>${denom.icon_url && denom.icon_url !== imageLink ? `\n      <g:additional_image_link>${escapeXml(denom.icon_url)}</g:additional_image_link>` : ""}
       <g:availability>${isItemInStock ? "in_stock" : "out_of_stock"}</g:availability>
       <g:price>${formattedPrice}</g:price>
       <g:brand>Byiora</g:brand>
