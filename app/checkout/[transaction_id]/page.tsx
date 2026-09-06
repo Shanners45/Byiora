@@ -609,9 +609,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
             </div>
             <h3 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-4 tracking-tight">Checkout Unavailable</h3>
             <p className="text-gray-600 text-lg mb-8 max-w-md leading-relaxed">
-              {["This order is no longer active", "Transaction not found", "Transaction is already completed", "Transaction is", "Payment session expired"].some(e => error.includes(e)) 
-                ? error 
-                : "Checkout unavailable"}
+              {error || "Checkout unavailable"}
             </p>
             <Button
               onClick={() => {

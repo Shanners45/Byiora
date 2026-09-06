@@ -33,6 +33,11 @@ export async function updateSession(request: NextRequest) {
   const isServerAction = request.headers.has("next-action")
   const isMutation = method !== "GET" || isServerAction
 
+  // ── Telemetry bypass: never rate-limit Sentry error tunnels ─────────────
+  if (pathname.startsWith("/monitoring-tunnel")) {
+    return NextResponse.next()
+  }
+
   // ── Admin subdomain detection ───────────────────────────────────────────
   const host = request.headers.get("host") || ""
   const isAdminHost = host === "admin.byiora.com.np" || host === "www.admin.byiora.com.np"

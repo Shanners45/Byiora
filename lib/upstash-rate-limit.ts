@@ -29,7 +29,7 @@ function getLoginLimiter(): Ratelimit | null {
   return loginLimiter
 }
 
-/** Generic mutation protection — 20 req/min per IP */
+/** Generic mutation protection — 60 req/min per IP */
 let mutationLimiter: Ratelimit | null = null
 function getMutationLimiter(): Ratelimit | null {
   if (mutationLimiter) return mutationLimiter
@@ -37,7 +37,7 @@ function getMutationLimiter(): Ratelimit | null {
   if (!r) return null
   mutationLimiter = new Ratelimit({
     redis: r,
-    limiter: Ratelimit.slidingWindow(20, "1 m"),
+    limiter: Ratelimit.slidingWindow(60, "1 m"),
     analytics: false,
     prefix: "byiora:mutation",
   })

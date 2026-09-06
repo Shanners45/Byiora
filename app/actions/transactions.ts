@@ -90,27 +90,23 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     const random = crypto.randomUUID().split("-")[0].toUpperCase().substring(0, 5)
     const transactionId = `BYI-${yy}${mm}${dd}-${random}`
 
-    let actualUserId = transactionData.userId || null;
-    let actualUserName = undefined;
+    // SECURITY: Authenticate userId strictly from server-side session to prevent user enumeration & impersonation
+    let actualUserId: string | null = null
+    let actualUserName: string | undefined = undefined
 
-    if (actualUserId) {
+    const { createClient } = await import("@/lib/supabase/server")
+    const userSupabase = await createClient()
+    const { data: { user: sessionUser } } = await userSupabase.auth.getUser()
+
+    if (sessionUser) {
+      actualUserId = sessionUser.id
       const { data: userData } = await serviceSupabase
         .from("users")
         .select("name")
-        .eq("id", actualUserId)
+        .eq("id", sessionUser.id)
         .single()
       if (userData?.name) {
         actualUserName = userData.name
-      }
-    } else if (transactionData.email) {
-      const { data: userData } = await serviceSupabase
-        .from("users")
-        .select("id, name")
-        .eq("email", transactionData.email.toLowerCase().trim())
-        .single()
-      if (userData) {
-        actualUserId = userData.id;
-        actualUserName = userData.name;
       }
     }
 

@@ -77,16 +77,6 @@ export async function getOrGenerateQRAction(transactionId: string) {
       return { success: false, error: "Transaction not found" }
     }
 
-    // SECURITY: For registered users, verify the session user owns this transaction
-    if (txn.user_id) {
-      const { createClient } = await import("@/lib/supabase/server")
-      const userSupabase = await createClient()
-      const { data: { user } } = await userSupabase.auth.getUser()
-      if (!user || user.id !== txn.user_id) {
-        return { success: false, error: "Unauthorized" }
-      }
-    }
-
     // 1b. INDUSTRY STANDARD STATE MACHINE: If order is Paid, Completed, or has bank_txn_id, NEVER expire or fail
     if (txn.status === "Completed" || txn.status === "Paid" || txn.bank_txn_id) {
       const resolvedStatus = (txn.status === "Payment Failed" && txn.bank_txn_id) ? "Paid" : txn.status
@@ -778,8 +768,8 @@ export async function expireTransactionAction(transactionId: string) {
       return { success: false }
     }
 
-    // For registered users, verify the authenticated user owns this transaction
-    if (txn.user_id && (!user || user.id !== txn.user_id)) {
+    // For registered users, prevent a DIFFERENT logged-in user from expiring
+    if (txn.user_id && user && user.id !== txn.user_id) {
       return { success: false, error: "Unauthorized" }
     }
 
@@ -872,12 +862,12 @@ export async function cancelTransactionAction(transactionId: string) {
       return { success: false, error: "Cannot cancel this transaction" }
     }
 
-    // SECURITY: Verify ownership — only the transaction's owner can cancel
+    // SECURITY: Prevent a DIFFERENT logged-in user from cancelling
     if (txn.user_id) {
       const { createClient } = await import("@/lib/supabase/server")
       const userSupabase = await createClient()
       const { data: { user } } = await userSupabase.auth.getUser()
-      if (!user || user.id !== txn.user_id) {
+      if (user && user.id !== txn.user_id) {
         return { success: false, error: "Unauthorized" }
       }
     }
