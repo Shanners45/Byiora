@@ -621,7 +621,7 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
     if (!isWithin24Hours) {
       return { success: false, error: "Payment verification window (24 hours) has expired for this transaction." }
     }
-    if (!["Payment Failed", "Payment Pending", "Processing"].includes(txn.status as string)) {
+    if (!["Payment Failed", "Payment Pending", "Processing", "Cancelled", "Failed"].includes(txn.status as string)) {
       return { success: false, error: "This transaction is no longer eligible for verification" }
     }
 

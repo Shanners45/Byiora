@@ -10,10 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { Search, Filter, RefreshCw, Download, Send, ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react"
+import { Search, Filter, RefreshCw, Download, Send, ChevronLeft, ChevronRight, Eye, EyeOff, Mail } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { updateTransactionStatusAction, sendGiftcardCodeAction, insertNotificationAction, refundKhaltiTransactionAction } from "@/app/actions/orders"
+import { updateTransactionStatusAction, sendGiftcardCodeAction, insertNotificationAction, refundKhaltiTransactionAction, sendRecoveryEmailAction } from "@/app/actions/orders"
 import { getAllTransactionsAction } from "@/app/actions/dashboard"
 import { decryptCheckoutData, clearCheckoutData } from "@/app/actions/checkout-encryption"
 import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
@@ -121,6 +121,7 @@ export default function OrdersPage() {
   const [adminUser, setAdminUser] = useState<Pick<AdminSession, "role"> | null>(null)
   const [giftcardCodes, setGiftcardCodes] = useState<Record<string, string>>({})
   const [sendingCodeIds, setSendingCodeIds] = useState<Record<string, boolean>>({})
+  const [sendingRecoveryIds, setSendingRecoveryIds] = useState<Record<string, boolean>>({})
   // Remarks dialog state
   const [remarksDialog, setRemarksDialog] = useState<{ open: boolean; transactionId: string; status: Transaction["status"] } | null>(null)
   const [remarksText, setRemarksText] = useState("")
@@ -444,6 +445,22 @@ export default function OrdersPage() {
       toast.error(error.message || "Failed to process giftcard code")
     } finally {
       setSendingCodeIds((prev) => ({ ...prev, [transaction.id]: false }))
+    }
+  }
+
+  const handleSendRecoveryEmail = async (transaction: Transaction) => {
+    setSendingRecoveryIds((prev) => ({ ...prev, [transaction.id]: true }))
+    try {
+      const result = await sendRecoveryEmailAction(transaction.transaction_id)
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success(result.message || "Recovery email sent!")
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Failed to send recovery email")
+    } finally {
+      setSendingRecoveryIds((prev) => ({ ...prev, [transaction.id]: false }))
     }
   }
 
@@ -776,6 +793,20 @@ export default function OrdersPage() {
                           <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono whitespace-pre-wrap">{getUIDForDisplay(transaction)}</span>
                         )
                       ) : (transaction.product_category === "digital-goods" || transaction.product_category === "games" || (!transaction.product_category && transaction.product_name)) ? (
+                        transaction.status === "Cancelled" && (transaction.payment_category === "fonepay" || transaction.payment_category === "nepalpay") ? (
+                          <Button
+                            size="sm"
+                            onClick={() => handleSendRecoveryEmail(transaction)}
+                            disabled={sendingRecoveryIds[transaction.id]}
+                            className="h-8 px-3 text-xs bg-amber-500 hover:bg-amber-600 text-white font-medium"
+                          >
+                            {sendingRecoveryIds[transaction.id] ? (
+                              <><RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />Sending...</>
+                            ) : (
+                              <><Mail className="h-3 w-3 mr-1.5" />Send Recovery Email</>
+                            )}
+                          </Button>
+                        ) : (
                         <div className="flex items-center gap-1.5">
                           <Input
                             placeholder="Enter Giftcard Code"
@@ -794,6 +825,7 @@ export default function OrdersPage() {
                             {sendingCodeIds[transaction.id] ? "..." : (transaction.status === "Completed" ? "✓" : <Send className="h-3 w-3" />)}
                           </Button>
                         </div>
+                        )
                       ) : (
                         <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{getUIDForDisplay(transaction)}</span>
                       )}

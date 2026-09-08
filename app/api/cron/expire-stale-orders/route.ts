@@ -106,7 +106,8 @@ export async function GET(req: Request) {
                   body: JSON.stringify({
                     nqrTxnId: typedTxn.validation_trace_id,
                     username,
-                    password
+                    password,
+                    orderCreatedAt: txn.created_at
                   }),
                   signal: AbortSignal.timeout(8000) // 8 second timeout to avoid hanging
                 })

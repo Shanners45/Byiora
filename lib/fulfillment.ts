@@ -73,7 +73,7 @@ export async function fulfillOrderDirectly({
       .from("transactions")
       .update(updatePayload)
       .eq("transaction_id", transactionId)
-      .in("status", ["Payment Pending", "Processing", "Payment Failed"])
+      .in("status", ["Payment Pending", "Processing", "Payment Failed", "Cancelled", "Failed"])
       .select("transaction_id")
 
     if (updateError) {

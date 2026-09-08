@@ -296,6 +296,100 @@ export async function insertNotificationAction(
  * @param amountInRs - Optional custom refund amount in NPR (e.g. 50). If empty/undefined, full price is refunded.
  * @param mobile - Optional mobile number for bank refund
  */
+/**
+ * Sends a recovery email for a Cancelled/Payment Failed order (admin only).
+ * For registered users: email links to Transaction History with a "Verify Payment" CTA.
+ * For guest users: generates a 24h magic link for secure guest verification.
+ */
+export async function sendRecoveryEmailAction(transactionId: string) {
+  if (!(await verifyAdmin())) {
+    return { error: "Unauthorized: Admin access required" }
+  }
+
+  try {
+    const serviceSupabase = createServiceRoleClient()
+
+    const { data: _txn, error: txnError } = await serviceSupabase
+      .from("transactions")
+      .select("*, users(name)")
+      .eq("transaction_id", transactionId)
+      .single()
+
+    if (txnError || !_txn) {
+      return { error: "Transaction not found" }
+    }
+    const txn = _txn as any
+
+    if (!["Cancelled", "Payment Failed"].includes(txn.status)) {
+      return { error: `Cannot send recovery email for status: ${txn.status}` }
+    }
+
+    if (!txn.user_email) {
+      return { error: "No email address found for this transaction" }
+    }
+
+    const isGuest = !txn.user_id
+    const isDynamic = txn.payment_category === "nepalpay" || txn.payment_category === "fonepay"
+
+    if (!isDynamic) {
+      return { error: "Recovery emails are only available for dynamic QR payments (Fonepay/NepalPay)" }
+    }
+
+    let userName = "Customer"
+    if (txn.users?.name) {
+      userName = txn.users.name
+    } else if (txn.guest_user_data?.name) {
+      userName = txn.guest_user_data.name
+    }
+
+    const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
+    const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
+
+    let customMsg = `Your order for <strong>${txn.product_name} (${txn.amount})</strong> was cancelled or marked as failed.`
+    let actionBtn: { label: string; url: string; subtext?: string } | undefined = undefined
+
+    if (!isGuest) {
+      // Registered user — link to transaction history
+      customMsg += "<br/><br/>If you have already paid, you can securely verify your payment from your Transaction History."
+      actionBtn = {
+        label: "Verify in Transaction History",
+        url: "https://www.byiora.com.np/transactions",
+        subtext: "Click the Verify Payment button next to this order within 24 hours."
+      }
+    } else {
+      // Guest user with dynamic payment — generate magic link
+      const rawToken = await generateGuestVerificationToken(transactionId)
+      const token = encodeURIComponent(rawToken)
+      customMsg += "<br/><br/>If you have already paid, please click the secure link below to verify your payment and fulfill your order."
+      actionBtn = {
+        label: "Verify Payment Securely",
+        url: `https://www.byiora.com.np/verify-guest?token=${token}`,
+        subtext: "This secure link will expire in exactly 24 hours."
+      }
+    }
+
+    await sendOrderPlacedEmail({
+      email: txn.user_email,
+      userName,
+      productName: txn.product_name,
+      denomination: txn.amount,
+      transactionId,
+      price: txn.price,
+      paymentMethod: txn.payment_method,
+      isGuest,
+      status: "Payment Failed",
+      customMessage: customMsg,
+      subjectOverride: `Payment Recovery: ${txn.product_name}`,
+      actionButton: actionBtn
+    })
+
+    return { success: true, message: `Recovery email sent to ${txn.user_email}` }
+  } catch (error: any) {
+    console.error("Error in sendRecoveryEmailAction:", error)
+    return { error: error.message || "Failed to send recovery email" }
+  }
+}
+
 export async function refundKhaltiTransactionAction(
   transactionId: string,
   amountInRs?: number,

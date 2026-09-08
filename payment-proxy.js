@@ -58,6 +58,16 @@ function parseJwt(token) {
 }
 
 /**
+ * Get date string (YYYY-MM-DD) in Nepal Time (Asia/Kathmandu).
+ * Supports offset in days and optional base date.
+ */
+function getNepalDate(offsetDays = 0, baseDate = null) {
+    const d = baseDate ? new Date(baseDate) : new Date();
+    const targetMs = (isNaN(d.getTime()) ? Date.now() : d.getTime()) + (offsetDays * 24 * 60 * 60 * 1000);
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kathmandu' }).format(new Date(targetMs));
+}
+
+/**
  * Make an HTTP request to a banking API via curl.
  * Uses execFile (NOT exec) to avoid shell injection and reduce overhead.
  */
@@ -519,12 +529,26 @@ async function handleNepalPayVerifyTransaction(body, res) {
             credentialVault['nepalpay'] = { username, password };
         }
 
-        const today = new Date().toISOString().split('T')[0];
+        const todayNpt = getNepalDate(0);
+        let fromDate = todayNpt;
+        let toDate = todayNpt;
+
+        if (orderCreatedAt) {
+            const orderDateNpt = getNepalDate(0, orderCreatedAt);
+            fromDate = orderDateNpt;
+        } else {
+            const nowNptHours = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kathmandu', hour: 'numeric', hour12: false }).format(new Date()));
+            if (nowNptHours < 6) {
+                fromDate = getNepalDate(-1);
+            }
+        }
+
+        console.log(`📅 [NEPALPAY] Querying statement range (NPT): ${fromDate} to ${toDate}`);
 
         const listPayload = {
             merchantCode,
-            fromDate: today,
-            toDate: today,
+            fromDate: fromDate,
+            toDate: toDate,
             storeLabel: "",
             terminal: "",
             nqrTxnId: "", // Fetch all transactions, don't filter by validationTraceId!
@@ -877,10 +901,24 @@ async function handleFonepayVerifyTransaction(body, res) {
             credentialVault['fonepay'] = { username, password };
         }
 
-        const today = new Date().toISOString().split('T')[0];
+        const todayNpt = getNepalDate(0);
+        let fromDate = todayNpt;
+        let toDate = todayNpt;
+
+        if (orderCreatedAt) {
+            const orderDateNpt = getNepalDate(0, orderCreatedAt);
+            fromDate = orderDateNpt;
+        } else {
+            const nowNptHours = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Kathmandu', hour: 'numeric', hour12: false }).format(new Date()));
+            if (nowNptHours < 6) {
+                fromDate = getNepalDate(-1);
+            }
+        }
+
+        console.log(`📅 [FONEPAY] Querying settlement range (NPT): ${fromDate} to ${toDate}`);
 
         // Using the Settlement Report API
-        const reportUrl = `https://merchantapi.fonepay.com/report/merchant-Settlement-report?pageNumber=1&pageSize=50&fromTransmissionDateTime=${today}&toTransmissionDateTime=${today}`;
+        const reportUrl = `https://merchantapi.fonepay.com/report/merchant-Settlement-report?pageNumber=1&pageSize=50&fromTransmissionDateTime=${fromDate}&toTransmissionDateTime=${toDate}`;
 
         const listData = await makeBankRequest(
             reportUrl,

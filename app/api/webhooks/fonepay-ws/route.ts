@@ -100,7 +100,8 @@ export async function POST(req: Request) {
       const verifyPayload: any = {
         nqrTxnId: validationTraceId || txn.validation_trace_id,
         amount: parseInt(txn.price),
-        remarks: transactionId
+        remarks: transactionId,
+        orderCreatedAt: txn.created_at
       }
       if (sessionToken) {
         verifyPayload.sessionToken = sessionToken
