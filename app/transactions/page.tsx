@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { ArrowLeft, Filter, Download, Lock, Eye, EyeOff, Gift, RefreshCw, RefreshCcw, Phone, CheckCircle2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Filter, Download, Lock, Eye, EyeOff, Gift, RefreshCw, Phone, CheckCircle2, ExternalLink } from "lucide-react";
 import TransactionsLoading from "./loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,14 +14,13 @@ import { Header } from "@/components/header";
 import { Footer } from "@/components/footer";
 import { useAuth } from "@/lib/auth-context";
 import { toast } from "sonner";
-import { reorderTransactionAction, retryKhaltiPaymentAction } from "@/app/actions/transactions";
+import { retryKhaltiPaymentAction } from "@/app/actions/transactions";
 import { verifyPaymentByPhoneAction } from "@/app/actions/checkout";
 import { TurnstileWidget } from "@/components/turnstile-widget";
 
 export default function TransactionsPage() {
   const [filterStatus, setFilterStatus] = useState("all");
   const [revealedCodes, setRevealedCodes] = useState<Record<string, boolean>>({});
-  const [reorderingId, setReorderingId] = useState<string | null>(null);
   
   // Phone verification state
   const [verifyingPhoneId, setVerifyingPhoneId] = useState<string | null>(null);
@@ -109,22 +108,7 @@ export default function TransactionsPage() {
 
   const [retryingKhaltiId, setRetryingKhaltiId] = useState<string | null>(null);
 
-  const handleReorder = async (oldTransactionId: string) => {
-    setReorderingId(oldTransactionId);
-    try {
-      const res = await reorderTransactionAction(oldTransactionId);
-      if (res.success && res.transactionId) {
-        toast.success("Processing reorder... taking you to checkout");
-        router.push(`/checkout/${res.transactionId}`);
-      } else {
-        toast.error(res.error || "Failed to process reorder");
-      }
-    } catch (e) {
-      toast.error("An unexpected error occurred");
-    } finally {
-      setReorderingId(null);
-    }
-  };
+
 
   const handleRetryKhalti = async (transactionId: string) => {
     setRetryingKhaltiId(transactionId);
@@ -532,22 +516,7 @@ export default function TransactionsPage() {
                               </Button>
                             )}
 
-                            {isUnpaidState && isDigitalGoods && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleReorder(transaction.transactionId)}
-                                disabled={reorderingId === transaction.transactionId}
-                                className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
-                              >
-                                {reorderingId === transaction.transactionId ? (
-                                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                ) : (
-                                  <RefreshCcw className="h-4 w-4 mr-2" />
-                                )}
-                                Buy Again
-                              </Button>
-                            )}
+
 
                             {displayStatus === "Completed" && (
                               <Button
@@ -586,41 +555,11 @@ export default function TransactionsPage() {
                                   Verify Payment
                                 </Button>
                               )}
-                              {isDigitalGoods && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleReorder(transaction.transactionId)}
-                                  disabled={reorderingId === transaction.transactionId}
-                                  className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
-                                >
-                                  {reorderingId === transaction.transactionId ? (
-                                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                  ) : (
-                                    <RefreshCcw className="h-4 w-4 mr-2" />
-                                  )}
-                                  Buy Again
-                                </Button>
-                              )}
+
                             </>
                           )}
 
-                          {displayStatus === "Cancelled" && isDigitalGoods && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleReorder(transaction.transactionId)}
-                              disabled={reorderingId === transaction.transactionId}
-                              className="border-[#7E3AF2] text-[#7E3AF2] hover:bg-[#7E3AF2]/10 font-semibold"
-                            >
-                              {reorderingId === transaction.transactionId ? (
-                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                              ) : (
-                                <RefreshCcw className="h-4 w-4 mr-2" />
-                              )}
-                              Buy Again
-                            </Button>
-                          )}
+
 
                           {(displayStatus === "Payment Pending" || displayStatus === "Processing") && !isDynamicExpired && (
                             <>

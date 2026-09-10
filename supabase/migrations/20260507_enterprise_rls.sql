@@ -112,35 +112,13 @@ BEGIN
   END IF;
 END $$;
 
--- Allow anon+auth to INSERT, but prevent privileged fields from being set client-side
--- (server-side service role can still write anything).
-CREATE POLICY transactions_anon_insert
-ON public.transactions
-FOR INSERT
-TO anon, authenticated
-WITH CHECK (
-  status = 'Processing'
-  AND giftcard_code IS NULL
-  AND failure_remarks IS NULL
-  AND encrypted_checkout_data IS NULL
-  AND (user_id IS NULL OR user_id = auth.uid())
-);
-
--- Owners can read their transactions
+-- Owners can read their transactions (read-only for clients)
+-- All mutations (INSERT, UPDATE, DELETE) must occur via Server Actions using the Service Role.
 CREATE POLICY transactions_owner_read
 ON public.transactions
 FOR SELECT
 TO authenticated
 USING (user_id = auth.uid());
-
--- Owners cannot update status/giftcard fields safely at column-level; keep updates limited to their rows.
--- Application code should avoid exposing this broadly.
-CREATE POLICY transactions_owner_update
-ON public.transactions
-FOR UPDATE
-TO authenticated
-USING (user_id = auth.uid())
-WITH CHECK (user_id = auth.uid());
 
 -- Banners + homepage categories public read (active only)
 CREATE POLICY banners_public_read

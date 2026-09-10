@@ -60,8 +60,6 @@ export async function getOrGenerateQRAction(transactionId: string) {
     if (qrRatelimit) {
       const { success } = await qrRatelimit.limit(`qr-gen:${ip}`)
       if (!success) {
-        // Clean up the abandoned transaction row so it doesn't clutter the DB
-        await supabase.from("transactions").delete().eq("transaction_id", transactionId)
         return { success: false, error: "Too many payment requests. Please wait a few minutes and try again." }
       }
     }
@@ -768,8 +766,8 @@ export async function expireTransactionAction(transactionId: string) {
       return { success: false }
     }
 
-    // For registered users, prevent a DIFFERENT logged-in user from expiring
-    if (txn.user_id && user && user.id !== txn.user_id) {
+    // For registered users, prevent unauthenticated or DIFFERENT logged-in users from expiring
+    if (txn.user_id && (!user || user.id !== txn.user_id)) {
       return { success: false, error: "Unauthorized" }
     }
 
@@ -862,12 +860,12 @@ export async function cancelTransactionAction(transactionId: string) {
       return { success: false, error: "Cannot cancel this transaction" }
     }
 
-    // SECURITY: Prevent a DIFFERENT logged-in user from cancelling
+    // SECURITY: Prevent unauthenticated or DIFFERENT logged-in users from cancelling
     if (txn.user_id) {
       const { createClient } = await import("@/lib/supabase/server")
       const userSupabase = await createClient()
       const { data: { user } } = await userSupabase.auth.getUser()
-      if (user && user.id !== txn.user_id) {
+      if (!user || user.id !== txn.user_id) {
         return { success: false, error: "Unauthorized" }
       }
     }

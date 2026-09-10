@@ -32,17 +32,19 @@ function saveSignupState(email: string) {
   } catch {}
 }
 
-function loadSignupState(): { email: string } | null {
+function loadSignupState(): { email: string; remainingCooldown: number } | null {
   try {
     const raw = localStorage.getItem(SIGNUP_STORAGE_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw)
     // Expire after 15 minutes
-    if (Date.now() - parsed.ts > 15 * 60 * 1000) {
+    const elapsed = Date.now() - parsed.ts
+    if (elapsed > 15 * 60 * 1000) {
       localStorage.removeItem(SIGNUP_STORAGE_KEY)
       return null
     }
-    return { email: parsed.email }
+    const remainingCooldown = Math.max(0, 60 - Math.floor(elapsed / 1000))
+    return { email: parsed.email, remainingCooldown }
   } catch {
     return null
   }
@@ -87,6 +89,9 @@ export default function SignUpPage() {
       setSignupStep(2)
       setAuthMode("signup")
       setShowEmailForm(true)
+      if (saved.remainingCooldown > 0) {
+        setResendCooldown(saved.remainingCooldown)
+      }
     }
   }, [])
 
@@ -229,6 +234,7 @@ export default function SignUpPage() {
         return
       }
       toast.success("New verification code sent!")
+      saveSignupState(email.trim())
       setResendCooldown(60)
       setOtp(Array(OTP_LENGTH).fill(""))
       otpRefs.current[0]?.focus()

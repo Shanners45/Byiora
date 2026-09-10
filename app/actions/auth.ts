@@ -120,11 +120,32 @@ export async function verifySignupOtp(email: string, token: string) {
 
 // ─── Resend OTP (signup) ────────────────────────────────────────────────────
 export async function resendSignupOtp(email: string) {
+  if (!email || !email.includes("@")) {
+    return { error: "Please enter a valid email address" }
+  }
+
+  const normalizedEmail = email.toLowerCase().trim()
+  const h = await headers()
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+
+  // SECURITY (Industry Standard): 60-second cooldown timer per email address
+  const cooldown = await rateLimit(`resend-otp-cooldown:${normalizedEmail}`, { windowMs: 60_000, max: 1 })
+  if (!cooldown.ok) {
+    const remainingSeconds = cooldown.retryAfterSeconds || 60
+    return { error: `Please wait ${remainingSeconds} seconds before requesting another code.` }
+  }
+
+  // SECURITY: IP rate limiting (max 5 resend requests per 15 minutes per IP)
+  const rl = await rateLimit(`resend-otp-ip:${ip}`, { windowMs: 900_000, max: 5 })
+  if (!rl.ok) {
+    return { error: "Too many verification code requests. Please wait a few minutes." }
+  }
+
   const supabase = await createClient()
 
   const { error } = await supabase.auth.resend({
     type: "signup",
-    email: email.toLowerCase().trim(),
+    email: normalizedEmail,
   })
 
   if (error) {

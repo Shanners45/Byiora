@@ -15,7 +15,7 @@ function getResend() {
  * 3. Enforces trusted reputable email providers (Gmail, Outlook, Yahoo, iCloud, Hotmail).
  * 4. Graceful and non-blocking — never breaks order processing or email sending.
  */
-export async function addCustomerToAudience(email: string, firstName?: string) {
+export async function addCustomerToAudience(email: string, firstName?: string, isRegistered: boolean = false) {
   try {
     if (!email || typeof email !== "string") return
 
@@ -64,7 +64,9 @@ export async function addCustomerToAudience(email: string, firstName?: string) {
       unsubscribed: false,
     }
 
-    if (audienceId) {
+    // ONLY attach the "Registered USERS" segment if the user is an actual registered account on Byiora.
+    // Guest orders are added to General Contacts (for broadcasts) WITHOUT the Registered USERS segment.
+    if (isRegistered && audienceId) {
       payload.audienceId = audienceId
     }
 
@@ -107,8 +109,8 @@ export async function sendWelcomeEmail(input: { email: string; userName?: string
 </div>
   `
 
-  // Non-blocking audience sync with anti-spam check
-  addCustomerToAudience(email, userName).catch(() => {})
+  // Non-blocking audience sync with anti-spam check (Registered user account -> isRegistered: true)
+  addCustomerToAudience(email, userName, true).catch(() => {})
 
   return await resend.emails.send({
     from: "Byiora <noreply@byiora.com.np>",
@@ -213,8 +215,8 @@ export async function sendOrderPlacedEmail(input: {
 </div>
   `
 
-  // Non-blocking audience sync with anti-spam check
-  addCustomerToAudience(email, userName).catch(() => {})
+  // Non-blocking audience sync with anti-spam check (Only tag Registered USERS if not guest)
+  addCustomerToAudience(email, userName, !input.isGuest).catch(() => {})
 
   return await resend.emails.send({
     from: "Byiora <order-status@byiora.com.np>",
@@ -290,8 +292,8 @@ export async function sendGiftcardCodeEmail(input: {
   </div>
 </div>`
 
-  // Non-blocking audience sync with anti-spam check
-  addCustomerToAudience(email, userName).catch(() => {})
+  // Non-blocking audience sync with anti-spam check (Only tag Registered USERS if not guest)
+  addCustomerToAudience(email, userName, !input.isGuest).catch(() => {})
 
   return await resend.emails.send({
     from: "Byiora <order-status@byiora.com.np>",

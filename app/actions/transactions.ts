@@ -82,21 +82,24 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       denominations = slugProduct.denominations
     }
     
-    // Find matching denomination and set verified price
-    let matchedDenom = denominations?.find(
+    // SECURITY: Strictly match denomination by label or id against DB records
+    const cleanAmount = transactionData.amount?.trim().toLowerCase()
+    let matchedDenom = Array.isArray(denominations) ? denominations.find(
       (d: any) =>
-        (d.label && transactionData.amount && d.label.toLowerCase() === transactionData.amount.toLowerCase()) ||
-        (d.id && d.id === transactionData.amount) ||
-        (d.price !== undefined && String(d.price) === String(transactionData.price))
-    )
+        (d.label && d.label.trim().toLowerCase() === cleanAmount) ||
+        (d.id && String(d.id).trim().toLowerCase() === cleanAmount)
+    ) : null
 
     let verifiedPrice = "0"
     if (matchedDenom && matchedDenom.price !== undefined && matchedDenom.price !== null) {
       verifiedPrice = String(matchedDenom.price).replace(/,/g, '').trim()
-    } else if (transactionData.price) {
-      verifiedPrice = String(transactionData.price).replace(/,/g, '').trim()
     } else {
       return { success: false, error: "Invalid product denomination or price." }
+    }
+
+    const numericPrice = parseFloat(verifiedPrice)
+    if (isNaN(numericPrice) || numericPrice <= 0) {
+      return { success: false, error: "Invalid product price." }
     }
     const now = new Date()
     const yy = String(now.getFullYear()).slice(-2)
@@ -249,7 +252,8 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       try {
         const { addCustomerToAudience } = await import("@/lib/email/resend")
         const customerName = transactionData.guestData?.name || actualUserName || transactionData.email.split('@')[0]
-        addCustomerToAudience(transactionData.email, customerName).catch(() => {})
+        const isRegistered = !!actualUserId
+        addCustomerToAudience(transactionData.email, customerName, isRegistered).catch(() => {})
       } catch (audienceErr) {
         console.error("Resend audience sync error (non-blocking):", audienceErr)
       }
@@ -349,90 +353,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
   }
 }
 
-// This function clones an expired transaction and creates a new one
-// so the user can re-try checking out
-export async function reorderTransactionAction(oldTransactionId: string) {
-  try {
-    const supabase = createServiceRoleClient()
-    const { data: oldTxn, error: fetchError } = await supabase
-      .from("transactions")
-      .select("*")
-      .eq("transaction_id", oldTransactionId)
-      .single()
-    
-    if (fetchError || !oldTxn) {
-      return { success: false, error: "Original transaction not found" }
-    }
 
-    // Generate a new transaction ID with standard format
-    const now = new Date()
-    const yy = String(now.getFullYear()).slice(-2)
-    const mm = String(now.getMonth() + 1).padStart(2, '0')
-    const dd = String(now.getDate()).padStart(2, '0')
-    const random = crypto.randomUUID().split("-")[0].toUpperCase().substring(0, 5)
-    const newTransactionId = `BYI-${yy}${mm}${dd}-${random}`
-
-    // Create new payload based on the old transaction
-    const oldTxnAny = oldTxn as any;
-    const newStatus = oldTxnAny.payment_category === "nepalpay" || oldTxnAny.payment_category === "fonepay" || oldTxnAny.payment_category === "khalti"
-      ? "Payment Pending" 
-      : "Processing"
-
-    const insertPayload = {
-      user_id: oldTxn.user_id,
-      product_id: oldTxn.product_id,
-      product_name: oldTxn.product_name,
-      amount: oldTxn.amount,
-      price: oldTxn.price,
-      status: newStatus,
-      payment_method: oldTxn.payment_method,
-      payment_category: oldTxnAny.payment_category,
-      transaction_id: newTransactionId,
-      user_email: oldTxn.user_email,
-      guest_user_data: oldTxn.guest_user_data,
-      product_category: oldTxn.product_category,
-    }
-
-    const { data: newTxn, error: insertError } = await supabase
-      .from("transactions")
-      .insert([insertPayload as any])
-      .select()
-      .single()
-
-    if (insertError) {
-      return { success: false, error: "Failed to create new transaction" }
-    }
-
-    // Send Discord alert
-    const isDynamicReorder = oldTxnAny.payment_category === "nepalpay" || oldTxnAny.payment_category === "fonepay" || oldTxnAny.payment_category === "khalti"
-    if (process.env.DISCORD_WEBHOOK_URL && (!isDynamicReorder || oldTxn.product_category === "direct-login")) {
-      try {
-        const webhookUrl = process.env.DISCORD_WEBHOOK_URL
-        const embed = {
-          title: "🔄 REORDER PLACED!",
-          color: 0x00BCD4,
-          fields: [
-            { name: "Old Txn", value: oldTransactionId, inline: true },
-            { name: "New Txn", value: newTransactionId, inline: true },
-            { name: "Product", value: oldTxn.product_name, inline: false },
-            { name: "Amount", value: oldTxn.amount, inline: true },
-          ],
-          timestamp: new Date().toISOString()
-        }
-        await fetch(webhookUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ embeds: [embed] }),
-        })
-      } catch (e) {}
-    }
-
-    return { success: true, transactionId: newTransactionId }
-  } catch (error: any) {
-    console.error("Reorder transaction error:", error)
-    return { success: false, error: error.message || "An unexpected error occurred" }
-  }
-}
 
 /**
  * Retries/Re-initiates payment for an existing Khalti transaction within 1800 seconds (30 minutes).
