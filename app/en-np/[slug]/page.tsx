@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, HelpCircle, QrCode, Download } from "lucide-react"
+import { ArrowLeft, HelpCircle, QrCode, Download, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -58,6 +58,7 @@ export default function ProductDetailPage() {
   const [selectedServer, setSelectedServer] = useState("")
   const [checkoutFieldValues, setCheckoutFieldValues] = useState<Record<string, string>>({})
   const [isProcessing, setIsProcessing] = useState(false)
+  const isSubmittingRef = useRef(false)
   const supabase = createClient()
   const [product, setProduct] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -159,6 +160,8 @@ export default function ProductDetailPage() {
   }
 
   const handlePurchase = async () => {
+    if (isProcessing || isSubmittingRef.current) return
+
     // Validate checkout fields for direct-login and topup
     const missingCheckoutField = (isDirectLoginProduct || isTopupProduct) && checkoutFields.some(
       (f: any) => f.required && !checkoutFieldValues[f.key]?.trim()
@@ -182,6 +185,7 @@ export default function ProductDetailPage() {
       return
     }
 
+    isSubmittingRef.current = true
     setIsProcessing(true)
 
     const selectedDenom = giftCard.denominations.find((d: any) => d.label === selectedDenomination)
@@ -189,7 +193,7 @@ export default function ProductDetailPage() {
 
     try {
       // Add transaction and keep it as "Processing" - no status updates
-      const { transactionId, paymentUrl } = await addTransaction({
+      const { transactionId, paymentUrl, isDuplicate } = await addTransaction({
         product: `${giftCard.name}`,
         amount: selectedDenom?.label || selectedDenomination,
         price: `${selectedDenom?.price}`,
@@ -200,6 +204,11 @@ export default function ProductDetailPage() {
         productCategory: product?.category || (isTopupProduct ? "topup" : isDirectLoginProduct ? "direct-login" : "digital-goods"),
         guestData: isTopupProduct && !topupHasCheckout ? { userId, server: selectedServer } : null,
       })
+
+      if (isDuplicate || !transactionId) {
+        // Silently drop duplicate without error toast; let primary order redirect in background
+        return
+      }
 
       // Encrypt checkout field values
       if ((isDirectLoginProduct || isTopupProduct) && Object.keys(checkoutFieldValues).length > 0) {
@@ -269,6 +278,11 @@ export default function ProductDetailPage() {
         setCheckoutFieldValues({})
       }, 2000)
     } catch (error: any) {
+      if (error?.message === "SILENT_COOLDOWN" || error?.isDuplicate) {
+        // Silently ignore duplicate request; keep loading state active while the first request completes
+        return
+      }
+      isSubmittingRef.current = false
       console.error("Error adding transaction:", error)
       setIsProcessing(false)
       setShowQRDialog(false)
@@ -863,10 +877,17 @@ export default function ProductDetailPage() {
                     setShowQRDialog(true)
                   }
                 }}
-                disabled={!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !topupHasCheckout && (!userId || (product.servers && product.servers.length > 0 && !selectedServer))) || ((isDirectLoginProduct || topupHasCheckout) && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
-                className="w-full mt-6 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white py-3 text-lg font-semibold"
+                disabled={isProcessing || !selectedDenomination || !selectedPayment || !email || (isTopupProduct && !topupHasCheckout && (!userId || (product.servers && product.servers.length > 0 && !selectedServer))) || ((isDirectLoginProduct || topupHasCheckout) && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
+                className="w-full mt-6 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white py-3 text-lg font-semibold flex items-center justify-center gap-2"
               >
-                Proceed to Payment
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  "Proceed to Payment"
+                )}
               </Button>
 
               <div className="mt-4 text-xs text-brand-light-gray leading-relaxed">
@@ -1010,9 +1031,16 @@ export default function ProductDetailPage() {
               <Button
                 onClick={handlePurchase}
                 disabled={isProcessing}
-                className="flex-1 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white"
+                className="flex-1 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white flex items-center justify-center gap-2"
               >
-                {isProcessing ? "Processing..." : "I've Made Payment"}
+                {isProcessing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  "I've Made Payment"
+                )}
               </Button>
             </div>
           </div>

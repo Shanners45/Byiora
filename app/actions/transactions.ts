@@ -22,12 +22,27 @@ interface TransactionData {
  * Adds a new transaction (for both guest and authenticated users)
  * Uses Service Role to bypass RLS and allow returning inserted data
  */
-export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any; paymentUrl?: string }> {
+export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any; paymentUrl?: string; isDuplicate?: boolean }> {
   try {
-    // SECURITY: Per-IP rate limiting (3 orders per 10 minutes per IP)
+    // SECURITY: Double-submission / Rapid-click cooldown (1 order every 6 seconds per IP)
     const h = await headers()
     const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
-    const rl = await rateLimit(`order:${ip}`, { windowMs: 600_000, max: 6 })
+    const cooldownIp = await rateLimit(`order-cooldown:${ip}`, { windowMs: 6_000, max: 1 })
+    if (!cooldownIp.ok) {
+      return { success: false, error: "SILENT_COOLDOWN", isDuplicate: true }
+    }
+
+    // SECURITY: Cooldown by customer email (prevents rapid multi-tab spam)
+    if (transactionData.email) {
+      const cleanEmail = transactionData.email.trim().toLowerCase()
+      const cooldownEmail = await rateLimit(`order-email-cooldown:${cleanEmail}`, { windowMs: 6_000, max: 1 })
+      if (!cooldownEmail.ok) {
+        return { success: false, error: "SILENT_COOLDOWN", isDuplicate: true }
+      }
+    }
+
+    // SECURITY: Per-IP rate limiting (5 orders per 10 minutes per IP)
+    const rl = await rateLimit(`order:${ip}`, { windowMs: 600_000, max: 5 })
     if (!rl.ok) {
       return { success: false, error: "Too many orders. Please wait a few minutes and try again." }
     }
@@ -226,6 +241,17 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         })
       } catch (emailErr) {
         console.error("Failed to send static order confirmation email:", emailErr)
+      }
+    }
+
+    // Sync customer email to Resend audience for broadcasts (both static & dynamic QR, with anti-spam check)
+    if (transactionData.email) {
+      try {
+        const { addCustomerToAudience } = await import("@/lib/email/resend")
+        const customerName = transactionData.guestData?.name || actualUserName || transactionData.email.split('@')[0]
+        addCustomerToAudience(transactionData.email, customerName).catch(() => {})
+      } catch (audienceErr) {
+        console.error("Resend audience sync error (non-blocking):", audienceErr)
       }
     }
 

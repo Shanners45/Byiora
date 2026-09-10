@@ -69,6 +69,12 @@ export async function updateSession(request: NextRequest) {
   // │ ADMIN ROUTES — Layered protection
   // └──────────────────────────────────────────────────────────────────────────
   if (isAdminRoute) {
+    // Root /admin access -> immediately redirect to /admin/login at HTTP level (307)
+    if (pathname === "/admin") {
+      url.pathname = "/admin/login"
+      return NextResponse.redirect(url)
+    }
+
     // ── Layer A: Admin Login — strict brute-force shield (5/min per IP) ────
     if (pathname === "/admin/login") {
       if (isMutation) {

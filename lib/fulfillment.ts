@@ -161,6 +161,28 @@ export async function fulfillOrderDirectly({
       console.error("[FULFILLMENT] Failed to send email:", emailErr)
     }
 
+    // 5b. In-App Notification for registered users
+    if (txn.user_id) {
+      try {
+        const notifTitle = decryptedCode
+          ? "Order Completed! 🎉"
+          : "Payment Verified ✅"
+        const notifMessage = decryptedCode
+          ? `Your order for ${txn.product_name} (${txn.amount}) is complete! Check your email or transaction history for your gift card code.`
+          : `Your payment for ${txn.product_name} (${txn.amount}) has been verified and is being processed. You'll be notified once your order is ready.`
+
+        await supabase.from("notifications").insert({
+          title: notifTitle,
+          message: notifMessage,
+          type: decryptedCode ? "success" : "info",
+          user_id: txn.user_id,
+          is_read: false,
+        })
+      } catch (notifErr) {
+        console.error("[FULFILLMENT] Failed to insert notification:", notifErr)
+      }
+    }
+
     // 6. Discord Webhook Notification
     if (process.env.DISCORD_WEBHOOK_URL) {
       try {

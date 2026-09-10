@@ -46,7 +46,7 @@ interface AuthContextType {
       productCategory?: string
       guestData?: any
     },
-  ) => Promise<{ transactionId: string, paymentUrl?: string }>
+  ) => Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean }>
   refreshTransactions: () => Promise<void>
   isLoading: boolean
 }
@@ -263,13 +263,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       productCategory?: string
       guestData?: any
     },
-  ): Promise<{ transactionId: string, paymentUrl?: string }> => {
+  ): Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean }> => {
     try {
       // Use Server Action with Service Role to bypass RLS
       const result = await addTransactionAction({
         ...transactionData,
         userId: user?.id || null,
       })
+
+      if (result.error === "SILENT_COOLDOWN" || result.isDuplicate) {
+        return { transactionId: result.transactionId || "", isDuplicate: true }
+      }
 
       if (!result.success || result.error) {
         throw new Error(result.error || "Failed to add transaction")

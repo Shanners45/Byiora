@@ -7,6 +7,77 @@ function getResend() {
   return new Resend(key)
 }
 
+/**
+ * Adds legitimate customer emails to Resend Audience for broadcasts & updates.
+ * Anti-spam conditions:
+ * 1. Valid email format validation.
+ * 2. Excludes test / fake / bot accounts (e.g. test@, fake@, admin@).
+ * 3. Enforces trusted reputable email providers (Gmail, Outlook, Yahoo, iCloud, Hotmail).
+ * 4. Graceful and non-blocking — never breaks order processing or email sending.
+ */
+export async function addCustomerToAudience(email: string, firstName?: string) {
+  try {
+    if (!email || typeof email !== "string") return
+
+    const cleanEmail = email.trim().toLowerCase()
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
+    if (!emailRegex.test(cleanEmail)) return
+
+    const [userPart, domain] = cleanEmail.split("@")
+    if (!userPart || !domain) return
+
+    // 1. Exclude obvious test / fake addresses
+    if (
+      userPart === "test" ||
+      userPart === "admin" ||
+      userPart === "demo" ||
+      userPart === "fake" ||
+      userPart === "spam" ||
+      userPart.startsWith("test+") ||
+      userPart.startsWith("noreply")
+    ) {
+      return
+    }
+
+    // 2. Trusted reputable domains (like before, focusing on Gmail and major reliable providers)
+    const TRUSTED_DOMAINS = [
+      "gmail.com",
+      "googlemail.com",
+      "yahoo.com",
+      "outlook.com",
+      "hotmail.com",
+      "icloud.com",
+    ]
+
+    if (!TRUSTED_DOMAINS.includes(domain)) {
+      return
+    }
+
+    const resend = getResend()
+    const audienceId = process.env.RESEND_AUDIENCE_ID || "96e1b97d-c7bf-4293-92a2-71bac425b6c7"
+
+    const cleanFirstName = firstName ? sanitizeHtml(firstName).trim() : userPart
+
+    const payload: any = {
+      email: cleanEmail,
+      firstName: cleanFirstName,
+      unsubscribed: false,
+    }
+
+    if (audienceId) {
+      payload.audienceId = audienceId
+    }
+
+    await resend.contacts.create(payload)
+  } catch (err: any) {
+    // Non-blocking: Silently ignore duplicates or transient errors
+    if (err?.message?.includes("already exists") || err?.statusCode === 409) {
+      return
+    }
+    console.error("[RESEND AUDIENCE] Non-blocking sync error:", err?.message || err)
+  }
+}
+
 export async function sendWelcomeEmail(input: { email: string; userName?: string }) {
   const resend = getResend()
   const email = input.email.trim().toLowerCase()
@@ -35,6 +106,9 @@ export async function sendWelcomeEmail(input: { email: string; userName?: string
   </div>
 </div>
   `
+
+  // Non-blocking audience sync with anti-spam check
+  addCustomerToAudience(email, userName).catch(() => {})
 
   return await resend.emails.send({
     from: "Byiora <noreply@byiora.com.np>",
@@ -139,6 +213,9 @@ export async function sendOrderPlacedEmail(input: {
 </div>
   `
 
+  // Non-blocking audience sync with anti-spam check
+  addCustomerToAudience(email, userName).catch(() => {})
+
   return await resend.emails.send({
     from: "Byiora <order-status@byiora.com.np>",
     replyTo: "support@byiora.com.np",
@@ -179,12 +256,6 @@ export async function sendGiftcardCodeEmail(input: {
     </div>
 
     <div style="text-align: center; padding: 35px 40px 10px;">
-      <div style="display: inline-block; background-color: #F4F0F9; border-radius: 50%; padding: 18px; margin-bottom: 15px;">
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#6B3FA0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-          <polyline points="22 4 12 14.01 9 11.01"></polyline>
-        </svg>
-      </div>
       <h2 style="color: #4A2A70; font-size: 22px; font-weight: 700; margin: 0;">Order Successful!</h2>
     </div>
 
@@ -218,6 +289,9 @@ export async function sendGiftcardCodeEmail(input: {
 
   </div>
 </div>`
+
+  // Non-blocking audience sync with anti-spam check
+  addCustomerToAudience(email, userName).catch(() => {})
 
   return await resend.emails.send({
     from: "Byiora <order-status@byiora.com.np>",
