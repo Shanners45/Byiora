@@ -1,4 +1,4 @@
-import { Facebook, Instagram, Youtube, Clock, Shield, CreditCard, Headphones } from "lucide-react"
+import { Facebook, Instagram, Youtube, Clock, Shield, CreditCard, Headphones, Mail, BadgeCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
 import Link from "next/link"
@@ -88,9 +88,10 @@ export function Footer() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="border-brand-charcoal text-brand-charcoal hover:bg-brand-charcoal hover:text-white"
+                  className="border-brand-charcoal text-brand-charcoal hover:bg-brand-charcoal hover:text-white flex items-center gap-1.5"
                 >
-                  📧 Contact Us
+                  <Mail className="h-4 w-4" />
+                  Contact Us
                 </Button>
               </a>
             </div>
@@ -98,10 +99,20 @@ export function Footer() {
             {/* Country */}
             <div>
               <h3 className="font-bold text-brand-charcoal mb-4">Country</h3>
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🇳🇵</span>
+              <div className="flex items-center gap-1.5">
+                <Image
+                  src="/images/nepal-flag.svg"
+                  alt="Nepal Flag"
+                  width={20}
+                  height={20}
+                  className="w-4 h-4 object-contain drop-shadow-sm -translate-y-[2.5px]"
+                />
                 <span className="text-brand-charcoal font-medium">Nepal</span>
               </div>
+              <p className="text-xs text-brand-charcoal/90 font-medium mt-1.5 tracking-wide flex items-center gap-1.5">
+                <BadgeCheck className="h-4 w-4 text-emerald-700 shrink-0" />
+                <span>PAN: 151285437</span>
+              </p>
             </div>
 
             {/* Stay updated */}

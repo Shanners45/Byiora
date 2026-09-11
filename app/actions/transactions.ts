@@ -251,8 +251,8 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     if (transactionData.email) {
       try {
         const { addCustomerToAudience } = await import("@/lib/email/resend")
-        const customerName = transactionData.guestData?.name || actualUserName || transactionData.email.split('@')[0]
         const isRegistered = !!actualUserId
+        const customerName = isRegistered ? actualUserName : undefined
         addCustomerToAudience(transactionData.email, customerName, isRegistered).catch(() => {})
       } catch (audienceErr) {
         console.error("Resend audience sync error (non-blocking):", audienceErr)

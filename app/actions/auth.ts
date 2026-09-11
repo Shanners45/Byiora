@@ -104,11 +104,12 @@ export async function verifySignupOtp(email: string, token: string) {
       console.error("User insert after OTP:", insertError.message)
     }
 
-    // Send welcome email in background
+    // Send welcome email
     try {
-      sendWelcomeEmail({ email: email.toLowerCase().trim(), userName }).catch((e) =>
-        console.error("Welcome email background error:", e),
-      )
+      const emailRes = await sendWelcomeEmail({ email: email.toLowerCase().trim(), userName })
+      if (emailRes?.error) {
+        console.error("Resend welcome email error:", emailRes.error)
+      }
     } catch (e) {
       console.error("Welcome email trigger failed:", e)
     }
@@ -224,9 +225,10 @@ export async function verifyRecoveryAndResetPassword(
 
   // Send password changed confirmation email
   try {
-    sendPasswordChangedEmail({ email: email.toLowerCase().trim() }).catch((e) =>
-      console.error("Password changed email error:", e),
-    )
+    const emailRes = await sendPasswordChangedEmail({ email: email.toLowerCase().trim() })
+    if (emailRes?.error) {
+      console.error("Resend password changed email error:", emailRes.error)
+    }
   } catch (e) {
     console.error("Password changed email trigger failed:", e)
   }
@@ -275,9 +277,10 @@ export async function changePasswordAction(
 
   // Send password changed email notification
   try {
-    sendPasswordChangedEmail({ email: user.email.toLowerCase().trim() }).catch((e) =>
-      console.error("Password changed email error:", e),
-    )
+    const emailRes = await sendPasswordChangedEmail({ email: user.email.toLowerCase().trim() })
+    if (emailRes?.error) {
+      console.error("Resend password changed email error:", emailRes.error)
+    }
   } catch (e) {
     console.error("Password changed email trigger failed:", e)
   }

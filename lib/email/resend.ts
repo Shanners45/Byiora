@@ -56,18 +56,20 @@ export async function addCustomerToAudience(email: string, firstName?: string, i
     const resend = getResend()
     const audienceId = process.env.RESEND_AUDIENCE_ID || "96e1b97d-c7bf-4293-92a2-71bac425b6c7"
 
-    const cleanFirstName = firstName ? sanitizeHtml(firstName).trim() : userPart
-
     const payload: any = {
       email: cleanEmail,
-      firstName: cleanFirstName,
       unsubscribed: false,
     }
 
-    // ONLY attach the "Registered USERS" segment if the user is an actual registered account on Byiora.
-    // Guest orders are added to General Contacts (for broadcasts) WITHOUT the Registered USERS segment.
-    if (isRegistered && audienceId) {
-      payload.audienceId = audienceId
+    // ONLY attach name and the "Registered USERS" segment if the user is an actual registered account.
+    // Guest orders are stored as plain email contacts without names and WITHOUT the Registered USERS segment.
+    if (isRegistered) {
+      if (firstName && firstName.trim() && firstName.trim().toLowerCase() !== "customer" && firstName.trim().toLowerCase() !== "valued customer") {
+        payload.firstName = sanitizeHtml(firstName).trim()
+      }
+      if (audienceId) {
+        payload.audienceId = audienceId
+      }
     }
 
     await resend.contacts.create(payload)
@@ -215,8 +217,8 @@ export async function sendOrderPlacedEmail(input: {
 </div>
   `
 
-  // Non-blocking audience sync with anti-spam check (Only tag Registered USERS if not guest)
-  addCustomerToAudience(email, userName, !input.isGuest).catch(() => {})
+  // Non-blocking audience sync with anti-spam check (Only tag Registered USERS if not guest, no names for guests)
+  addCustomerToAudience(email, !input.isGuest ? userName : undefined, !input.isGuest).catch(() => {})
 
   return await resend.emails.send({
     from: "Byiora <order-status@byiora.com.np>",
@@ -292,8 +294,8 @@ export async function sendGiftcardCodeEmail(input: {
   </div>
 </div>`
 
-  // Non-blocking audience sync with anti-spam check (Only tag Registered USERS if not guest)
-  addCustomerToAudience(email, userName, !input.isGuest).catch(() => {})
+  // Non-blocking audience sync with anti-spam check (Only tag Registered USERS if not guest, no names for guests)
+  addCustomerToAudience(email, !input.isGuest ? userName : undefined, !input.isGuest).catch(() => {})
 
   return await resend.emails.send({
     from: "Byiora <order-status@byiora.com.np>",
