@@ -126,6 +126,23 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       if (userData?.name) {
         actualUserName = userData.name
       }
+    } else if (transactionData.email) {
+      // Guest checkout: Check if the email belongs to a registered user
+      // If so, silently link the order to their account (industry standard: Shopify, WooCommerce, etc.)
+      // This is server-side only — the guest user sees no difference
+      const cleanEmail = transactionData.email.trim().toLowerCase()
+      const { data: matchedUser } = await serviceSupabase
+        .from("users")
+        .select("id, name")
+        .eq("email", cleanEmail)
+        .single()
+
+      if (matchedUser) {
+        actualUserId = matchedUser.id
+        if (matchedUser.name) {
+          actualUserName = matchedUser.name
+        }
+      }
     }
 
     // Look up the payment method category from the database

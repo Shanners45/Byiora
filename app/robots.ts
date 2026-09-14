@@ -6,17 +6,56 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/admin", "/admin/*", "/api/*", "/settings", "/transactions", "/checkout/*", "/verify-guest/*"],
+        disallow: [
+          "/admin",
+          "/admin/*",
+          "/api/*",
+          "/auth/*",
+          "/settings",
+          "/transactions",
+          "/checkout/*",
+          "/verify-guest/*",
+          "/monitoring-tunnel",
+        ],
+      },
+      // AI Answer Engine bots — explicitly ALLOW for AEO visibility
+      {
+        userAgent: "GPTBot",
+        allow: "/",
+        disallow: ["/admin", "/admin/*", "/api/*", "/auth/*", "/settings", "/transactions", "/checkout/*", "/verify-guest/*"],
       },
       {
-        userAgent: "Bingbot",
+        userAgent: "ChatGPT-User",
         allow: "/",
-        disallow: ["/admin", "/admin/*", "/api/*", "/settings", "/transactions", "/checkout/*", "/verify-guest/*"],
+        disallow: ["/admin", "/admin/*", "/api/*", "/auth/*", "/settings", "/transactions", "/checkout/*", "/verify-guest/*"],
       },
       {
-        userAgent: "Googlebot",
+        userAgent: "Google-Extended",
         allow: "/",
-        disallow: ["/admin", "/admin/*", "/api/*", "/settings", "/transactions", "/checkout/*", "/verify-guest/*"],
+        disallow: ["/admin", "/admin/*", "/api/*", "/auth/*", "/settings", "/transactions", "/checkout/*", "/verify-guest/*"],
+      },
+      {
+        userAgent: "PerplexityBot",
+        allow: "/",
+        disallow: ["/admin", "/admin/*", "/api/*", "/auth/*", "/settings", "/transactions", "/checkout/*", "/verify-guest/*"],
+      },
+      {
+        userAgent: "ClaudeBot",
+        allow: "/",
+        disallow: ["/admin", "/admin/*", "/api/*", "/auth/*", "/settings", "/transactions", "/checkout/*", "/verify-guest/*"],
+      },
+      // Block known bad bots
+      {
+        userAgent: "AhrefsBot",
+        disallow: "/",
+      },
+      {
+        userAgent: "SemrushBot",
+        disallow: "/",
+      },
+      {
+        userAgent: "MJ12bot",
+        disallow: "/",
       },
     ],
     sitemap: "https://www.byiora.com.np/sitemap.xml",

@@ -15,6 +15,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 1.0,
     },
     {
+      url: `${BASE_URL}/en-np/sign-up`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
+    {
       url: `${BASE_URL}/contact`,
       lastModified: new Date(),
       changeFrequency: "monthly",
@@ -40,31 +46,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
   ]
 
-  // Category routes
+  // Category routes — higher priority since these are key landing pages
   const categoryRoutes: MetadataRoute.Sitemap = [
     {
       url: `${BASE_URL}/category/topup`,
       lastModified: new Date(),
       changeFrequency: "daily",
-      priority: 0.3,
+      priority: 0.8,
     },
     {
       url: `${BASE_URL}/category/digital-goods`,
       lastModified: new Date(),
       changeFrequency: "daily",
-      priority: 0.3,
+      priority: 0.8,
     },
     {
       url: `${BASE_URL}/category/games`,
       lastModified: new Date(),
       changeFrequency: "daily",
-      priority: 0.3,
+      priority: 0.7,
     },
     {
       url: `${BASE_URL}/category/direct-login`,
       lastModified: new Date(),
       changeFrequency: "daily",
-      priority: 0.3,
+      priority: 0.7,
     },
   ]
 

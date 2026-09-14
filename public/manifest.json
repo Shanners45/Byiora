@@ -1,12 +1,15 @@
 {
+  "id": "/",
   "name": "Byiora – Premium Game Top-Up Nepal",
   "short_name": "Byiora",
   "description": "Nepal's trusted platform for game top-ups & gift cards. Buy Steam, PUBG, Valorant with instant digital delivery. Pay via eSewa, Khalti, Fonepay.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#1A1A2E",
   "theme_color": "#00BCD4",
   "orientation": "portrait-primary",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon.png",
@@ -18,6 +21,26 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Browse Gift Cards",
+      "short_name": "Gift Cards",
+      "url": "/category/digital-goods",
+      "icons": [{ "src": "/icon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Game Top-ups",
+      "short_name": "Top-ups",
+      "url": "/category/topup",
+      "icons": [{ "src": "/icon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Orders",
+      "short_name": "Orders",
+      "url": "/transactions",
+      "icons": [{ "src": "/icon.png", "sizes": "192x192" }]
     }
   ],
   "categories": ["shopping", "games", "entertainment"],

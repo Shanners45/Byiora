@@ -329,10 +329,10 @@ export async function sendRecoveryEmailAction(transactionId: string) {
     }
 
     const isGuest = !txn.user_id
-    const isDynamic = txn.payment_category === "nepalpay" || txn.payment_category === "fonepay"
+    const isDynamic = txn.payment_category === "nepalpay" || txn.payment_category === "fonepay" || txn.payment_category === "khalti"
 
     if (!isDynamic) {
-      return { error: "Recovery emails are only available for dynamic QR payments (Fonepay/NepalPay)" }
+      return { error: "Recovery emails are only available for dynamic QR payments (Fonepay/NepalPay/Khalti)" }
     }
 
     let userName = "Customer"

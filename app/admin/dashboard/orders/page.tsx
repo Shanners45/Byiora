@@ -465,8 +465,11 @@ export default function OrdersPage() {
   }
 
   const getUIDForDisplay = (transaction: Transaction) => {
-    // For topup products, UID comes from guest_user_data
+    // For topup products, UID comes from guest_user_data or encrypted_checkout_data
     if (transaction.product_name.toLowerCase().includes("topup") || transaction.product_category === "topup") {
+      if (transaction.encrypted_checkout_data) {
+        return "Encrypted (Topup)"
+      }
       const uid = transaction.guest_user_data?.userId || transaction.guest_user_data?.uid;
       const server = transaction.guest_user_data?.server;
       if (uid) {
@@ -475,12 +478,19 @@ export default function OrdersPage() {
     }
     // For direct-login products, show "Direct Login" label
     if (transaction.product_category === "direct-login") {
+      if (transaction.encrypted_checkout_data) {
+        return "Encrypted (Direct Login)"
+      }
       return "Direct Login"
     }
-    // For digital-goods, show giftcard code if available
+    // For digital-goods, show giftcard code if available, or UID from guest_user_data
     if (transaction.product_category === "digital-goods" || (!transaction.product_category && transaction.product_name)) {
       if (transaction.giftcard_code) {
         return transaction.giftcard_code
+      }
+      const uid = transaction.guest_user_data?.userId || transaction.guest_user_data?.uid;
+      if (uid) {
+        return `UID: ${uid}`
       }
     }
     return "N/A"
@@ -784,51 +794,83 @@ export default function OrdersPage() {
                       })()}
                     </TableCell>
                     <TableCell className="text-[#4B5563] text-sm">
-                      {transaction.product_category === "direct-login" ? (
-                        <DirectLoginCell transaction={transaction} />
-                      ) : transaction.product_category === "topup" ? (
-                        transaction.encrypted_checkout_data ? (
-                          <DirectLoginCell transaction={transaction} />
-                        ) : (
-                          <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono whitespace-pre-wrap">{getUIDForDisplay(transaction)}</span>
+                      {(() => {
+                        const isCancelledDynamic = transaction.status === "Cancelled" && (
+                          transaction.payment_category === "fonepay" ||
+                          transaction.payment_category === "nepalpay" ||
+                          transaction.payment_category === "khalti"
                         )
-                      ) : (transaction.product_category === "digital-goods" || transaction.product_category === "games" || (!transaction.product_category && transaction.product_name)) ? (
-                        transaction.status === "Cancelled" && (transaction.payment_category === "fonepay" || transaction.payment_category === "nepalpay") ? (
-                          <Button
-                            size="sm"
-                            onClick={() => handleSendRecoveryEmail(transaction)}
-                            disabled={sendingRecoveryIds[transaction.id]}
-                            className="h-8 px-3 text-xs bg-amber-500 hover:bg-amber-600 text-white font-medium"
-                          >
-                            {sendingRecoveryIds[transaction.id] ? (
-                              <><RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />Sending...</>
-                            ) : (
-                              <><Mail className="h-3 w-3 mr-1.5" />Send Recovery Email</>
-                            )}
-                          </Button>
-                        ) : (
-                        <div className="flex items-center gap-1.5">
-                          <Input
-                            placeholder="Enter Giftcard Code"
-                            value={giftcardCodes[transaction.id] !== undefined ? giftcardCodes[transaction.id] : (transaction.giftcard_code || '')}
-                            onChange={(e) => setGiftcardCodes(prev => ({ ...prev, [transaction.id]: e.target.value }))}
-                            disabled={["Processing", "Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status)}
-                            readOnly={transaction.status === "Completed"}
-                            className={`w-[170px] h-8 text-xs placeholder:text-gray-500 ${transaction.status === "Completed" ? "bg-green-50 border-green-200 text-green-800 font-mono" : ""}`}
-                          />
-                          <Button
-                            size="sm"
-                            onClick={() => handleSendGiftcardCode(transaction)}
-                            disabled={["Processing", "Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status) || sendingCodeIds[transaction.id]}
-                            className={`h-8 px-2 flex-shrink-0 ${transaction.status === "Completed" ? "bg-green-500 hover:bg-green-500 text-white cursor-not-allowed" : "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"}`}
-                          >
-                            {sendingCodeIds[transaction.id] ? "..." : (transaction.status === "Completed" ? "✓" : <Send className="h-3 w-3" />)}
-                          </Button>
-                        </div>
+
+                        // For ALL cancelled orders with dynamic QR payment, show recovery email button
+                        if (isCancelledDynamic) {
+                          return (
+                            <Button
+                              size="sm"
+                              onClick={() => handleSendRecoveryEmail(transaction)}
+                              disabled={sendingRecoveryIds[transaction.id]}
+                              className="h-8 px-3 text-xs bg-amber-500 hover:bg-amber-600 text-white font-medium"
+                            >
+                              {sendingRecoveryIds[transaction.id] ? (
+                                <><RefreshCw className="h-3 w-3 mr-1.5 animate-spin" />Sending...</>
+                              ) : (
+                                <><Mail className="h-3 w-3 mr-1.5" />Send Recovery Email</>
+                              )}
+                            </Button>
+                          )
+                        }
+
+                        // Direct-login products: always show encrypted data cell
+                        if (transaction.product_category === "direct-login") {
+                          return <DirectLoginCell transaction={transaction} />
+                        }
+
+                        // Topup products: show encrypted data or UID from guest_user_data
+                        if (transaction.product_category === "topup") {
+                          if (transaction.encrypted_checkout_data) {
+                            return <DirectLoginCell transaction={transaction} />
+                          }
+                          return (
+                            <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono whitespace-pre-wrap">
+                              {getUIDForDisplay(transaction)}
+                            </span>
+                          )
+                        }
+
+                        // Digital-goods / games / fallback: show giftcard code input
+                        if (
+                          transaction.product_category === "digital-goods" ||
+                          transaction.product_category === "games" ||
+                          (!transaction.product_category && transaction.product_name)
+                        ) {
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <Input
+                                placeholder="Enter Giftcard Code"
+                                value={giftcardCodes[transaction.id] !== undefined ? giftcardCodes[transaction.id] : (transaction.giftcard_code || '')}
+                                onChange={(e) => setGiftcardCodes(prev => ({ ...prev, [transaction.id]: e.target.value }))}
+                                disabled={["Processing", "Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status)}
+                                readOnly={transaction.status === "Completed"}
+                                className={`w-[170px] h-8 text-xs placeholder:text-gray-500 ${transaction.status === "Completed" ? "bg-green-50 border-green-200 text-green-800 font-mono" : ""}`}
+                              />
+                              <Button
+                                size="sm"
+                                onClick={() => handleSendGiftcardCode(transaction)}
+                                disabled={["Processing", "Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status) || sendingCodeIds[transaction.id]}
+                                className={`h-8 px-2 flex-shrink-0 ${transaction.status === "Completed" ? "bg-green-500 hover:bg-green-500 text-white cursor-not-allowed" : "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"}`}
+                              >
+                                {sendingCodeIds[transaction.id] ? "..." : (transaction.status === "Completed" ? "✓" : <Send className="h-3 w-3" />)}
+                              </Button>
+                            </div>
+                          )
+                        }
+
+                        // Fallback
+                        return (
+                          <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
+                            {getUIDForDisplay(transaction)}
+                          </span>
                         )
-                      ) : (
-                        <span className="bg-gray-100 px-2 py-1 rounded text-xs font-mono">{getUIDForDisplay(transaction)}</span>
-                      )}
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}

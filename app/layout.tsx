@@ -162,6 +162,18 @@ export default function RootLayout({
         <link rel="preconnect" href="https://tkovigthghwpwbtjikyp.supabase.co" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://tkovigthghwpwbtjikyp.supabase.co" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        {/* Service Worker Registration */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').catch(function() {});
+                });
+              }
+            `,
+          }}
+        />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd).replace(/</g, '\\u003c') }}
