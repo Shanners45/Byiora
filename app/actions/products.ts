@@ -149,6 +149,9 @@ export async function updateProductAction(
     revalidatePath("/admin/dashboard/products")
     revalidatePath("/admin/dashboard/products/[id]")
     revalidatePath("/")
+    if (data?.slug) {
+      revalidatePath(`/en-np/${data.slug}`)
+    }
     return { success: true, data }
   } catch (error: any) {
     console.error("Error in updateProductAction:", error)

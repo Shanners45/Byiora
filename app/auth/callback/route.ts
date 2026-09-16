@@ -46,11 +46,12 @@ export async function GET(request: Request) {
             name: userName,
           })
 
-          // Send welcome email in background
+          // Send welcome email (awaited so serverless execution does not terminate before Resend receives it)
           try {
-            sendWelcomeEmail({ email: session.user.email.toLowerCase().trim(), userName }).catch((e) =>
-              console.error("Welcome email background error (Google):", e),
-            )
+            const emailRes = await sendWelcomeEmail({ email: session.user.email.toLowerCase().trim(), userName })
+            if (emailRes?.error) {
+              console.error("Resend welcome email error (Google):", emailRes.error)
+            }
           } catch (e) {
             console.error("Welcome email trigger failed (Google):", e)
           }

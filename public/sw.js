@@ -1,7 +1,7 @@
-// Byiora Service Worker v1
+// Byiora Service Worker v2
 // Provides offline caching, runtime image caching, and offline fallback
 
-const CACHE_VERSION = 'byiora-v1'
+const CACHE_VERSION = 'byiora-v2'
 const OFFLINE_URL = '/offline.html'
 
 // Assets to pre-cache on install (app shell)
@@ -9,6 +9,7 @@ const PRECACHE_ASSETS = [
   OFFLINE_URL,
   '/icon.png',
   '/logo-final.png',
+  '/byiora-logo-full.png',
   '/manifest.json',
 ]
 
@@ -44,9 +45,8 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return
 
-  // Skip Supabase, Sentry, analytics, and other API calls
+  // Skip Supabase auth/API, Sentry, analytics, and other external API calls
   if (
-    url.hostname.includes('supabase.co') ||
     url.hostname.includes('sentry.io') ||
     url.hostname.includes('cloudflareinsights.com') ||
     url.hostname.includes('challenges.cloudflare.com') ||
@@ -81,6 +81,39 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  // Next.js optimized images (/_next/image): stale-while-revalidate with offline logo fallback
+  if (url.pathname.startsWith('/_next/image')) {
+    event.respondWith(
+      caches.match(request).then((cached) => {
+        const fetchPromise = fetch(request)
+          .then((response) => {
+            if (response.ok) {
+              const clone = response.clone()
+              caches.open(CACHE_VERSION).then((cache) => {
+                cache.put(request, clone)
+              })
+            }
+            return response
+          })
+          .catch(() => {
+            // When offline: if request is for the Byiora logo, return pre-cached /logo-final.png
+            if (request.url.includes('logo-final.png') || request.url.includes('byiora-logo')) {
+              return caches.match('/logo-final.png')
+            }
+            return cached
+          })
+
+        return cached || fetchPromise.catch(() => {
+          if (request.url.includes('logo-final.png') || request.url.includes('byiora-logo')) {
+            return caches.match('/logo-final.png')
+          }
+          return cached
+        })
+      })
+    )
+    return
+  }
+
   // For product images from Supabase storage: stale-while-revalidate
   if (
     url.hostname.includes('supabase.co') &&
@@ -104,9 +137,9 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // For static assets (JS, CSS, fonts, local images): cache-first
+  // For static assets (JS, CSS, fonts, local images, icons): cache-first
   if (
-    url.pathname.match(/\.(js|css|woff2?|ttf|png|jpg|jpeg|svg|webp|avif|ico)$/) ||
+    url.pathname.match(/\.(js|css|woff2?|ttf|png|jpg|jpeg|svg|webp|avif|ico|gif)$/i) ||
     url.hostname.includes('fonts.gstatic.com') ||
     url.hostname.includes('fonts.googleapis.com')
   ) {
@@ -121,6 +154,12 @@ self.addEventListener('fetch', (event) => {
             })
           }
           return response
+        }).catch(() => {
+          // If a logo image fails offline, fallback to cached /logo-final.png
+          if (request.url.includes('logo-final.png') || request.url.includes('byiora-logo')) {
+            return caches.match('/logo-final.png')
+          }
+          return cached
         })
       })
     )

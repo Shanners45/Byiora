@@ -171,6 +171,7 @@ export function Header() {
                         height={40}
                         className="object-contain"
                         priority
+                        unoptimized
                       />
                     </div>
                   </div>
@@ -306,6 +307,7 @@ export function Header() {
                   height={40}
                   className="object-contain"
                   priority
+                  unoptimized
                 />
               </div>
             </div>

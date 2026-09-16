@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Offline – Byiora</title>
   <link rel="icon" href="/icon.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,19 +15,26 @@
       box-sizing: border-box;
     }
 
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      max-height: 100dvh;
+      overflow: hidden;
+    }
+
     body {
       font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background-color: #6B3FA0;
       color: #FFFFFF;
-      min-height: 100vh;
       display: flex;
       flex-direction: column;
+      justify-content: space-between;
     }
 
     /* Header bar with Byiora logo */
     .header {
       width: 100%;
-      height: 64px;
+      height: 56px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -37,7 +44,7 @@
     }
 
     .header-logo {
-      height: 38px;
+      height: 34px;
       width: auto;
       object-fit: contain;
       filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.15));
@@ -46,14 +53,15 @@
     /* Main centered content */
     .main {
       flex: 1;
+      min-height: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2rem 1.5rem;
+      padding: 1rem 1.5rem;
     }
 
     .content {
-      max-width: 420px;
+      max-width: 380px;
       width: 100%;
       display: flex;
       flex-direction: column;
@@ -62,35 +70,37 @@
     }
 
     .icon-box {
-      width: 64px;
-      height: 64px;
+      width: 56px;
+      height: 56px;
       border-radius: 50%;
       background-color: rgba(255, 255, 255, 0.12);
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
       color: #FFFFFF;
+      flex-shrink: 0;
     }
 
     .icon-box svg {
-      width: 32px;
-      height: 32px;
+      width: 28px;
+      height: 28px;
     }
 
     h1 {
-      font-size: 1.6rem;
+      font-size: 1.35rem;
       font-weight: 800;
       color: #FFFFFF;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.35rem;
       letter-spacing: -0.01em;
     }
 
     p {
-      font-size: 1rem;
+      font-size: 0.9rem;
       color: rgba(255, 255, 255, 0.8);
-      line-height: 1.5;
-      margin-bottom: 2rem;
+      line-height: 1.4;
+      margin-bottom: 1.25rem;
+      max-width: 280px;
     }
 
     .retry-btn {
@@ -98,17 +108,18 @@
       align-items: center;
       justify-content: center;
       gap: 0.5rem;
-      padding: 0.75rem 2.25rem;
+      padding: 0.65rem 2rem;
       background-color: #4DA8DA;
       color: #FFFFFF;
       font-family: 'Nunito', sans-serif;
-      font-size: 1rem;
+      font-size: 0.95rem;
       font-weight: 700;
       border: none;
       border-radius: 8px;
       cursor: pointer;
       transition: background-color 0.15s ease, transform 0.1s ease;
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+      flex-shrink: 0;
     }
 
     .retry-btn:hover {
@@ -121,10 +132,10 @@
 
     /* Footer */
     .footer {
-      padding: 1.25rem;
+      padding: 0.75rem 1rem;
       text-align: center;
       color: rgba(255, 255, 255, 0.4);
-      font-size: 0.85rem;
+      font-size: 0.75rem;
       font-weight: 600;
       letter-spacing: 0.03em;
       flex-shrink: 0;

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Save, Upload, Trash2, Pencil, HelpCircle, Plus, ArrowUp, ArrowDown, ArrowUpToLine, ArrowDownToLine } from "lucide-react"
+import { ArrowLeft, Save, Upload, Trash2, Pencil, HelpCircle, Plus, ArrowUp, ArrowDown, ArrowUpToLine, ArrowDownToLine, GripVertical } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import Image from "next/image"
@@ -55,6 +55,8 @@ export default function AddProductPage() {
   const [newDenomInStock, setNewDenomInStock] = useState(true)
   const [newDenomCategoryId, setNewDenomCategoryId] = useState<string>("")
   const [editingDenomIndex, setEditingDenomIndex] = useState<number | null>(null)
+  const [draggedDenomIndex, setDraggedDenomIndex] = useState<number | null>(null)
+  const [dragOverDenomIndex, setDragOverDenomIndex] = useState<number | null>(null)
 
   // Denomination Categories state
   const [denominationCategories, setDenominationCategories] = useState<Array<{ id: string; name: string; icon_url?: string; description?: string }>>([])
@@ -309,6 +311,83 @@ export default function AddProductPage() {
     setNewDenomInStock(denom.in_stock !== false)
     setNewDenomCategoryId(denom.categoryId || "")
     setEditingDenomIndex(index)
+  }
+
+  const handleDenomDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedDenomIndex(index)
+    e.dataTransfer.effectAllowed = "move"
+    e.dataTransfer.setData("text/plain", `${index}`)
+  }
+
+  const handleDenomDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = "move"
+    if (dragOverDenomIndex !== index) {
+      setDragOverDenomIndex(index)
+    }
+  }
+
+  const handleDenomDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault()
+    if (draggedDenomIndex === null || draggedDenomIndex === dropIndex) {
+      setDraggedDenomIndex(null)
+      setDragOverDenomIndex(null)
+      return
+    }
+    const updated = [...denominations]
+    const [movedItem] = updated.splice(draggedDenomIndex, 1)
+    updated.splice(dropIndex, 0, movedItem)
+    setDenominations(updated)
+    setDraggedDenomIndex(null)
+    setDragOverDenomIndex(null)
+  }
+
+  const handleDenomDragEnd = () => {
+    setDraggedDenomIndex(null)
+    setDragOverDenomIndex(null)
+  }
+
+  // Mobile touch drag-and-drop support
+  const touchDraggedIndexRef = useRef<number | null>(null)
+  const touchOverIndexRef = useRef<number | null>(null)
+
+  const handleTouchStart = (index: number) => {
+    touchDraggedIndexRef.current = index
+    touchOverIndexRef.current = index
+    setDraggedDenomIndex(index)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchDraggedIndexRef.current === null) return
+    const touch = e.touches[0]
+    if (!touch) return
+
+    const el = document.elementFromPoint(touch.clientX, touch.clientY)
+    const row = el?.closest("[data-denom-index]")
+    if (row) {
+      const idx = Number(row.getAttribute("data-denom-index"))
+      if (!isNaN(idx) && idx !== touchOverIndexRef.current) {
+        touchOverIndexRef.current = idx
+        setDragOverDenomIndex(idx)
+      }
+    }
+  }
+
+  const handleTouchEnd = () => {
+    const from = touchDraggedIndexRef.current
+    const to = touchOverIndexRef.current
+
+    if (from !== null && to !== null && from !== to) {
+      const updated = [...denominations]
+      const [moved] = updated.splice(from, 1)
+      updated.splice(to, 0, moved)
+      setDenominations(updated)
+    }
+
+    touchDraggedIndexRef.current = null
+    touchOverIndexRef.current = null
+    setDraggedDenomIndex(null)
+    setDragOverDenomIndex(null)
   }
 
   const addDenomCategory = () => {
@@ -961,6 +1040,7 @@ export default function AddProductPage() {
               <Table>
                 <TableHeader className="bg-[#F9FAFB]">
                   <TableRow>
+                    <TableHead className="w-[44px] text-center text-[#4B5563]">Move</TableHead>
                     <TableHead className="text-[#4B5563]">Price</TableHead>
                     <TableHead className="text-[#4B5563]">Label</TableHead>
                     {showCategories && <TableHead className="text-[#4B5563]">Category</TableHead>}
@@ -969,9 +1049,35 @@ export default function AddProductPage() {
                     <TableHead className="w-[100px] text-right text-[#4B5563]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody onDragLeave={() => setDragOverDenomIndex(null)}>
                   {denominations.map((denom, index) => (
-                    <TableRow key={index} className="border-t border-[#E5E7EB]">
+                    <TableRow
+                      key={index}
+                      data-denom-index={index}
+                      onDragOver={(e) => handleDenomDragOver(e, index)}
+                      onDrop={(e) => handleDenomDrop(e, index)}
+                      className={`border-t border-[#E5E7EB] transition-colors duration-150 ${
+                        draggedDenomIndex === index
+                          ? "opacity-35 bg-purple-50"
+                          : dragOverDenomIndex === index
+                          ? "border-t-2 border-t-[#6B3FA0] bg-[#FEF3C7]/60"
+                          : ""
+                      }`}
+                    >
+                      <TableCell className="w-[44px] text-center p-2">
+                        <div
+                          draggable
+                          onDragStart={(e) => handleDenomDragStart(e, index)}
+                          onDragEnd={handleDenomDragEnd}
+                          onTouchStart={() => handleTouchStart(index)}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={handleTouchEnd}
+                          className="inline-flex items-center justify-center p-1.5 rounded-md text-gray-400 hover:text-gray-800 hover:bg-gray-200/70 cursor-grab active:cursor-grabbing transition-colors select-none touch-none"
+                          title="Hold and drag to move placement"
+                        >
+                          <GripVertical className="h-4 w-4" />
+                        </div>
+                      </TableCell>
                       <TableCell className="text-[#1F2937] font-medium">Rs. {denom.price}</TableCell>
                       <TableCell className="text-[#4B5563]">{denom.label}</TableCell>
                       {showCategories && (
