@@ -12,6 +12,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Facebook, Instagram, Youtube, ArrowLeft, KeyRound, ShieldCheck, Loader2, CheckCircle2, Mail, BadgeCheck } from "lucide-react"
 import { requestPasswordReset, verifyRecoveryAndResetPassword } from "@/app/actions/auth"
+import { createClient } from "@/lib/supabase/client"
 
 const OTP_LENGTH = 6
 const STORAGE_KEY = "byiora_pw_reset"
@@ -50,6 +51,7 @@ function isRateLimitError(msg: string): boolean {
 export default function ForgotPasswordPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [isLoading, setIsLoading] = useState(false)
+  const [isRecoverySession, setIsRecoverySession] = useState(false)
 
   // Form fields
   const [email, setEmail] = useState("")
@@ -61,6 +63,25 @@ export default function ForgotPasswordPage() {
   const [otp, setOtp] = useState(Array(OTP_LENGTH).fill(""))
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
   const [resendCooldown, setResendCooldown] = useState(0)
+
+  // Detect recovery session from direct email action link
+  useEffect(() => {
+    try {
+      const supabase = createClient()
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === "PASSWORD_RECOVERY" || (session && (window.location.hash.includes("type=recovery") || window.location.search.includes("mode=recovery")))) {
+          setIsRecoverySession(true)
+          if (session?.user?.email) setEmail(session.user.email)
+          setStep(2)
+        }
+      })
+      if (window.location.hash.includes("type=recovery") || window.location.search.includes("mode=recovery")) {
+        setIsRecoverySession(true)
+        setStep(2)
+      }
+      return () => subscription.unsubscribe()
+    } catch {}
+  }, [])
 
   // Restore state from localStorage on mount
   useEffect(() => {
@@ -152,18 +173,42 @@ export default function ForgotPasswordPage() {
   // Step 2: Verify OTP + set new password
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    const code = otp.join("")
 
-    if (code.length !== OTP_LENGTH) {
-      toast.error(`Please enter the complete ${OTP_LENGTH}-digit code`)
-      return
-    }
     if (newPassword.length < 8) {
       toast.error("Password must be at least 8 characters long")
       return
     }
     if (newPassword !== confirmPassword) {
       toast.error("Passwords do not match")
+      return
+    }
+
+    if (isRecoverySession) {
+      setIsLoading(true)
+      try {
+        const supabase = createClient()
+        const { error: updateError } = await supabase.auth.updateUser({
+          password: newPassword,
+        })
+        if (updateError) {
+          toast.error(updateError.message)
+          return
+        }
+        clearResetState()
+        setStep(3)
+        toast.success("Password reset successfully!")
+      } catch (error: any) {
+        console.error("Recovery password reset error:", error)
+        toast.error(error.message || "Reset failed. Please try again.")
+      } finally {
+        setIsLoading(false)
+      }
+      return
+    }
+
+    const code = otp.join("")
+    if (code.length !== OTP_LENGTH) {
+      toast.error(`Please enter the complete ${OTP_LENGTH}-digit code`)
       return
     }
 
@@ -262,32 +307,42 @@ export default function ForgotPasswordPage() {
                 </div>
                 <h1 className="text-white text-2xl md:text-3xl font-bold mb-2">Reset Your Password</h1>
                 <p className="text-white/60 text-sm">
-                  If an account exists for <span className="text-[#FFD700] font-medium">{email}</span>,<br />
-                  we&apos;ve sent a {OTP_LENGTH}-digit code. Enter it below.
+                  {isRecoverySession ? (
+                    <span className="text-emerald-300 font-medium">
+                      ✓ Email verified via secure link. Enter your new password below.
+                    </span>
+                  ) : (
+                    <>
+                      If an account exists for <span className="text-[#FFD700] font-medium">{email}</span>,<br />
+                      we&apos;ve sent a {OTP_LENGTH}-digit code. Enter it below.
+                    </>
+                  )}
                 </p>
               </div>
 
               <form onSubmit={handleResetPassword} className="space-y-5">
-                {/* OTP Inputs */}
-                <div>
-                  <Label className="text-white/80 ml-1 text-sm mb-2 block">Verification Code</Label>
-                  <div className="flex justify-center gap-2.5" onPaste={handleOtpPaste}>
-                    {Array.from({ length: OTP_LENGTH }).map((_, idx) => (
-                      <input
-                        key={idx}
-                        ref={(el) => { otpRefs.current[idx] = el }}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={1}
-                        value={otp[idx] || ""}
-                        onChange={(e) => handleOtpChange(idx, e.target.value)}
-                        onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                        className="w-12 h-14 text-center text-xl font-bold bg-white/10 border-2 border-[#4a2a5f] text-white rounded-xl focus:border-[#FFD700] focus:ring-1 focus:ring-[#FFD700] outline-none transition-colors"
-                        autoFocus={idx === 0}
-                      />
-                    ))}
+                {/* OTP Inputs (shown only if not in direct recovery session) */}
+                {!isRecoverySession && (
+                  <div>
+                    <Label className="text-white/80 ml-1 text-sm mb-2 block">Verification Code</Label>
+                    <div className="flex justify-center gap-2.5" onPaste={handleOtpPaste}>
+                      {Array.from({ length: OTP_LENGTH }).map((_, idx) => (
+                        <input
+                          key={idx}
+                          ref={(el) => { otpRefs.current[idx] = el }}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={1}
+                          value={otp[idx] || ""}
+                          onChange={(e) => handleOtpChange(idx, e.target.value)}
+                          onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                          className="w-12 h-14 text-center text-xl font-bold bg-white/10 border-2 border-[#4a2a5f] text-white rounded-xl focus:border-[#FFD700] focus:ring-1 focus:ring-[#FFD700] outline-none transition-colors"
+                          autoFocus={idx === 0}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* New Password */}
                 <div className="space-y-2">
@@ -319,7 +374,7 @@ export default function ForgotPasswordPage() {
 
                 <Button
                   type="submit"
-                  disabled={isLoading || otp.join("").length !== OTP_LENGTH}
+                  disabled={isLoading || (!isRecoverySession && otp.join("").length !== OTP_LENGTH)}
                   className="w-full h-12 bg-[#FFD700] hover:bg-[#FFD700]/90 text-[#311144] font-bold rounded-xl transition-all duration-200 disabled:opacity-50"
                 >
                   {isLoading ? (

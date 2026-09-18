@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
-import { Resend } from 'resend'
 import { sanitizeHtml } from '@/lib/sanitize'
 import { rateLimit } from '@/lib/rate-limit'
 import { verifyTurnstileToken } from '@/lib/captcha'
-
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function POST(request: Request) {
   try {
@@ -17,7 +14,12 @@ export async function POST(request: Request) {
       )
     }
 
-    const body = await request.json()
+    let body: any
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: "Invalid or empty JSON body" }, { status: 400 })
+    }
     const { name, email, subject, message, captchaToken } = body
 
     if (!name || !email || !message) {
@@ -44,33 +46,71 @@ export async function POST(request: Request) {
     const sanitizedSubject = sanitizeHtml(subject || "New Support Request")
     const sanitizedMessage = sanitizeHtml(message)
 
-    const htmlContent = `
-<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
-  <h2 style="color: #6B3FA0; border-bottom: 2px solid #6B3FA0; padding-bottom: 10px;">New Contact Request</h2>
-  <div style="margin-top: 20px;">
-    <p><strong>Name:</strong> ${sanitizedName}</p>
-    <p><strong>Email Address:</strong> ${sanitizedEmail}</p>
-    <p><strong>Subject:</strong> ${sanitizedSubject}</p>
-  </div>
-  <div style="margin-top: 20px; padding: 15px; background-color: #f9fafb; border-left: 4px solid #F59E0B; border-radius: 4px;">
-    <h3 style="margin-top: 0; color: #4b5563; font-size: 14px; text-transform: uppercase;">Message:</h3>
-    <p style="white-space: pre-wrap; margin-bottom: 0;">${sanitizedMessage}</p>
-  </div>
-  <p style="margin-top: 30px; font-size: 12px; color: #9ca3af;">This email was sent from the Byiora Contact Form.</p>
-</div>
-    `
+    const { createServiceRoleClient } = await import("@/lib/supabase/service-role")
+    const supabase = createServiceRoleClient() as any
+    const normalizedEmail = sanitizedEmail.trim().toLowerCase()
 
-    const data = await resend.emails.send({
-      from: 'Byiora Support Form <contact@byiora.com.np>',
-      replyTo: sanitizedEmail,
-      to: ['support@byiora.com.np'],
-      subject: `Contact Form: ${sanitizedSubject}`,
-      html: htmlContent,
+    // Check if customer already has an active ongoing ticket (Open or Replied)
+    const { data: existingTicket } = await supabase
+      .from("support_tickets")
+      .select("id, ticket_number, replies, status")
+      .ilike("email", normalizedEmail)
+      .in("status", ["open", "replied"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (existingTicket) {
+      // Append follow-up customer message to existing conversation thread
+      const nowIso = new Date().toISOString()
+      const currentReplies = Array.isArray(existingTicket.replies) ? existingTicket.replies : []
+      const updatedReplies = [
+        ...currentReplies,
+        {
+          reply: sanitizedMessage,
+          reply_by: sanitizedName,
+          replied_at: nowIso,
+          sender: "customer",
+        },
+      ]
+
+      const { error: updateErr } = await supabase
+        .from("support_tickets")
+        .update({
+          status: "open", // Reopen/flag for admin attention
+          replies: updatedReplies,
+        })
+        .eq("id", existingTicket.id)
+
+      if (updateErr) {
+        console.error("Failed to append follow-up message to support ticket:", updateErr.message)
+        return NextResponse.json({ error: "Failed to submit ticket" }, { status: 500 })
+      }
+
+      return NextResponse.json({ success: true, ticketNumber: existingTicket.ticket_number })
+    }
+
+    // Otherwise, create a brand new ticket
+    const ticketNumber = `BYI-TICK-${Math.floor(1000 + Math.random() * 9000)}`
+    const { error: dbErr } = await supabase.from("support_tickets").insert({
+      ticket_number: ticketNumber,
+      name: sanitizedName,
+      email: sanitizedEmail,
+      subject: sanitizedSubject,
+      message: sanitizedMessage,
+      status: "open",
+      created_at: new Date().toISOString(),
+      replies: [],
     })
 
-    return NextResponse.json({ success: true, data })
+    if (dbErr) {
+      console.error("Failed to insert support ticket into Supabase:", dbErr.message)
+      return NextResponse.json({ error: "Failed to submit ticket" }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true, ticketNumber })
   } catch (error) {
-    console.error('Error sending contact email:', error)
+    console.error('Error submitting contact ticket:', error)
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 })
   }
 }

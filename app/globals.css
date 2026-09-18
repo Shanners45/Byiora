@@ -147,20 +147,26 @@ body > nextjs-portal {
   display: none;
 }
 
-/* Scrollbar styling */
+/* Sleek custom scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(77, 168, 218, 0.1);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(77, 168, 218, 0.6);
-  border-radius: 4px;
+  background: #CBD5E1;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(77, 168, 218, 0.8);
+  background: #94A3B8;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 transparent;
 }

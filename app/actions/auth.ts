@@ -8,6 +8,9 @@ import { headers } from "next/headers"
 import { verifyTurnstileToken } from "@/lib/captcha"
 import { rateLimit } from "@/lib/rate-limit"
 
+import { isDisposableEmail } from "@/lib/security/disposable-emails"
+import { checkIsBanned } from "@/lib/security/blacklist"
+
 // Must match your Supabase Dashboard → Auth → Email OTP Length
 const OTP_LENGTH = 6
 
@@ -17,6 +20,7 @@ export async function loginWithPassword(
   password: string,
   redirectPath: string = "/",
   captchaToken?: string,
+  deviceId?: string,
 ) {
   if (!captchaToken) return { error: "Captcha verification required." }
   const h = await headers()
@@ -24,10 +28,18 @@ export async function loginWithPassword(
   const captchaOk = await verifyTurnstileToken(captchaToken, ip)
   if (!captchaOk) return { error: "Captcha validation failed. Please try again." }
 
+  const cleanEmail = email.toLowerCase().trim()
+
+  // Security: Check if customer, IP, or device is banned
+  const banCheck = await checkIsBanned({ email: cleanEmail, ip, deviceId })
+  if (banCheck.banned) {
+    return { error: banCheck.reason || "Account suspended due to security policy." }
+  }
+
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.toLowerCase().trim(),
+    email: cleanEmail,
     password,
   })
 
@@ -41,7 +53,13 @@ export async function loginWithPassword(
 }
 
 // ─── Signup Step 1: Register (sends OTP email automatically) ────────────────
-export async function signupWithPassword(email: string, password: string, name: string, captchaToken?: string) {
+export async function signupWithPassword(
+  email: string,
+  password: string,
+  name: string,
+  captchaToken?: string,
+  deviceId?: string,
+) {
   if (!name || name.trim().length === 0) {
     return { error: "Full name is required" }
   }
@@ -53,6 +71,19 @@ export async function signupWithPassword(email: string, password: string, name: 
   const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim()
   const captchaOk = await verifyTurnstileToken(captchaToken, ip)
   if (!captchaOk) return { error: "Captcha validation failed. Please try again." }
+
+  const cleanEmail = email.toLowerCase().trim()
+
+  // Security: Block burner / temporary emails
+  if (isDisposableEmail(cleanEmail)) {
+    return { error: "Please provide a valid email address." }
+  }
+
+  // Security: Block banned users, IPs, or devices from creating new accounts
+  const banCheck = await checkIsBanned({ email: cleanEmail, ip, deviceId })
+  if (banCheck.banned) {
+    return { error: "Account registration is suspended on this device or network." }
+  }
 
   const supabase = await createClient()
 

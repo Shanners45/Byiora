@@ -8,6 +8,7 @@ import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 import { headers } from "next/headers"
 import * as Sentry from "@sentry/nextjs"
+import { incrementFailureStrike } from "@/lib/security/strike-counter"
 
 // Rate limit for polling (30 req/min)
 let ratelimit: Ratelimit | null = null
@@ -882,6 +883,12 @@ export async function cancelTransactionAction(transactionId: string) {
       .is("bank_txn_id", null)
 
     if (cancelError) return { success: false, error: "Could not cancel transaction" }
+
+    // Increment failure strike for user/IP on cancellation
+    incrementFailureStrike({
+      email: txn.user_email,
+      ip: (txn.guest_user_data as any)?.ip,
+    }).catch(() => {})
 
     return { success: true }
   } catch (error) {

@@ -220,6 +220,66 @@ export async function sendGiftcardCodeAction(
 }
 
 /**
+ * Resends the existing gift card code email to a customer/guest in 1-click.
+ */
+export async function resendExistingGiftcardCodeAction(transactionId: string) {
+  if (!(await verifyAdmin())) {
+    return { error: "Unauthorized: Admin access required" }
+  }
+
+  try {
+    const serviceSupabase = createServiceRoleClient()
+
+    const { data: _txn, error: txnError } = await serviceSupabase
+      .from("transactions")
+      .select("*, users(name)")
+      .eq("transaction_id", transactionId)
+      .single()
+
+    const txn = _txn as any
+    if (txnError || !txn) {
+      return { error: "Transaction not found" }
+    }
+
+    if (!txn.giftcard_code) {
+      return { error: "No gift card code is associated with this order yet." }
+    }
+
+    let codeToSend = txn.giftcard_code
+    try {
+      const decrypted = decryptInventoryCode(codeToSend)
+      if (decrypted) codeToSend = decrypted
+    } catch (_) {}
+
+    const { sendGiftcardCodeEmail } = await import("@/lib/email/resend")
+
+    let userName = "Customer"
+    if (txn.users?.name) {
+      userName = txn.users.name
+    } else if (txn.guest_user_data?.name) {
+      userName = txn.guest_user_data.name
+    }
+
+    await sendGiftcardCodeEmail({
+      email: txn.user_email,
+      userName: userName,
+      productName: txn.product_name || "Gift Card",
+      denomination: txn.amount || "",
+      transactionId: txn.transaction_id,
+      price: String(txn.price) || "",
+      paymentMethod: txn.payment_method || "Unknown",
+      giftcardCode: codeToSend,
+      isGuest: !txn.user_id,
+    })
+
+    return { success: true, message: `Gift card code resent to ${txn.user_email}!` }
+  } catch (err: any) {
+    console.error("resendExistingGiftcardCodeAction error:", err)
+    return { error: err.message || "Failed to resend gift card code" }
+  }
+}
+
+/**
  * Gets transaction details by ID (admin only)
  * Uses Service Role to bypass RLS and access any transaction
  */

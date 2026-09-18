@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { loginWithPassword, signupWithPassword, logoutUser } from "@/app/actions/auth"
 import { addTransactionAction } from "@/app/actions/transactions"
+import { getOrCreateDeviceId } from "@/lib/security/device"
 import * as Sentry from "@sentry/nextjs"
 
 interface User {
@@ -151,7 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string, captchaToken: string): Promise<boolean> => {
     try {
-      const result = await loginWithPassword(email, password, "/", captchaToken)
+      const deviceId = getOrCreateDeviceId()
+      const result = await loginWithPassword(email, password, "/", captchaToken, deviceId)
       if (result.error || !result.data?.user) {
         toast.error(result.error || "Invalid credentials")
         return false
@@ -188,7 +190,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = async (email: string, password: string, name: string, captchaToken: string): Promise<boolean> => {
     try {
-      const result = await signupWithPassword(email, password, name, captchaToken)
+      const deviceId = getOrCreateDeviceId()
+      const result = await signupWithPassword(email, password, name, captchaToken, deviceId)
 
       if (result.error) {
         toast.error(result.error || "Failed to create account. Please try again.");
@@ -265,9 +268,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
   ): Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean }> => {
     try {
+      const enrichedGuestData = {
+        ...(transactionData.guestData || {}),
+        deviceId: transactionData.guestData?.deviceId || getOrCreateDeviceId(),
+      }
+
       // Use Server Action with Service Role to bypass RLS
       const result = await addTransactionAction({
         ...transactionData,
+        guestData: enrichedGuestData,
         userId: user?.id || null,
       })
 

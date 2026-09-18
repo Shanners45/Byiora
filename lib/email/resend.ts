@@ -444,3 +444,52 @@ export async function sendPasswordChangedEmail(input: { email: string }) {
     html: htmlContent,
   })
 }
+
+export async function sendPasswordResetEmail(input: {
+  email: string
+  resetLink: string
+}) {
+  const resend = getResend()
+  const email = input.email.trim().toLowerCase()
+  const resetLink = input.resetLink
+
+  const htmlContent = `
+<div style="background-color: #f3f4f6; padding: 40px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
+    <div style="background-color: #6B3FA0; padding: 35px 40px; text-align: center;">
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height: 45px; margin: 0 auto; display: block;" onerror="this.outerHTML='<h1 style=\\'color: #ffffff; margin: 0; font-size: 28px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;\\'>BYIORA</h1>'" />
+      <p style="color: #ffffff; margin: 15px 0 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px;">Password Reset Request</p>
+    </div>
+    <div style="padding: 40px;">
+      <h2 style="color: #1E1E1E; font-size: 22px; margin-top: 0; text-align: center;">Reset Your Password</h2>
+      <p style="color: #4b5563; font-size: 16px; line-height: 1.6; text-align: center; margin-top: 20px;">
+        A password reset has been requested for your Byiora account (<strong>${email}</strong>). Click the button below to choose a new password.
+      </p>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${resetLink}" style="display: inline-block; background-color: #6B3FA0; color: #ffffff; padding: 14px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 2px 4px rgba(107, 63, 160, 0.2);">Reset My Password</a>
+      </div>
+
+      <div style="margin: 30px 0; padding: 16px 20px; background-color: #FEF7E0; border: 1px solid #F59E0B; border-radius: 8px;">
+        <p style="color: #92400E; font-size: 13px; margin: 0; line-height: 1.5; text-align: center;">
+          This link is valid for 24 hours. If you did not request this change, you can safely ignore this email and your password will remain unchanged.
+        </p>
+      </div>
+    </div>
+    <div style="background-color: #f9fafb; border-top: 1px solid #e5e7eb; padding: 24px; text-align: center;">
+      <p style="color: #6b7280; font-size: 13px; margin: 0 0 10px 0;">Need help? <a href="https://www.byiora.com.np/contact" style="color: #4DA8DA; text-decoration: none; font-weight: 600;">Contact Support</a></p>
+      <p style="color: #9ca3af; font-size: 12px; margin: 0;">&copy; ${new Date().getFullYear()} Byiora. All rights reserved.</p>
+    </div>
+  </div>
+</div>
+  `
+
+  return await resend.emails.send({
+    from: "Byiora Security <support@byiora.com.np>",
+    replyTo: "support@byiora.com.np",
+    to: [email],
+    subject: "Reset your Byiora account password",
+    html: htmlContent,
+  })
+}
+

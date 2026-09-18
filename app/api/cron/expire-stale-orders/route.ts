@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/app/actions/payment-credentials"
 import { fulfillOrderDirectly } from "@/lib/fulfillment"
+import { incrementFailureStrike } from "@/lib/security/strike-counter"
 
 const PROXY_SECRET = process.env.INTERNAL_API_SECRET!
 if (!PROXY_SECRET) {
@@ -175,6 +176,12 @@ export async function GET(req: Request) {
         failure_remarks: "QR code expired without payment confirmation",
         encrypted_checkout_data: null
       } as any).eq("transaction_id", txn.transaction_id)
+
+      // Increment failure strike for user/IP on expiration
+      incrementFailureStrike({
+        email: txn.user_email,
+        ip: typedTxn.guest_user_data?.ip,
+      }).catch(() => {})
 
       // Send Payment Failed email for nepalpay and fonepay
       if (typedTxn.payment_category === "nepalpay" || typedTxn.payment_category === "fonepay") {

@@ -2,6 +2,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { sendOrderPlacedEmail, sendGiftcardCodeEmail } from "@/lib/email/resend"
 import { decryptInventoryCode } from "@/lib/crypto/inventory"
 import { Redis } from "@upstash/redis"
+import { resetFailureStrikes } from "@/lib/security/strike-counter"
 
 interface FulfillOrderParams {
   transactionId: string
@@ -85,6 +86,12 @@ export async function fulfillOrderDirectly({
       console.log(`[FULFILLMENT] Optimistic lock: ${transactionId} already processed, skipping`)
       return { success: true, message: "Already processed", alreadyProcessed: true }
     }
+
+    // Reset any failure strikes for this buyer since payment succeeded
+    resetFailureStrikes({
+      email: txn.user_email,
+      ip: (txn.guest_user_data as any)?.ip,
+    }).catch(() => {})
 
     // 4. Fulfillment: Claim inventory gift card code if applicable
     const categoriesWithInventory = ["digital-goods", "games"]

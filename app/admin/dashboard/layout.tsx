@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
-import { LayoutDashboard, ShoppingBag, Package, Settings, Users, LogOut, Menu, X, Bell, ImageIcon, DollarSign, KeyRound } from "lucide-react"
+import { LayoutDashboard, ShoppingBag, Package, Settings, Users, LogOut, Menu, X, Bell, ImageIcon, DollarSign, KeyRound, UserCheck, Mail } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import Image from "next/image"
@@ -88,6 +88,8 @@ export default function AdminDashboardLayout({
     return null
   }
 
+  const isSubAdmin = adminUser.role === "sub_admin"
+
   const navItems = [
     {
       name: "Dashboard",
@@ -99,6 +101,12 @@ export default function AdminDashboardLayout({
       name: "Orders",
       href: "/admin/dashboard/orders",
       icon: ShoppingBag,
+      roles: ["admin", "sub_admin", "order_management"],
+    },
+    {
+      name: isSubAdmin ? "Support Inbox" : "Customers & Security",
+      href: "/admin/dashboard/customers",
+      icon: isSubAdmin ? Mail : UserCheck,
       roles: ["admin", "sub_admin", "order_management"],
     },
     { name: "Products", href: "/admin/dashboard/products", icon: Package, roles: ["admin", "sub_admin"] },

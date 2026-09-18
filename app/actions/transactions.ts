@@ -4,6 +4,9 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { headers } from "next/headers"
 import { rateLimit } from "@/lib/rate-limit"
 import crypto from "crypto"
+import { isDisposableEmail } from "@/lib/security/disposable-emails"
+import { checkIsBanned } from "@/lib/security/blacklist"
+import { checkStrikePenalty } from "@/lib/security/strike-counter"
 
 interface TransactionData {
   product: string
@@ -24,17 +27,46 @@ interface TransactionData {
  */
 export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any; paymentUrl?: string; isDuplicate?: boolean }> {
   try {
-    // SECURITY: Double-submission / Rapid-click cooldown (1 order every 6 seconds per IP)
     const h = await headers()
     const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+    const cleanEmail = transactionData.email?.trim().toLowerCase() || ""
+
+    const deviceId = transactionData.guestData?.deviceId || null
+
+    // ── LAYER 1: Disposable / Burner Email Domain Filter ──
+    if (cleanEmail && isDisposableEmail(cleanEmail)) {
+      return {
+        success: false,
+        error: "Please provide a valid email address.",
+      }
+    }
+
+    // ── LAYER 4: Blacklist & Ban Check (Device, Email, IP) ──
+    const banCheck = await checkIsBanned({ email: cleanEmail, ip, deviceId })
+    if (banCheck.banned) {
+      return {
+        success: false,
+        error: banCheck.reason || "Transaction declined. Please contact support.",
+      }
+    }
+
+    // ── LAYER 3: 3-Strike Failure Penalty Box ──
+    const strikeCheck = await checkStrikePenalty({ email: cleanEmail, ip })
+    if (strikeCheck.isBlocked) {
+      return {
+        success: false,
+        error: "Too many failed payment attempts. Please wait 1 hour or contact support for assistance.",
+      }
+    }
+
+    // SECURITY: Double-submission / Rapid-click cooldown (1 order every 6 seconds per IP)
     const cooldownIp = await rateLimit(`order-cooldown:${ip}`, { windowMs: 6_000, max: 1 })
     if (!cooldownIp.ok) {
       return { success: false, error: "SILENT_COOLDOWN", isDuplicate: true }
     }
 
     // SECURITY: Cooldown by customer email (prevents rapid multi-tab spam)
-    if (transactionData.email) {
-      const cleanEmail = transactionData.email.trim().toLowerCase()
+    if (cleanEmail) {
       const cooldownEmail = await rateLimit(`order-email-cooldown:${cleanEmail}`, { windowMs: 6_000, max: 1 })
       if (!cooldownEmail.ok) {
         return { success: false, error: "SILENT_COOLDOWN", isDuplicate: true }
@@ -56,6 +88,38 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     }
 
     const serviceSupabase = createServiceRoleClient()
+
+    // ── LAYER 2: Single Active Pending Order Concurrency Lock ──
+    // Stops bots/users from creating multiple unpaid Dynamic QR orders within 10 minutes
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+    try {
+      let activeOrderQuery = serviceSupabase
+        .from("transactions")
+        .select("transaction_id, status, created_at")
+        .eq("status", "Payment Pending")
+        .gte("created_at", tenMinutesAgo)
+
+      if (cleanEmail && ip && ip !== "unknown") {
+        activeOrderQuery = activeOrderQuery.or(`user_email.ilike.${cleanEmail},guest_user_data->>ip.eq.${ip}`)
+      } else if (cleanEmail) {
+        activeOrderQuery = activeOrderQuery.ilike("user_email", cleanEmail)
+      } else if (ip && ip !== "unknown") {
+        activeOrderQuery = activeOrderQuery.filter("guest_user_data->>ip", "eq", ip)
+      }
+
+      const { data: activeOrders } = await activeOrderQuery.limit(1)
+      if (activeOrders && activeOrders.length > 0) {
+        const activeTxn = activeOrders[0]
+        return {
+          success: false,
+          error: `ACTIVE_ORDER_EXISTS:${activeTxn.transaction_id}`,
+          transactionId: activeTxn.transaction_id,
+          data: { activeTransactionId: activeTxn.transaction_id },
+        }
+      }
+    } catch (concurrencyErr: any) {
+      console.warn("Active order concurrency check skipped:", concurrencyErr.message)
+    }
 
     const productId = transactionData.productId || transactionData.product.toLowerCase().replace(/\s+/g, "-")
     
@@ -128,20 +192,29 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       }
     } else if (transactionData.email) {
       // Guest checkout: Check if the email belongs to a registered user
-      // If so, silently link the order to their account (industry standard: Shopify, WooCommerce, etc.)
-      // This is server-side only — the guest user sees no difference
+      // Note: transactions.user_id has a foreign key referencing auth.users(id).
+      // We only assign actualUserId if verified to exist in auth.users, otherwise transactions_user_id_fkey fails!
       const cleanEmail = transactionData.email.trim().toLowerCase()
-      const { data: matchedUser } = await serviceSupabase
-        .from("users")
-        .select("id, name")
-        .eq("email", cleanEmail)
-        .single()
+      try {
+        const { data: matchedUser } = await serviceSupabase
+          .from("users")
+          .select("id, name")
+          .eq("email", cleanEmail)
+          .maybeSingle()
 
-      if (matchedUser) {
-        actualUserId = matchedUser.id
-        if (matchedUser.name) {
-          actualUserName = matchedUser.name
+        if (matchedUser?.id) {
+          // Check if this ID exists in auth.users
+          const { data: authCheck } = await serviceSupabase.auth.admin.getUserById(matchedUser.id)
+          if (authCheck?.user) {
+            actualUserId = matchedUser.id
+            if (matchedUser.name) {
+              actualUserName = matchedUser.name
+            }
+          }
         }
+      } catch (e) {
+        console.warn("[Checkout] Could not link guest checkout to auth user:", e)
+        actualUserId = null
       }
     }
 
@@ -161,6 +234,12 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     // Static payments start as Processing, Dynamic as Payment Pending
     const initialStatus = isDynamic ? "Payment Pending" : "Processing"
 
+    const guestDataWithIp = {
+      ...(transactionData.guestData || {}),
+      ...(ip && ip !== "unknown" ? { ip } : {}),
+      ...(deviceId ? { deviceId } : {}),
+    }
+
     const insertPayload: any = {
       user_id: actualUserId,
       product_id: productId,
@@ -171,7 +250,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       payment_method: transactionData.paymentMethod,
       transaction_id: transactionId,
       user_email: transactionData.email,
-      guest_user_data: transactionData.guestData || null,
+      guest_user_data: Object.keys(guestDataWithIp).length > 0 ? guestDataWithIp : null,
       payment_category: paymentCategory,
     }
 
@@ -197,6 +276,20 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       const retryResult = await serviceSupabase
         .from("transactions")
         .insert([payloadWithoutCategory])
+        .select()
+        .single()
+
+      data = retryResult.data
+      error = retryResult.error
+    }
+
+    // Resilience: If user_id violates foreign key (e.g. auth.users constraint), retry with user_id: null
+    if (error && (error.message?.includes("transactions_user_id_fkey") || error.code === "23503")) {
+      console.warn("[Checkout] transactions_user_id_fkey violation, retrying with user_id: null")
+      const { user_id, ...payloadWithoutUser } = insertPayload
+      const retryResult = await serviceSupabase
+        .from("transactions")
+        .insert([{ ...payloadWithoutUser, user_id: null }])
         .select()
         .single()
 

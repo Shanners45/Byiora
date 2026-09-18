@@ -11,8 +11,9 @@ import { Header } from "@/components/header"
 import { TurnstileWidget } from "@/components/turnstile-widget"
 import Link from "next/link"
 import Image from "next/image"
-import { Mail, Facebook, Instagram, Youtube, ArrowLeft, ShieldCheck, Loader2, BadgeCheck } from "lucide-react"
 import { signupWithPassword, verifySignupOtp, resendSignupOtp } from "@/app/actions/auth"
+import { getOrCreateDeviceId } from "@/lib/security/device"
+import { ShieldCheck, Loader2, ArrowLeft, Mail, BadgeCheck, Facebook, Instagram, Youtube } from "lucide-react"
 
 const GoogleIcon = () => (
   <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -161,7 +162,7 @@ export default function SignUpPage() {
         return
       }
 
-      const result = await signupWithPassword(email, password, name.trim(), captchaToken)
+      const result = await signupWithPassword(email, password, name.trim(), captchaToken, getOrCreateDeviceId())
 
       if (result.error) {
         if (isRateLimitError(result.error)) {

@@ -39,6 +39,8 @@ interface PaymentMethod {
 }
 
 
+import { getOrCreateDeviceId } from "@/lib/security/device"
+
 export default function ProductDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -202,7 +204,10 @@ export default function ProductDetailPage() {
         email: email,
         productId: product?.id || productSlug,
         productCategory: product?.category || (isTopupProduct ? "topup" : isDirectLoginProduct ? "direct-login" : "digital-goods"),
-        guestData: isTopupProduct && !topupHasCheckout ? { userId, server: selectedServer } : null,
+        guestData: {
+          ...(isTopupProduct && !topupHasCheckout ? { userId, server: selectedServer } : {}),
+          deviceId: getOrCreateDeviceId(),
+        },
       })
 
       if (isDuplicate || !transactionId) {
@@ -286,6 +291,20 @@ export default function ProductDetailPage() {
       console.error("Error adding transaction:", error)
       setIsProcessing(false)
       setShowQRDialog(false)
+
+      if (error?.message?.startsWith("ACTIVE_ORDER_EXISTS:")) {
+        const activeId = error.message.replace("ACTIVE_ORDER_EXISTS:", "").trim()
+        toast.error("Payment in progress", {
+          description: "Please complete your existing payment first.",
+          duration: 6000,
+          action: {
+            label: "Go to Payment",
+            onClick: () => router.push(`/checkout/${activeId}`),
+          },
+        })
+        return
+      }
+
       toast.error(error?.message || "Failed to process order. Please try again.")
     }
   }
