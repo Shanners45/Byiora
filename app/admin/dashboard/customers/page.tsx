@@ -76,6 +76,15 @@ import { resendExistingGiftcardCodeAction } from "@/app/actions/orders"
 import { getAdminSessionAction } from "@/app/actions/admin-utils"
 import { BannedEntity } from "@/lib/security/blacklist"
 
+const GoogleIcon = ({ className = "h-3.5 w-3.5" }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
+    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+  </svg>
+)
+
 export default function CustomersAndSecurityPage() {
   const [currentUserRole, setCurrentUserRole] = useState<string>("admin")
   const [activeTab, setActiveTab] = useState("customers")
@@ -540,26 +549,26 @@ export default function CustomersAndSecurityPage() {
   if (loading) {
     if (isSubAdmin) {
       return (
-        <div className="space-y-6 max-w-7xl mx-auto">
+        <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
           {/* Skeleton Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div className="space-y-2">
-              <Skeleton className="h-8 w-48 bg-[#FEF7E0]" />
-              <Skeleton className="h-4 w-72 bg-[#FEF7E0]/70" />
+              <Skeleton className="h-7 sm:h-8 w-44 sm:w-48 bg-[#FEF7E0]" />
+              <Skeleton className="h-3.5 sm:h-4 w-60 sm:w-72 bg-[#FEF7E0]/70" />
             </div>
-            <Skeleton className="h-10 w-28 bg-[#FEF7E0] border border-[#F59E0B]/30" />
+            <Skeleton className="h-9 w-24 self-start sm:self-auto bg-[#FEF7E0] border border-[#F59E0B]/30" />
           </div>
 
           {/* Skeleton Support Inbox Table Card */}
-          <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div className="space-y-2">
-                <Skeleton className="h-6 w-36 bg-[#F59E0B]/25" />
-                <Skeleton className="h-3 w-64 bg-[#F59E0B]/15" />
+          <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-hidden">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+              <div className="space-y-1.5 sm:space-y-2">
+                <Skeleton className="h-5 sm:h-6 w-36 bg-[#F59E0B]/25" />
+                <Skeleton className="h-3 w-48 sm:w-64 bg-[#F59E0B]/15" />
               </div>
-              <Skeleton className="h-10 w-48 bg-white rounded-lg border border-[#F59E0B]/20" />
+              <Skeleton className="h-9 sm:h-10 w-full sm:w-48 bg-white rounded-lg border border-[#F59E0B]/20" />
             </div>
-            <div className="space-y-2.5 bg-white p-4 rounded-xl border border-[#F59E0B]/20">
+            <div className="space-y-2.5 bg-white p-3 sm:p-4 rounded-xl border border-[#F59E0B]/20">
               <Skeleton className="h-9 w-full bg-amber-50" />
               {[1, 2, 3, 4, 5].map((i) => (
                 <Skeleton key={i} className="h-12 w-full bg-slate-50" />
@@ -571,29 +580,29 @@ export default function CustomersAndSecurityPage() {
     }
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
         {/* Skeleton Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div className="space-y-2">
-            <Skeleton className="h-8 w-64 bg-[#FEF7E0]" />
-            <Skeleton className="h-4 w-96 bg-[#FEF7E0]/70" />
+            <Skeleton className="h-7 sm:h-8 w-52 sm:w-64 bg-[#FEF7E0]" />
+            <Skeleton className="h-3.5 sm:h-4 w-full max-w-sm bg-[#FEF7E0]/70" />
           </div>
-          <Skeleton className="h-10 w-28 bg-[#FEF7E0] border border-[#F59E0B]/30" />
+          <Skeleton className="h-9 w-24 self-start sm:self-auto bg-[#FEF7E0] border border-[#F59E0B]/30" />
         </div>
 
         {/* Skeleton Tabs */}
-        <div className="flex gap-2">
-          <Skeleton className="h-11 w-44 rounded-xl bg-[#FEF7E0]" />
-          <Skeleton className="h-11 w-48 rounded-xl bg-[#FEF7E0]/80" />
-          <Skeleton className="h-11 w-44 rounded-xl bg-[#FEF7E0]/80" />
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          <Skeleton className="h-9 sm:h-11 w-36 sm:w-44 rounded-xl bg-[#FEF7E0] shrink-0" />
+          <Skeleton className="h-9 sm:h-11 w-44 sm:w-48 rounded-xl bg-[#FEF7E0]/80 shrink-0" />
+          <Skeleton className="h-9 sm:h-11 w-36 sm:w-44 rounded-xl bg-[#FEF7E0]/80 shrink-0" />
         </div>
 
         {/* Skeleton Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
           {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md p-5 space-y-3">
-              <Skeleton className="h-4 w-28 bg-[#F59E0B]/20" />
-              <Skeleton className="h-8 w-24 bg-[#F59E0B]/30" />
+            <Card key={i} className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md p-3.5 sm:p-5 space-y-2 sm:space-y-3">
+              <Skeleton className="h-3.5 sm:h-4 w-20 sm:w-28 bg-[#F59E0B]/20" />
+              <Skeleton className="h-6 sm:h-8 w-16 sm:w-24 bg-[#F59E0B]/30" />
             </Card>
           ))}
         </div>
@@ -602,14 +611,14 @@ export default function CustomersAndSecurityPage() {
         <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md p-6 space-y-6">
           <div className="space-y-2">
             <Skeleton className="h-6 w-48 bg-[#F59E0B]/25" />
-            <Skeleton className="h-3 w-80 bg-[#F59E0B]/15" />
+            <Skeleton className="h-4 w-80 bg-[#F59E0B]/15" />
           </div>
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <Skeleton className="h-10 flex-1 bg-white rounded-lg border border-[#F59E0B]/20" />
-            <Skeleton className="h-10 w-48 bg-white rounded-lg border border-[#F59E0B]/20" />
+            <Skeleton className="h-10 w-full md:w-52 bg-white rounded-lg border border-[#F59E0B]/20" />
           </div>
-          <div className="space-y-2.5 bg-white p-4 rounded-xl border border-[#F59E0B]/20">
-            <Skeleton className="h-9 w-full bg-amber-50" />
+          <div className="space-y-3 bg-white p-4 rounded-xl border border-[#F59E0B]/20">
+            <Skeleton className="h-10 w-full bg-amber-50" />
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <Skeleton key={i} className="h-12 w-full bg-slate-50" />
             ))}
@@ -620,7 +629,7 @@ export default function CustomersAndSecurityPage() {
   }
 
   const supportInboxCard = (
-    <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
+    <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md rounded-xl overflow-hidden">
       <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <CardTitle className="text-[#1F2937] flex items-center gap-2">
@@ -649,8 +658,8 @@ export default function CustomersAndSecurityPage() {
         </Select>
       </CardHeader>
       <CardContent className="p-6">
-        <div className="rounded-xl border-2 border-[#F59E0B]/20 bg-white shadow-sm overflow-hidden">
-          <Table className="w-full">
+        <div className="rounded-xl border-2 border-[#F59E0B]/20 bg-white shadow-sm overflow-x-auto w-full">
+          <Table className="w-full min-w-[650px]">
             <TableHeader className="bg-[#FEF7E0]/40 border-b border-[#F59E0B]/20">
               <TableRow>
                 <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap w-28">Ticket #</TableHead>
@@ -796,14 +805,14 @@ export default function CustomersAndSecurityPage() {
   )
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto">
+    <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#1F2937]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[#1F2937]">
             {isSubAdmin ? "Support Inbox" : "Customers & Security"}
           </h1>
-          <p className="text-sm text-[#4B5563] mt-0.5">
+          <p className="text-xs sm:text-sm text-[#4B5563] mt-0.5 leading-relaxed">
             {isSubAdmin
               ? "View and reply to customer inquiries submitted from the contact page."
               : "Manage customer accounts, view order history, handle security, and reply to support inquiries"}
@@ -811,91 +820,95 @@ export default function CustomersAndSecurityPage() {
         </div>
         <Button
           variant="outline"
+          size="sm"
           onClick={() => loadData(false)}
           disabled={loading || refreshing}
-          className="border-[#F59E0B] text-[#92400E] bg-[#FEF7E0] hover:bg-[#FEF7E0]/80 font-semibold shadow-xs"
+          className="w-fit self-start sm:self-auto border-[#F59E0B] text-[#92400E] bg-[#FEF7E0] hover:bg-[#FEF7E0]/80 font-semibold shadow-xs h-9 px-3.5 text-xs sm:text-sm shrink-0"
         >
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? "animate-spin" : ""}`} />
+          <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 ${refreshing ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
 
       {/* Main Content Area */}
       {isSubAdmin ? (
-        <div className="space-y-6">{supportInboxCard}</div>
+        <div className="space-y-5 sm:space-y-6 w-full min-w-0">{supportInboxCard}</div>
       ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-[#FEF7E0]/70 border-2 border-[#F59E0B]/30 p-1 rounded-xl shadow-xs">
-          <TabsTrigger
-            value="customers"
-            className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all"
-          >
-            <Users className="h-4 w-4" />
-            Customers ({customers.length})
-          </TabsTrigger>
-          <TabsTrigger
-            value="blacklist"
-            className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all"
-          >
-            <ShieldAlert className="h-4 w-4" />
-            Security & Blacklist ({consolidatedBans.length})
-          </TabsTrigger>
-          <TabsTrigger
-            value="support"
-            className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all relative"
-          >
-            <Mail className="h-4 w-4" />
-            <span>Support Inbox</span>
-            {openTicketsCount > 0 && (
-              <span className="relative flex h-2 w-2 ml-0.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600" />
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5 sm:space-y-6 w-full min-w-0">
+          {/* Scrollable Tabs on Mobile */}
+          <div className="w-full overflow-x-auto pb-1 -mb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            <TabsList className="inline-flex w-max min-w-full sm:w-auto justify-start bg-[#FEF7E0]/70 border-2 border-[#F59E0B]/30 p-1 rounded-xl shadow-xs gap-1">
+              <TabsTrigger
+                value="customers"
+                className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap shrink-0"
+              >
+                <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                <span>Customers ({customers.length})</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="blacklist"
+                className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap shrink-0"
+              >
+                <ShieldAlert className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                <span>Security & Blacklist ({consolidatedBans.length})</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="support"
+                className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition-all relative whitespace-nowrap shrink-0"
+              >
+                <Mail className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
+                <span>Support Inbox</span>
+                {openTicketsCount > 0 && (
+                  <span className="relative flex h-2 w-2 ml-0.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600" />
+                  </span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
         {/* ──────────────────────────────────────────────────────────────────────── */}
         {/* TAB 1: CUSTOMERS & GUEST BUYERS                                         */}
         {/* ──────────────────────────────────────────────────────────────────────── */}
-        <TabsContent value="customers" className="space-y-6">
-          {/* Statistics Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <TabsContent value="customers" className="space-y-5 sm:space-y-6">
+          {/* Statistics Grid: 2 cols on mobile, 4 on desktop */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
             <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md rounded-xl">
-              <CardContent className="p-5">
-                <p className="text-xs font-bold text-[#92400E] uppercase tracking-wider">Total Customers</p>
-                <p className="text-2xl font-bold text-[#1F2937] mt-1">{customers.length}</p>
+              <CardContent className="p-3 sm:p-5">
+                <p className="text-[10px] sm:text-xs font-bold text-[#92400E] uppercase tracking-wider truncate">Total Customers</p>
+                <p className="text-xl sm:text-2xl font-bold text-[#1F2937] mt-1">{customers.length}</p>
               </CardContent>
             </Card>
 
             <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md rounded-xl">
-              <CardContent className="p-5">
-                <p className="text-xs font-bold text-[#92400E] uppercase tracking-wider">Total Registered Accounts</p>
-                <p className="text-2xl font-bold text-[#1F2937] mt-1">{registeredCount}</p>
+              <CardContent className="p-3 sm:p-5">
+                <p className="text-[10px] sm:text-xs font-bold text-[#92400E] uppercase tracking-wider truncate">Registered Accounts</p>
+                <p className="text-xl sm:text-2xl font-bold text-[#1F2937] mt-1">{registeredCount}</p>
               </CardContent>
             </Card>
 
             <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md rounded-xl">
-              <CardContent className="p-5">
-                <p className="text-xs font-bold text-[#92400E] uppercase tracking-wider">Total Guest Accounts</p>
-                <p className="text-2xl font-bold text-[#1F2937] mt-1">{guestCount}</p>
+              <CardContent className="p-3 sm:p-5">
+                <p className="text-[10px] sm:text-xs font-bold text-[#92400E] uppercase tracking-wider truncate">Guest Accounts</p>
+                <p className="text-xl sm:text-2xl font-bold text-[#1F2937] mt-1">{guestCount}</p>
               </CardContent>
             </Card>
 
             <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md rounded-xl">
-              <CardContent className="p-5">
-                <p className="text-xs font-bold text-[#92400E] uppercase tracking-wider">Banned Customers</p>
-                <p className="text-2xl font-bold text-red-600 mt-1">{bannedCount}</p>
+              <CardContent className="p-3 sm:p-5">
+                <p className="text-[10px] sm:text-xs font-bold text-[#92400E] uppercase tracking-wider truncate">Banned Customers</p>
+                <p className="text-xl sm:text-2xl font-bold text-red-600 mt-1">{bannedCount}</p>
               </CardContent>
             </Card>
           </div>
 
           {/* Main Card with Search and Table */}
-          <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md rounded-xl">
+          <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md rounded-xl overflow-hidden">
             <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
                 <CardTitle className="text-[#1F2937] text-lg font-bold">Customer Directory ({filteredCustomers.length})</CardTitle>
-                <CardDescription className="text-[#92400E] text-xs mt-0.5 font-medium">
+                <CardDescription className="text-[#92400E]">
                   Click any customer to inspect order history or resend gift card codes
                 </CardDescription>
               </div>
@@ -927,8 +940,8 @@ export default function CustomersAndSecurityPage() {
               </div>
 
               {/* Customers Table */}
-              <div className="rounded-xl border-2 border-[#F59E0B]/20 bg-white shadow-sm mt-2 overflow-hidden">
-                <Table className="w-full">
+              <div className="rounded-xl border-2 border-[#F59E0B]/20 bg-white shadow-sm mt-2 overflow-x-auto w-full">
+                <Table className="w-full min-w-[720px]">
                   <TableHeader className="bg-[#FEF7E0]/40 border-b-2 border-[#F59E0B]/20">
                     <TableRow>
                       <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap">Customer Email & Name</TableHead>
@@ -956,9 +969,19 @@ export default function CustomersAndSecurityPage() {
                         >
                           <TableCell className="py-3">
                             <div className="flex flex-col min-w-0 max-w-[200px] lg:max-w-[260px]">
-                              <span className="font-medium text-sm text-[#111827] truncate hover:text-[#F59E0B] transition-colors" title={cust.email}>
-                                {cust.email}
-                              </span>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="font-medium text-sm text-[#111827] truncate hover:text-[#F59E0B] transition-colors" title={cust.email}>
+                                  {cust.email}
+                                </span>
+                                {cust.isGoogleUser && (
+                                  <span
+                                    title="Registered with Google"
+                                    className="inline-flex items-center shrink-0 bg-white p-0.5 rounded-full border border-gray-200 shadow-2xs"
+                                  >
+                                    <GoogleIcon className="h-3.5 w-3.5" />
+                                  </span>
+                                )}
+                              </div>
                               {cust.isRegistered && cust.name && (
                                 <span className="text-xs text-[#4B5563] font-medium truncate">
                                   {cust.name}
@@ -1093,12 +1116,12 @@ export default function CustomersAndSecurityPage() {
         {/* ──────────────────────────────────────────────────────────────────────── */}
         {/* TAB 2: SECURITY & BLACKLIST (Consolidated by User / Rule)                */}
         {/* ──────────────────────────────────────────────────────────────────────── */}
-        <TabsContent value="blacklist" className="space-y-6">
-          <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
-            <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <TabsContent value="blacklist" className="space-y-4 sm:space-y-6">
+          <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md overflow-hidden">
+            <CardHeader className="p-4 sm:px-6 sm:py-4 border-b border-[#F59E0B]/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
-                <CardTitle className="text-[#1F2937]">Active Blacklist Rules ({consolidatedBans.length})</CardTitle>
-                <CardDescription className="text-[#92400E]">
+                <CardTitle className="text-[#1F2937] text-base sm:text-lg">Active Blacklist Rules ({consolidatedBans.length})</CardTitle>
+                <CardDescription className="text-[#92400E] text-xs sm:text-sm">
                   Active security rules to automatically block suspicious users and orders.
                 </CardDescription>
               </div>
@@ -1110,7 +1133,7 @@ export default function CustomersAndSecurityPage() {
                   setBanDuration("0")
                   setBanModalOpen(true)
                 }}
-                className="bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white flex items-center gap-1.5 font-semibold shadow-sm"
+                className="w-full sm:w-auto bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white flex items-center justify-center gap-1.5 font-semibold shadow-sm shrink-0"
               >
                 <Plus className="h-4 w-4" />
                 Add Blacklist Rule
@@ -1129,8 +1152,8 @@ export default function CustomersAndSecurityPage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border-2 border-[#F59E0B]/20 bg-white shadow-sm overflow-hidden">
-                <Table className="w-full">
+              <div className="rounded-xl border-2 border-[#F59E0B]/20 bg-white shadow-sm overflow-x-auto w-full">
+                <Table className="w-full min-w-[650px]">
                   <TableHeader className="bg-[#FEF7E0]/40 border-b border-[#F59E0B]/20">
                     <TableRow>
                       <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap">Banned User / Target</TableHead>
@@ -1284,19 +1307,19 @@ export default function CustomersAndSecurityPage() {
           }
         }}
       >
-        <DialogContent className="max-w-xl w-[92vw] sm:w-full bg-white max-h-[90vh] overflow-hidden p-0 rounded-2xl shadow-xl border-2 border-[#F59E0B]/30 flex flex-col">
+        <DialogContent className="max-w-xl w-[94vw] sm:w-full bg-white max-h-[90vh] overflow-hidden p-0 rounded-2xl shadow-xl border-2 border-[#F59E0B]/30 flex flex-col">
           {selectedCustomer && (
-            <div className="overflow-y-auto max-h-[90vh] p-6 space-y-4">
+            <div className="overflow-y-auto max-h-[90vh] p-4 sm:p-6 space-y-4">
               <DialogHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <DialogTitle className="text-xl font-bold text-[#1F2937]">
+                  <DialogTitle className="text-lg sm:text-xl font-bold text-[#1F2937]">
                     Customer Details
                   </DialogTitle>
                 </div>
               </DialogHeader>
 
               {/* Customer Profile & Quick Actions Banner */}
-              <div className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 rounded-xl p-5 mb-5">
+              <div className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 rounded-xl p-3.5 sm:p-5 mb-4 sm:mb-5">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1311,6 +1334,14 @@ export default function CustomersAndSecurityPage() {
                       >
                         {selectedCustomer.isRegistered ? "Registered Customer" : "Guest Buyer"}
                       </Badge>
+                      {selectedCustomer.isGoogleUser && (
+                        <span
+                          title="Registered with Google"
+                          className="inline-flex items-center shrink-0 bg-white p-0.5 rounded-full border border-gray-200 shadow-2xs"
+                        >
+                          <GoogleIcon className="h-3.5 w-3.5" />
+                        </span>
+                      )}
                       {selectedCustomer.isBanned && (
                         <Badge variant="destructive" className="bg-red-600 text-white font-bold text-xs">
                            Banned
@@ -1512,7 +1543,7 @@ export default function CustomersAndSecurityPage() {
       {/* MODAL: UNIFIED 1-CLICK CUSTOMER BAN                                      */}
       {/* ──────────────────────────────────────────────────────────────────────── */}
       <Dialog open={!!customerToBan} onOpenChange={(open) => !open && setCustomerToBan(null)}>
-        <DialogContent className="sm:max-w-md bg-white border-2 border-red-200 shadow-2xl rounded-2xl p-6">
+        <DialogContent className="w-[94vw] sm:w-full sm:max-w-md bg-white border-2 border-red-200 shadow-2xl rounded-2xl p-4 sm:p-6">
           <DialogHeader className="space-y-1">
             <DialogTitle className="flex items-center gap-2 text-red-600 text-lg font-bold">
               <Ban className="h-5 w-5" />
@@ -1530,16 +1561,26 @@ export default function CustomersAndSecurityPage() {
                   <p className="text-[11px] text-gray-500 font-semibold uppercase tracking-wider">Customer Email</p>
                   <p className="font-mono font-bold text-sm text-[#111827] truncate">{customerToBan.email}</p>
                 </div>
-                <Badge
-                  variant="outline"
-                  className={
-                    customerToBan.isRegistered
-                      ? "bg-purple-100 text-purple-900 border-purple-300 text-xs font-bold shrink-0"
-                      : "bg-amber-100 text-amber-900 border-amber-300 text-xs font-bold shrink-0"
-                  }
-                >
-                  {customerToBan.isRegistered ? "Registered User" : "Guest Buyer"}
-                </Badge>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Badge
+                    variant="outline"
+                    className={
+                      customerToBan.isRegistered
+                        ? "bg-purple-100 text-purple-900 border-purple-300 text-xs font-bold shrink-0"
+                        : "bg-amber-100 text-amber-900 border-amber-300 text-xs font-bold shrink-0"
+                    }
+                  >
+                    {customerToBan.isRegistered ? "Registered User" : "Guest Buyer"}
+                  </Badge>
+                  {customerToBan.isGoogleUser && (
+                    <span
+                      title="Registered with Google"
+                      className="inline-flex items-center shrink-0 bg-white p-0.5 rounded-full border border-gray-200 shadow-2xs"
+                    >
+                      <GoogleIcon className="h-3.5 w-3.5" />
+                    </span>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -1575,14 +1616,14 @@ export default function CustomersAndSecurityPage() {
             </div>
           )}
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-gray-100">
-            <Button variant="outline" onClick={() => setCustomerToBan(null)} className="border-gray-200 text-gray-700">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2 border-t border-gray-100">
+            <Button variant="outline" onClick={() => setCustomerToBan(null)} className="w-full sm:w-auto border-gray-200 text-gray-700">
               Cancel
             </Button>
             <Button
               onClick={handleConfirmCustomerBan}
               disabled={submittingCustomerBan}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold shadow-sm flex items-center gap-1.5"
+              className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold shadow-sm flex items-center justify-center gap-1.5"
             >
               <Ban className="h-4 w-4" />
               {submittingCustomerBan ? "Banning..." : "Ban Customer"}
@@ -1595,7 +1636,7 @@ export default function CustomersAndSecurityPage() {
       {/* MODAL: ADD MANUAL BAN (Device, IP, Email, Domain + Duration)             */}
       {/* ──────────────────────────────────────────────────────────────────────── */}
       <Dialog open={banModalOpen} onOpenChange={setBanModalOpen}>
-        <DialogContent className="sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl">
+        <DialogContent className="w-[94vw] sm:w-full sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600 text-lg font-bold">
               <ShieldAlert className="h-5 w-5" />
@@ -1676,14 +1717,14 @@ export default function CustomersAndSecurityPage() {
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100">
-            <Button variant="outline" onClick={() => setBanModalOpen(false)} className="border-slate-200 text-slate-700">
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2 border-t border-slate-100">
+            <Button variant="outline" onClick={() => setBanModalOpen(false)} className="w-full sm:w-auto border-slate-200 text-slate-700">
               Cancel
             </Button>
             <Button
               onClick={handleCreateBan}
               disabled={submittingBan}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold shadow-sm"
+              className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold shadow-sm justify-center"
             >
               {submittingBan ? "Applying Ban..." : "Confirm & Ban"}
             </Button>
@@ -1707,11 +1748,11 @@ export default function CustomersAndSecurityPage() {
           }
         }}
       >
-        <DialogContent className="max-w-lg w-[92vw] sm:w-full bg-white max-h-[85vh] overflow-hidden p-0 border border-slate-200 shadow-2xl rounded-2xl flex flex-col">
+        <DialogContent className="max-w-lg w-[94vw] sm:w-full bg-white max-h-[85vh] overflow-hidden p-0 border border-slate-200 shadow-2xl rounded-2xl flex flex-col">
           {selectedTicket && (
             <>
               <div
-                className="overflow-y-auto flex-1 p-6 space-y-4"
+                className="overflow-y-auto flex-1 p-4 sm:p-6 space-y-4"
                 style={{ scrollbarWidth: "thin", scrollbarColor: "#94A3B8 transparent" }}
               >
                 <DialogHeader>
@@ -1808,14 +1849,14 @@ export default function CustomersAndSecurityPage() {
                 </div>
               </div>
 
-              <DialogFooter className="flex flex-col sm:flex-row justify-between items-center gap-2 p-4 bg-slate-50 border-t border-slate-200 shrink-0">
-                <div className="flex gap-2">
+              <DialogFooter className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-2.5 p-3.5 sm:p-4 bg-slate-50 border-t border-slate-200 shrink-0">
+                <div className="flex gap-2 w-full sm:w-auto justify-between sm:justify-start">
                   {selectedTicket.status !== "resolved" && (
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleMarkTicketStatus(selectedTicket.id, "resolved")}
-                      className="text-xs text-emerald-800 border-emerald-300 hover:bg-emerald-50 font-bold"
+                      className="text-xs text-emerald-800 border-emerald-300 hover:bg-emerald-50 font-bold flex-1 sm:flex-initial"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5 mr-1 text-emerald-600" />
                       Mark Resolved
@@ -1828,7 +1869,7 @@ export default function CustomersAndSecurityPage() {
                       setIsTicketModalOpen(false)
                       setTimeout(() => setSelectedTicket(null), 300)
                     }}
-                    className="text-xs text-slate-500"
+                    className="text-xs text-slate-500 flex-1 sm:flex-initial"
                   >
                     Close
                   </Button>
@@ -1837,7 +1878,7 @@ export default function CustomersAndSecurityPage() {
                 <Button
                   onClick={handleSendTicketReply}
                   disabled={sendingReply || !replyMessage.trim()}
-                  className="bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white flex items-center gap-1.5 font-bold shadow-sm"
+                  className="w-full sm:w-auto bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white flex items-center justify-center gap-1.5 font-bold shadow-sm"
                 >
                   <Send className="h-3.5 w-3.5" />
                   {sendingReply ? "Sending Email..." : "Send Email Reply"}
@@ -1853,7 +1894,7 @@ export default function CustomersAndSecurityPage() {
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {!isSubAdmin && (
         <Dialog open={!!resetModalEmail} onOpenChange={(open) => !open && setResetModalEmail(null)}>
-          <DialogContent className="sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl">
+          <DialogContent className="w-[94vw] sm:w-full sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-[#7E3AF2] text-lg font-bold">
                 <KeyRound className="h-5 w-5" />
@@ -1865,17 +1906,17 @@ export default function CustomersAndSecurityPage() {
             </DialogHeader>
 
             <p className="text-xs text-slate-600 py-2 font-medium">
-              The customer will receive an official branded email with a one-time link to set a new password on Byiora.
+              This will immediately sign out all active sessions for this user, randomize their current password, and email them a secure 24-hour reset link to set a new password.
             </p>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100">
-              <Button variant="outline" onClick={() => setResetModalEmail(null)} className="border-slate-200 text-slate-700">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2 border-t border-slate-100">
+              <Button variant="outline" onClick={() => setResetModalEmail(null)} className="w-full sm:w-auto border-slate-200 text-slate-700">
                 Cancel
               </Button>
               <Button
                 onClick={() => resetModalEmail && handleSendPasswordReset(resetModalEmail)}
                 disabled={sendingReset}
-                className="bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white font-bold shadow-sm"
+                className="w-full sm:w-auto bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white font-bold shadow-sm justify-center"
               >
                 {sendingReset ? "Sending Email..." : "Send Reset Email"}
               </Button>

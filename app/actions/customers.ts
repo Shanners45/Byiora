@@ -1,5 +1,6 @@
 "use server"
 
+import crypto from "crypto"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { getAdminSessionAction } from "./admin-utils"
 import { banEntity, unbanEntity, getBannedEntities, BannedEntity } from "@/lib/security/blacklist"
@@ -12,6 +13,8 @@ export interface CustomerProfile {
   email: string
   name: string
   isRegistered: boolean
+  isGoogleUser?: boolean
+  provider?: string | null
   userId?: string | null
   totalOrders: number
   totalSpent: number
@@ -100,10 +103,17 @@ export async function getCustomersOverviewAction(): Promise<{
       const domainBan = bannedDomainSet.has(domain)
       const authUser = authUsersMap.get(cleanEmail)
 
+      const isGoogle =
+        authUser?.app_metadata?.provider === "google" ||
+        (Array.isArray(authUser?.app_metadata?.providers) && authUser.app_metadata.providers.includes("google")) ||
+        (Array.isArray(authUser?.identities) && authUser.identities.some((id: any) => id.provider === "google"))
+
       customerMap.set(cleanEmail, {
         email: cleanEmail,
-        name: u.name || cleanEmail.split("@")[0],
+        name: u.name || authUser?.user_metadata?.full_name || cleanEmail.split("@")[0],
         isRegistered: true,
+        isGoogleUser: Boolean(isGoogle),
+        provider: isGoogle ? "google" : "email",
         userId: u.id,
         totalOrders: 0,
         totalSpent: 0,
@@ -120,6 +130,43 @@ export async function getCustomersOverviewAction(): Promise<{
       })
     }
 
+    // Seed any auth users not present in public.users
+    if (authUsersMap.size > 0) {
+      for (const [cleanEmail, au] of authUsersMap.entries()) {
+        if (!customerMap.has(cleanEmail)) {
+          const isGoogle =
+            au.app_metadata?.provider === "google" ||
+            (Array.isArray(au.app_metadata?.providers) && au.app_metadata.providers.includes("google")) ||
+            (Array.isArray(au.identities) && au.identities.some((id: any) => id.provider === "google"))
+
+          const directBan = bannedEmailMap.get(cleanEmail)
+          const domain = cleanEmail.split("@")[1] || ""
+          const domainBan = bannedDomainSet.has(domain)
+
+          customerMap.set(cleanEmail, {
+            email: cleanEmail,
+            name: au.user_metadata?.full_name || au.user_metadata?.name || cleanEmail.split("@")[0],
+            isRegistered: true,
+            isGoogleUser: Boolean(isGoogle),
+            provider: isGoogle ? "google" : "email",
+            userId: au.id,
+            totalOrders: 0,
+            totalSpent: 0,
+            successfulOrders: 0,
+            failedOrders: 0,
+            lastOrderDate: null,
+            lastIp: null,
+            lastDeviceId: null,
+            lastSignInAt: au.last_sign_in_at || null,
+            isBanned: !!directBan || domainBan,
+            banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
+            banId: directBan?.id || null,
+            createdAt: au.created_at,
+          })
+        }
+      }
+    }
+
     // Aggregate transactions
     for (const t of transactions || []) {
       if (!t.user_email) continue
@@ -130,13 +177,21 @@ export async function getCustomersOverviewAction(): Promise<{
 
       let profile = customerMap.get(cleanEmail)
       if (!profile) {
-        // Pure guest buyer
-        const guestName = (t.guest_user_data as any)?.name || cleanEmail.split("@")[0]
+        const authUser = authUsersMap.get(cleanEmail)
+        const isRegistered = Boolean(t.user_id || authUser)
+        const isGoogle =
+          authUser?.app_metadata?.provider === "google" ||
+          (Array.isArray(authUser?.app_metadata?.providers) && authUser.app_metadata.providers.includes("google")) ||
+          (Array.isArray(authUser?.identities) && authUser.identities.some((id: any) => id.provider === "google"))
+
+        const guestName = (t.guest_user_data as any)?.name || authUser?.user_metadata?.full_name || cleanEmail.split("@")[0]
         profile = {
           email: cleanEmail,
           name: guestName,
-          isRegistered: false,
-          userId: null,
+          isRegistered,
+          isGoogleUser: Boolean(isGoogle),
+          provider: isGoogle ? "google" : (isRegistered ? "email" : null),
+          userId: t.user_id || authUser?.id || null,
           totalOrders: 0,
           totalSpent: 0,
           successfulOrders: 0,
@@ -144,7 +199,7 @@ export async function getCustomersOverviewAction(): Promise<{
           lastOrderDate: t.created_at,
           lastIp: (t.guest_user_data as any)?.ip || null,
           lastDeviceId: (t.guest_user_data as any)?.deviceId || null,
-          lastSignInAt: null,
+          lastSignInAt: authUser?.last_sign_in_at || null,
           isBanned: !!directBan || domainBan,
           banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
           banId: directBan?.id || null,
@@ -213,6 +268,8 @@ export async function getCustomersOverviewAction(): Promise<{
 
 /**
  * Sends an official password reset link to a registered user from the admin panel.
+ * Immediately logs out that user from every place, randomizes their current password,
+ * and sends a 24-hour active password reset link to their email.
  */
 export async function sendCustomerPasswordResetAction(email: string): Promise<{
   success: boolean
@@ -226,29 +283,72 @@ export async function sendCustomerPasswordResetAction(email: string): Promise<{
   try {
     const supabase = createServiceRoleClient() as any
 
-    // Generate password recovery link via Supabase Auth Admin API
-    const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://www.byiora.com.np"
-    const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
-      type: "recovery",
-      email: cleanEmail,
-      options: {
-        redirectTo: `${origin}/en-np/forgot-password`,
-      },
-    })
+    // 1. Locate user ID in Supabase
+    let targetUserId: string | null = null
+    const { data: userRow } = await supabase
+      .from("users")
+      .select("id")
+      .ilike("email", cleanEmail)
+      .maybeSingle()
 
-    if (linkError || !linkData?.properties?.action_link) {
-      if (linkError?.message?.toLowerCase().includes("not found") || (linkError as any)?.code === "user_not_found") {
-        return {
-          success: false,
-          error: "This customer ordered as a Guest and does not have a registered account password yet. They can sign up on the website.",
-        }
-      }
-      return { success: false, error: linkError?.message || "Could not generate password reset link" }
+    if (userRow?.id) {
+      targetUserId = userRow.id
+    } else {
+      const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 })
+      const match = authData?.users?.find((u: any) => u.email?.toLowerCase().trim() === cleanEmail)
+      if (match?.id) targetUserId = match.id
     }
 
-    const resetLink = linkData.properties.action_link
+    if (!targetUserId) {
+      return {
+        success: false,
+        error: "This customer ordered as a Guest and does not have a registered account password yet. They can sign up on the website.",
+      }
+    }
 
-    // Dispatch branded email via official Byiora email template
+    // 2. LOGOUT that user from every place (revoke all active sessions and refresh tokens)
+    try {
+      await supabase.rpc("revoke_all_user_sessions", { target_user_id: targetUserId })
+    } catch (rpcErr: any) {
+      console.warn("[Reset Password Action] revoke_all_user_sessions RPC warning:", rpcErr.message)
+    }
+
+    // 3. CHANGE his current password to something random immediately
+    const tempRandomPassword =
+      crypto.randomBytes(24).toString("base64") + "!Aa9" + Math.floor(100 + Math.random() * 900)
+    const { error: randomizePwError } = await supabase.auth.admin.updateUserById(targetUserId, {
+      password: tempRandomPassword,
+    })
+    if (randomizePwError) {
+      console.error("[Reset Password Action] Failed to randomize current password:", randomizePwError.message)
+      return { success: false, error: "Failed to randomize current password: " + randomizePwError.message }
+    }
+
+    // 4. Generate high-entropy 24-hour active reset token
+    const rawToken = crypto.randomBytes(32).toString("hex")
+    const tokenHash = crypto.createHash("sha256").update(rawToken).digest("hex")
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+
+    // Invalidate previous unconsumed reset tokens for this user
+    await supabase.from("password_reset_tokens").delete().eq("user_id", targetUserId)
+
+    const { error: tokenInsertErr } = await supabase.from("password_reset_tokens").insert({
+      user_id: targetUserId,
+      email: cleanEmail,
+      token_hash: tokenHash,
+      expires_at: expiresAt,
+    })
+
+    if (tokenInsertErr) {
+      console.error("[Reset Password Action] Failed to store reset token:", tokenInsertErr.message)
+      return { success: false, error: "Could not create password reset token: " + tokenInsertErr.message }
+    }
+
+    // 5. Build direct reset link (active for 24 hours)
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || "https://www.byiora.com.np"
+    const resetLink = `${origin}/en-np/reset-password?token=${rawToken}`
+
+    // 6. Dispatch branded email via official Byiora email template
     const sendRes = await sendPasswordResetEmail({
       email: cleanEmail,
       resetLink,

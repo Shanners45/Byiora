@@ -117,6 +117,15 @@ export async function replyToSupportTicketAction({
     <div class="content">
       <p style="font-size: 16px; margin-top: 0; color: #111827; font-weight: 600;">Hi ${ticket.name || "there"},</p>
       
+      <div style="background-color: #F9FAFB; border: 1px solid #E5E7EB; border-left: 4px solid #7E3AF2; padding: 12px 16px; border-radius: 6px; margin: 16px 0 20px 0;">
+        <p style="margin: 0; font-size: 13px; color: #4B5563;">
+          <strong style="color: #111827;">Ticket Number:</strong> <span style="font-family: monospace; font-weight: 700; color: #7E3AF2;">#${ticket.ticket_number}</span>
+        </p>
+        <p style="margin: 4px 0 0 0; font-size: 13px; color: #4B5563;">
+          <strong style="color: #111827;">Subject:</strong> ${ticket.subject}
+        </p>
+      </div>
+
       <div class="message-body">${cleanReply}</div>
 
       <div class="sign-off">

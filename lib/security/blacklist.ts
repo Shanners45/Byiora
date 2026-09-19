@@ -75,12 +75,16 @@ export async function checkIsBanned({
   // 2. Supabase Query Fallback
   try {
     const supabase = createServiceRoleClient() as any
+    const safeDevice = cleanDevice.replace(/[,()"]/g, "")
+    const safeEmail = cleanEmail.replace(/[,()"]/g, "")
+    const safeIp = cleanIp.replace(/[,()"]/g, "")
+    const safeDomain = domain.replace(/[,()"]/g, "")
     const conditions: string[] = []
 
-    if (cleanDevice) conditions.push(`and(type.eq.device_id,value.eq.${cleanDevice})`)
-    if (cleanEmail) conditions.push(`and(type.eq.email,value.ilike.${cleanEmail})`)
-    if (cleanIp && cleanIp !== "unknown") conditions.push(`and(type.eq.ip,value.eq.${cleanIp})`)
-    if (domain) conditions.push(`and(type.eq.email_domain,value.ilike.${domain})`)
+    if (safeDevice) conditions.push(`and(type.eq.device_id,value.eq.${safeDevice})`)
+    if (safeEmail) conditions.push(`and(type.eq.email,value.ilike.${safeEmail})`)
+    if (safeIp && safeIp !== "unknown") conditions.push(`and(type.eq.ip,value.eq.${safeIp})`)
+    if (safeDomain) conditions.push(`and(type.eq.email_domain,value.ilike.${safeDomain})`)
 
     if (conditions.length === 0) return { banned: false }
 

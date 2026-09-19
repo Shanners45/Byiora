@@ -17,6 +17,26 @@ if (dsn) {
     // Security & Privacy Controls
     sendDefaultPii: false,
 
+    // Block third-party browser extensions and adware from sending noise
+    denyUrls: [
+      /^chrome-extension:\/\//i,
+      /^moz-extension:\/\//i,
+      /^safari-extension:\/\//i,
+      /^safari-web-extension:\/\//i,
+      /executors\/\d+\.js/i,
+      /\/executors\//i,
+    ],
+
+    ignoreErrors: [
+      /Cannot read properties of undefined \(reading ['"]M_ID['"]\)/i,
+      "Cannot read properties of undefined (reading 'M_ID')",
+      "ResizeObserver loop",
+      "ResizeObserver loop completed with undelivered notifications",
+      "Failed to fetch",
+      "NetworkError when attempting to fetch resource",
+      "AbortError: The user aborted a request",
+    ],
+
     integrations: [
       Sentry.replayIntegration({
         maskAllText: false,
@@ -43,8 +63,24 @@ if (dsn) {
         errorMessage.includes("AbortError: The user aborted a request") ||
         errorMessage.includes("chrome-extension://") ||
         errorMessage.includes("moz-extension://") ||
-        errorMessage.includes("safari-extension://")
+        errorMessage.includes("safari-extension://") ||
+        errorMessage.includes("M_ID")
       ) {
+        return null
+      }
+
+      // Filter out errors thrown by injected third-party scripts/browser extensions in stack traces
+      const frames = event.exception?.values?.flatMap((val) => val.stacktrace?.frames || []) || []
+      const hasThirdPartyFrame = frames.some((frame) => {
+        const filename = frame.filename || ""
+        return (
+          filename.includes("extension://") ||
+          filename.includes("executors/") ||
+          filename.includes("/200.js")
+        )
+      })
+
+      if (hasThirdPartyFrame) {
         return null
       }
 

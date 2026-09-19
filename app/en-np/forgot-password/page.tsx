@@ -308,8 +308,8 @@ export default function ForgotPasswordPage() {
                 <h1 className="text-white text-2xl md:text-3xl font-bold mb-2">Reset Your Password</h1>
                 <p className="text-white/60 text-sm">
                   {isRecoverySession ? (
-                    <span className="text-emerald-300 font-medium">
-                      ✓ Email verified via secure link. Enter your new password below.
+                    <span className="text-white/70 font-medium">
+                      Enter your new password below.
                     </span>
                   ) : (
                     <>

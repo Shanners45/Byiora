@@ -130,6 +130,7 @@ export default function OrdersPage() {
   const [refundModal, setRefundModal] = useState<{ open: boolean; transaction: Transaction | null }>({ open: false, transaction: null })
   const [refundAmount, setRefundAmount] = useState("")
   const [refundMobile, setRefundMobile] = useState("")
+  const [refundReason, setRefundReason] = useState("")
   const [isRefunding, setIsRefunding] = useState(false)
 
   const handleProcessKhaltiRefund = async () => {
@@ -140,7 +141,8 @@ export default function OrdersPage() {
       const res = await refundKhaltiTransactionAction(
         refundModal.transaction.transaction_id,
         parsedAmount,
-        refundMobile.trim() || undefined
+        refundMobile.trim() || undefined,
+        refundReason.trim() || undefined
       )
       if (res.error) {
         toast.error(res.error)
@@ -161,7 +163,9 @@ export default function OrdersPage() {
               denomination: txn.amount,
               status: "Refunded",
               transactionId: txn.transaction_id,
-              remarks: res.message || (parsedAmount ? `Refunded (Partial): Rs. ${parsedAmount}` : `Refunded (Full): Rs. ${txn.price}`),
+              price: parsedAmount || txn.price,
+              paymentMethod: txn.payment_method,
+              remarks: refundReason.trim() || undefined,
               isGuest: !txn.user_id,
               isDynamic: true
             })
@@ -331,12 +335,13 @@ export default function OrdersPage() {
     if (newStatus === "Refunded" && isKhalti && !refundModal.open) {
       setRefundAmount("")
       setRefundMobile(transaction?.guest_user_data?.phoneNumber || "")
+      setRefundReason("")
       setRefundModal({ open: true, transaction: transaction || null })
       return
     }
 
-    // If marking as failed, prompt for remarks (optional)
-    if (newStatus === "Failed" && !remarks && !remarksDialog) {
+    // If marking as Failed or Refunded, prompt for remarks/reason (optional)
+    if ((newStatus === "Failed" || newStatus === "Refunded") && !remarks && !remarksDialog) {
       setRemarksText("")
       setRemarksDialog({ open: true, transactionId, status: newStatus })
       return
@@ -388,7 +393,9 @@ export default function OrdersPage() {
               denomination: transaction.amount,
               status: actualNewStatus,
               transactionId: transaction.transaction_id,
-              remarks: remarks || transaction.failure_remarks || undefined,
+              price: transaction.price,
+              paymentMethod: transaction.payment_method,
+              remarks: remarks?.trim() || undefined,
               isGuest: !transaction.user_id,
               isDynamic: transaction.payment_category === "nepalpay" || transaction.payment_category === "fonepay" || transaction.payment_category === "khalti"
             })
@@ -923,19 +930,31 @@ export default function OrdersPage() {
         </CardContent>
       </Card>
 
-      {/* Remarks Dialog for Failed orders */}
+      {/* Remarks Dialog for Failed and Refunded orders */}
       {remarksDialog && (
         <Dialog open={remarksDialog.open} onOpenChange={(open) => { if (!open) setRemarksDialog(null) }}>
           <DialogContent className="sm:max-w-md" aria-describedby={undefined}>
             <DialogHeader>
-              <DialogTitle className="text-red-600">Mark Order as Failed</DialogTitle>
+              <DialogTitle className={remarksDialog.status === "Refunded" ? "text-[#7E3AF2] flex items-center gap-2" : "text-red-600 flex items-center gap-2"}>
+                {remarksDialog.status === "Refunded" ? "Refund Order" : "Mark Order as Failed"}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-3 py-2">
-              <p className="text-sm text-gray-500">Optionally add a reason for the failure. This will be included in the notification email sent to the customer.</p>
+              <p className="text-sm text-gray-500">
+                {remarksDialog.status === "Refunded"
+                  ? "Optionally add a reason for the refund. If provided, this reason will be included in the refund email sent to the customer."
+                  : "Optionally add a reason for the failure. This will be included in the notification email sent to the customer."}
+              </p>
               <div className="space-y-1">
-                <Label className="text-sm font-medium text-gray-700">Remarks (Optional)</Label>
+                <Label className="text-sm font-medium text-gray-700">
+                  {remarksDialog.status === "Refunded" ? "Refund Reason (Optional)" : "Remarks (Optional)"}
+                </Label>
                 <Textarea
-                  placeholder="e.g. Payment not received, Out of stock, Invalid user ID..."
+                  placeholder={
+                    remarksDialog.status === "Refunded"
+                      ? "e.g. Customer requested cancellation, out of stock, duplicate order..."
+                      : "e.g. Payment not received, Out of stock, Invalid user ID..."
+                  }
                   value={remarksText}
                   onChange={(e) => setRemarksText(e.target.value)}
                   className="resize-none placeholder:text-gray-500"
@@ -946,14 +965,14 @@ export default function OrdersPage() {
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setRemarksDialog(null)}>Cancel</Button>
               <Button
-                className="bg-red-600 hover:bg-red-700 text-white"
+                className={remarksDialog.status === "Refunded" ? "bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white" : "bg-red-600 hover:bg-red-700 text-white"}
                 onClick={() => {
                   const { transactionId, status } = remarksDialog
                   setRemarksDialog(null)
-                  updateTransactionStatus(transactionId, status, remarksText || "")
+                  updateTransactionStatus(transactionId, status, remarksText.trim() || undefined)
                 }}
               >
-                Confirm & Notify Customer
+                {remarksDialog.status === "Refunded" ? "Confirm & Refund Order" : "Confirm & Notify Customer"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1016,6 +1035,17 @@ export default function OrdersPage() {
                   placeholder="e.g. 98XXXXXXXX"
                   value={refundMobile}
                   onChange={(e) => setRefundMobile(e.target.value)}
+                  className="h-9 text-xs border-gray-200 bg-white text-gray-900 focus:border-[#7E3AF2] focus:ring-1 focus:ring-[#7E3AF2] rounded-lg shadow-none"
+                />
+              </div>
+
+              {/* Form Input: Refund Reason */}
+              <div className="space-y-1">
+                <Label className="text-xs font-medium text-gray-700">Refund Reason (Optional)</Label>
+                <Input
+                  placeholder="e.g. Customer requested refund, duplicate order"
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
                   className="h-9 text-xs border-gray-200 bg-white text-gray-900 focus:border-[#7E3AF2] focus:ring-1 focus:ring-[#7E3AF2] rounded-lg shadow-none"
                 />
               </div>

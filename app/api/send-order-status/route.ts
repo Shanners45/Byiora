@@ -38,6 +38,8 @@ export async function POST(request: Request) {
     const productName = sanitizeHtml(body.productName || "")
     const denomination = sanitizeHtml(body.denomination || "")
     const remarks = sanitizeHtml(body.remarks || "")
+    const price = sanitizeHtml(body.price ? String(body.price) : "")
+    const paymentMethod = sanitizeHtml(body.paymentMethod || "")
     const isGuest = Boolean(body.isGuest)
     const isDynamic = Boolean(body.isDynamic)
     let magicLinkToken = body.magicLinkToken ? sanitizeHtml(body.magicLinkToken) : undefined
@@ -138,9 +140,11 @@ export async function POST(request: Request) {
         </div>
         <table style="width: 100%; border-collapse: collapse;">
           ${row("Product", `${productName} ${denomination}`.trim())}
+          ${price ? row("Refunded Amount", `NPR ${price}`) : ''}
+          ${paymentMethod ? row("Payment Method", paymentMethod) : ''}
           ${row("Order ID", transactionId || "—")}
           ${row("Status", '<span style="color: #7E3AF2; font-weight: 700; text-transform: uppercase;">Refunded</span>')}
-          ${remarks ? row("Details", remarks) : ''}
+          ${remarks ? row("Reason", remarks) : ''}
         </table>
       </div>
 

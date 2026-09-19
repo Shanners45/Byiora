@@ -453,7 +453,8 @@ export async function sendRecoveryEmailAction(transactionId: string) {
 export async function refundKhaltiTransactionAction(
   transactionId: string,
   amountInRs?: number,
-  mobile?: string
+  mobile?: string,
+  reason?: string
 ) {
   if (!(await verifyAdmin())) {
     return { error: "Unauthorized: Admin access required" }
@@ -619,9 +620,10 @@ export async function refundKhaltiTransactionAction(
     }
 
     // 4. Refund Succeeded! Update Database
-    const refundRemark = amountInRs
+    const baseRemark = amountInRs
       ? `Khalti Refunded (Partial): Rs. ${amountInRs}`
       : `Khalti Refunded (Full): Rs. ${txn.price}`
+    const refundRemark = reason?.trim() ? `${baseRemark} - Reason: ${reason.trim()}` : baseRemark
 
     await serviceSupabase
       .from("transactions")
