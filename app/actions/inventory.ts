@@ -14,12 +14,21 @@ export async function getInventoryProductsAction() {
   const supabase = createServiceRoleClient()
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, slug, logo, category, denominations")
+    .select("id, name, slug, logo, category, denominations, checkout_fields, uid_instructions")
     .in("category", ["digital-goods", "games"])
     .order("created_at", { ascending: false })
 
   if (error) return { error: error.message }
-  return { success: true, products: data }
+
+  // Exclude direct-login and topup products, as well as any products requiring credentials or user ID input
+  const eligibleProducts = (data || []).filter((product: any) => {
+    if (product.category === "topup" || product.category === "direct-login") return false
+    if (Array.isArray(product.checkout_fields) && product.checkout_fields.length > 0) return false
+    if (product.uid_instructions) return false
+    return true
+  })
+
+  return { success: true, products: eligibleProducts }
 }
 
 /**

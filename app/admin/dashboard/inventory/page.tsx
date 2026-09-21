@@ -243,11 +243,13 @@ export default function InventoryPage() {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
-  const filteredProducts = products.filter(
-    (product) =>
-      product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      product.category.toLowerCase().includes(searchQuery.toLowerCase()),
-  )
+  const filteredProducts = products
+    .filter((product) => product.category !== "topup" && product.category !== "direct-login" && !product.uid_instructions && !(Array.isArray(product.checkout_fields) && product.checkout_fields.length > 0))
+    .filter(
+      (product) =>
+        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        product.category.toLowerCase().includes(searchQuery.toLowerCase()),
+    )
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage)
   const paginatedProducts = filteredProducts.slice(

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { verifySignatureAppRouter } from "@upstash/qstash/dist/nextjs"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/app/actions/payment-credentials"
-import { fulfillOrderDirectly } from "@/lib/fulfillment"
+import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
 
 const BYPASS_SIGNATURE = process.env.NODE_ENV === "development"
 
@@ -106,10 +106,14 @@ async function handler(req: Request) {
         const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
         if (paidAmount > 0 && paidAmount < expectedAmount) {
           console.error(`[FRAUD ALERT] Amount mismatch for ${transactionId}: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`)
-          await supabase.from("transactions").update({
-            status: "Payment Failed",
-            failure_remarks: `Amount discrepancy: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`
-          } as any).eq("transaction_id", transactionId)
+          await handlePartialPayment({
+            transactionId,
+            expectedAmount,
+            paidAmount,
+            productName: txn.product_name,
+            userEmail: txn.user_email,
+            source: `QStash (${provider.toUpperCase()})`,
+          })
           return NextResponse.json({ error: "Amount mismatch" }, { status: 400 })
         }
       }
@@ -123,6 +127,7 @@ async function handler(req: Request) {
       validationTraceId,
       provider,
       bankTxnId: resolvedBankTxnId,
+      source: `QStash (${provider.toUpperCase()})`,
     })
 
     if (!fulfillResult.success) {

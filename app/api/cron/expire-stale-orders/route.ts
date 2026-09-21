@@ -170,12 +170,23 @@ export async function GET(req: Request) {
       // If payment was recovered, skip marking as failed
       if (recovered) continue
 
-      // Mark as Payment Failed & clear sensitive direct-login credentials
-      await supabase.from("transactions").update({
-        status: "Payment Failed",
-        failure_remarks: "QR code expired without payment confirmation",
-        encrypted_checkout_data: null
-      } as any).eq("transaction_id", txn.transaction_id)
+      // Mark as Payment Failed (keep encrypted_checkout_data for 24h recovery window)
+      const { data: updatedRows } = await supabase
+        .from("transactions")
+        .update({
+          status: "Payment Failed",
+          failure_remarks: "QR code expired without payment confirmation",
+        } as any)
+        .eq("transaction_id", txn.transaction_id)
+        .in("status", ["Payment Pending", "Processing"])
+        .is("bank_txn_id", null)
+        .select("transaction_id")
+
+      // If not updated, the order was already paid or processed concurrently — do not expire or penalize
+      if (!updatedRows || updatedRows.length === 0) {
+        console.log(`[CRON] Skipping expiration for ${txn.transaction_id} — order was already paid/processed`)
+        continue
+      }
 
       // Increment failure strike for user/IP on expiration
       incrementFailureStrike({
@@ -234,12 +245,36 @@ export async function GET(req: Request) {
       results.expired++
     }
 
-    console.log(`[CRON] Results: ${results.recovered} recovered, ${results.expired} expired, ${results.errors} errors`)
+    // ============================================
+    // PART 2: Purge direct-login credentials for Failed/Cancelled orders older than 24 hours
+    // ============================================
+    let purgedCredentials = 0
+    try {
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      const { error: purgeError, count } = await supabase
+        .from("transactions")
+        .update({ encrypted_checkout_data: null } as any, { count: "exact" })
+        .not("encrypted_checkout_data", "is", null)
+        .in("status", ["Payment Failed", "Cancelled", "Failed"])
+        .lt("created_at", twentyFourHoursAgo)
+
+      if (purgeError) {
+        console.error("[CRON] Error purging 24h+ expired credentials:", purgeError)
+      } else if (count && count > 0) {
+        purgedCredentials = count
+        console.log(`[CRON] 🧹 Purged credentials for ${count} orders older than 24h`)
+      }
+    } catch (purgeErr) {
+      console.error("[CRON] Unexpected error purging credentials:", purgeErr)
+    }
+
+    console.log(`[CRON] Results: ${results.recovered} recovered, ${results.expired} expired, ${purgedCredentials} credentials purged, ${results.errors} errors`)
 
     return NextResponse.json({
       success: true,
       recovered: results.recovered,
       expired: results.expired,
+      purgedCredentials,
       errors: results.errors,
       timestamp: new Date().toISOString()
     })

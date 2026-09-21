@@ -367,7 +367,7 @@ export default function OrdersPage() {
             ...t,
             status: actualNewStatus,
             failure_remarks: remarks,
-            ...(result.giftcardCode ? { giftcard_code: result.giftcardCode } : {})
+            ...((result as any)?.giftcardCode ? { giftcard_code: (result as any).giftcardCode } : {})
           }
         }
         return t;
@@ -405,8 +405,9 @@ export default function OrdersPage() {
         }
       }
 
-      // Auto-clear encrypted checkout data when marking as completed or failed
-      if ((newStatus === "Completed" || newStatus === "Failed") && transaction?.encrypted_checkout_data) {
+      // Auto-clear encrypted checkout data when marking as completed or refunded
+      // Failed orders retain credentials for 24 hours to allow recovery/verification before cron purges them
+      if ((newStatus === "Completed" || newStatus === "Refunded") && transaction?.encrypted_checkout_data) {
         try {
           await clearCheckoutData(transactionId)
           // Update local state to clear the encrypted data
@@ -441,9 +442,9 @@ export default function OrdersPage() {
         throw new Error(result.error)
       }
 
-      // Update local state
+      // Update local state (credentials are cleared when order is Completed)
       setTransactions((prev) =>
-        prev.map((t) => (t.id === transaction.id ? { ...t, giftcard_code: code, status: "Completed" } : t))
+        prev.map((t) => (t.id === transaction.id ? { ...t, giftcard_code: code, status: "Completed", encrypted_checkout_data: null } : t))
       )
 
       toast.success("Order marked as completed and gift card code sent to customer!")
@@ -745,6 +746,7 @@ export default function OrdersPage() {
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="Paid">Paid</SelectItem>
+                                    <SelectItem value="Completed">Completed</SelectItem>
                                     <SelectItem value="Refunded">Refunded</SelectItem>
                                   </SelectContent>
                                 </Select>
@@ -758,6 +760,11 @@ export default function OrdersPage() {
                               {refundSubtext && (
                                 <span className="text-[11px] font-semibold text-purple-700 leading-tight bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
                                   {refundSubtext}
+                                </span>
+                              )}
+                              {(status === "Payment Failed" || status === "Failed") && transaction.failure_remarks && (
+                                <span className="text-[11px] font-semibold text-red-600 leading-tight bg-red-50 px-1.5 py-0.5 rounded border border-red-200 max-w-[200px] break-words">
+                                  {transaction.failure_remarks}
                                 </span>
                               )}
                             </div>
@@ -827,7 +834,7 @@ export default function OrdersPage() {
                         }
 
                         // Direct-login products: always show encrypted data cell
-                        if (transaction.product_category === "direct-login") {
+                        if (transaction.product_category === "direct-login" || transaction.encrypted_checkout_data) {
                           return <DirectLoginCell transaction={transaction} />
                         }
 

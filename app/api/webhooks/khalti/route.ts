@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/app/actions/payment-credentials"
-import { sendOrderPlacedEmail, sendGiftcardCodeEmail } from "@/lib/email/resend"
-import { decryptInventoryCode } from "@/lib/crypto/inventory"
-import { Redis } from "@upstash/redis"
+import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -113,147 +111,33 @@ export async function GET(request: Request) {
       const receivedPaisa = Number(verifyData.total_amount || verifyData.amount)
       if (receivedPaisa && receivedPaisa < expectedPaisa) {
         console.error(`[KHALTI FRAUD ALERT] Amount mismatch for ${purchase_order_id}: Expected ${expectedPaisa} Paisa, received ${receivedPaisa} Paisa`)
-        await supabase.from("transactions").update({
-          status: "Payment Failed",
-          failure_remarks: `Amount discrepancy: Expected Rs. ${txn.price}, received Rs. ${receivedPaisa / 100}`,
-          updated_at: new Date().toISOString()
-        } as any).eq("transaction_id", purchase_order_id)
+        await handlePartialPayment({
+          transactionId: purchase_order_id,
+          expectedAmount: Math.round(Number(txn.price)),
+          paidAmount: Math.round(receivedPaisa / 100),
+          productName: txn.product_name,
+          userEmail: txn.user_email,
+          source: "Khalti",
+        })
         return NextResponse.redirect(failRedirect)
       }
 
       const resolvedBankTxnId = verifyData.transaction_id || verifyData.tidx || verifyData.bank_txn_id || verifyData.idx || pidx
 
-      // Acquire idempotency lock to prevent double fulfillment
-      let redis: Redis | null = null
-      if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-        redis = new Redis({
-          url: process.env.UPSTASH_REDIS_REST_URL,
-          token: process.env.UPSTASH_REDIS_REST_TOKEN,
-        })
-        const lockKey = `fulfill-lock:${purchase_order_id}`
-        const acquired = await redis.set(lockKey, "1", { nx: true, ex: 60 })
-        if (!acquired) {
-          console.log(`[KHALTI] Idempotency lock already held for ${purchase_order_id}, skipping`)
-          return NextResponse.redirect(successRedirect)
-        }
+      const fulfillResult = await fulfillOrderDirectly({
+        transactionId: purchase_order_id,
+        validationTraceId: pidx,
+        provider: "khalti",
+        bankTxnId: resolvedBankTxnId,
+        source: "Khalti",
+      })
+
+      if (!fulfillResult.success) {
+        console.error(`[KHALTI] Fulfillment failed for ${purchase_order_id}:`, fulfillResult.error)
+        return NextResponse.redirect(failRedirect)
       }
 
-      // A. Mark as Paid in DB
-      await supabase
-        .from("transactions")
-        .update({
-          status: "Paid",
-          validation_trace_id: pidx,
-          bank_txn_id: resolvedBankTxnId,
-          updated_at: new Date().toISOString()
-        } as any)
-        .eq("transaction_id", purchase_order_id)
-
-      // B. Fulfillment: Claim inventory code if applicable (digital-goods / games)
-      const categoriesWithInventory = ["digital-goods", "games"]
-      let deliveredCode: string | null = null
-      let decryptedCode: string | null = null
-
-      if (txn.product_category && categoriesWithInventory.includes(txn.product_category.toLowerCase())) {
-        console.log(`[KHALTI] Claiming inventory code for ${purchase_order_id}...`)
-
-        const { data: claimData, error: claimError } = await supabase.rpc("claim_gift_card", {
-          p_product_id: txn.product_id,
-          p_denomination_label: txn.amount,
-          p_transaction_id: purchase_order_id,
-          p_user_id: txn.user_id || txn.user_email
-        } as any)
-
-        if (claimError) {
-          console.error("[KHALTI] RPC claim error:", claimError)
-        } else if (claimData && (claimData as any).length > 0 && (claimData as any)[0].encrypted_code) {
-          deliveredCode = (claimData as any)[0].encrypted_code
-          decryptedCode = decryptInventoryCode(deliveredCode as string)
-
-          if (decryptedCode) {
-            await supabase.from("transactions").update({
-              giftcard_code: decryptedCode,
-              status: "Completed"
-            } as any).eq("transaction_id", purchase_order_id)
-          } else {
-            console.error(`[KHALTI] Failed to decrypt code for ${purchase_order_id}`)
-            await supabase.from("transactions").update({
-              giftcard_code: deliveredCode
-            } as any).eq("transaction_id", purchase_order_id)
-          }
-        } else {
-          console.warn(`[KHALTI] No codes left for ${txn.product_name} - ${txn.amount}`)
-        }
-      }
-
-      // C. Send Customer Email
-      let userName: string | undefined = undefined
-      if (txn.user_id) {
-        const { data: userData } = await supabase.from("users").select("name").eq("id", txn.user_id).single()
-        if (userData) userName = (userData as any).name
-      } else if (txn.guest_user_data && txn.guest_user_data.name) {
-        userName = txn.guest_user_data.name
-      }
-
-      try {
-        if (decryptedCode) {
-          await sendGiftcardCodeEmail({
-            email: txn.user_email,
-            userName,
-            productName: txn.product_name,
-            denomination: txn.amount,
-            transactionId: purchase_order_id,
-            price: txn.price,
-            paymentMethod: txn.payment_method,
-            giftcardCode: decryptedCode,
-            isGuest: !txn.user_id
-          })
-        } else {
-          await sendOrderPlacedEmail({
-            email: txn.user_email,
-            userName,
-            productName: txn.product_name,
-            denomination: txn.amount,
-            transactionId: purchase_order_id,
-            price: txn.price,
-            paymentMethod: txn.payment_method,
-            isGuest: !txn.user_id
-          })
-        }
-      } catch (emailErr) {
-        console.error("[KHALTI] Failed to send fulfillment email:", emailErr)
-      }
-
-      // D. Send Discord Notification
-      if (process.env.DISCORD_WEBHOOK_URL) {
-        try {
-          const title = decryptedCode
-            ? "✅ AUTO-FULFILLED (Khalti) - PAID ORDER"
-            : "⚠️ MANUAL DELIVERY REQUIRED (Khalti) - PAID ORDER"
-          const color = decryptedCode ? 0x4CAF50 : 0xFF5722
-
-          await fetch(process.env.DISCORD_WEBHOOK_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              embeds: [{
-                title,
-                color,
-                fields: [
-                  { name: "Order ID", value: purchase_order_id, inline: true },
-                  { name: "Bank Txn ID", value: resolvedBankTxnId || "N/A", inline: true },
-                  { name: "Product", value: txn.product_name, inline: false },
-                  { name: "Amount", value: `Rs. ${txn.price}`, inline: true },
-                  { name: "Source", value: "Khalti Gateway", inline: true },
-                ],
-                timestamp: new Date().toISOString()
-              }]
-            })
-          })
-        } catch (e) {}
-      }
-
-      console.log(`[KHALTI] ✅ Successfully updated DB status to Paid/Completed for ${purchase_order_id}`)
+      console.log(`[KHALTI] ✅ Successfully fulfilled order for ${purchase_order_id}`)
       return NextResponse.redirect(successRedirect)
 
     } else if (verifyData.status === "Refunded" || verifyData.status === "Expired" || verifyData.status === "User canceled") {
@@ -265,6 +149,7 @@ export async function GET(request: Request) {
           updated_at: new Date().toISOString()
         } as any)
         .eq("transaction_id", purchase_order_id)
+        .in("status", ["Payment Pending", "Processing"])
       return NextResponse.redirect(failRedirect)
 
     } else if (verifyData.status === "Pending" || verifyData.status === "Initiated") {

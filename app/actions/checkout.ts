@@ -3,7 +3,7 @@
 import { verifyTurnstileToken } from "@/lib/captcha"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "./payment-credentials"
-import { fulfillOrderDirectly } from "@/lib/fulfillment"
+import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
 import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 import { headers } from "next/headers"
@@ -213,7 +213,6 @@ export async function getOrGenerateQRAction(transactionId: string) {
         .update({
           status: "Payment Failed",
           failure_remarks: "QR code expired (server-side enforcement)",
-          encrypted_checkout_data: null
         } as any)
         .eq("transaction_id", transactionId)
         .in("status", ["Payment Pending", "Processing"])
@@ -459,7 +458,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
     const supabase = createServiceRoleClient()
 
     // Ensure it exists and not already completed
-    const { data: txn } = await supabase.from("transactions").select("status, price, created_at").eq("transaction_id", transactionId).single()
+    const { data: txn } = await supabase.from("transactions").select("status, price, created_at, product_name, user_email").eq("transaction_id", transactionId).single()
     if (!txn) {
       return { success: false, error: "Transaction not found" }
     }
@@ -535,11 +534,15 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
         const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
         if (paidAmount > 0 && paidAmount < expectedAmount) {
           console.error(`[VERIFY FRAUD ALERT] Amount mismatch for ${transactionId}: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`)
-          await supabase.from("transactions").update({
-            status: "Payment Failed",
-            failure_remarks: `Amount discrepancy: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`
-          } as any).eq("transaction_id", transactionId)
-          return { success: false, error: "Amount mismatch detected" }
+          await handlePartialPayment({
+            transactionId,
+            expectedAmount,
+            paidAmount,
+            productName: txn.product_name,
+            userEmail: txn.user_email,
+            source: `${provider.toUpperCase()} (Web Verification)`,
+          })
+          return { success: false, error: `Amount mismatch: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}` }
         }
       }
 
@@ -548,6 +551,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
         validationTraceId,
         provider,
         bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
+        source: `${provider.toUpperCase()} (Web Verification)`,
       })
 
       if (fulfillResult.success) {
@@ -699,10 +703,14 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
         const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
         if (paidAmount > 0 && paidAmount < expectedAmount) {
           console.error(`[VERIFY FRAUD ALERT] Amount mismatch for ${transactionId}: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`)
-          await supabase.from("transactions").update({
-            status: "Payment Failed",
-            failure_remarks: `Amount discrepancy: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`
-          } as any).eq("transaction_id", transactionId)
+          await handlePartialPayment({
+            transactionId,
+            expectedAmount,
+            paidAmount,
+            productName: txn.product_name,
+            userEmail: txn.user_email,
+            source: `${paymentCategory.toUpperCase()} (Manual Claim)`,
+          })
           return { success: false, error: `Amount mismatch: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}` }
         }
       }
@@ -728,6 +736,7 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
         validationTraceId: typedTxn.validation_trace_id,
         provider: paymentCategory,
         bankTxnId: candidateBankTxnId,
+        source: `${paymentCategory.toUpperCase()} (Manual Claim)`,
       })
 
       if (fulfillResult.success) {
@@ -777,7 +786,6 @@ export async function expireTransactionAction(transactionId: string) {
       .update({
         status: "Payment Failed",
         failure_remarks: "QR code expired without payment confirmation (Client Timeout)",
-        encrypted_checkout_data: null
       } as any)
       .eq("transaction_id", transactionId)
       .in("status", ["Payment Pending", "Processing"])
@@ -876,7 +884,6 @@ export async function cancelTransactionAction(transactionId: string) {
       .update({
         status: "Cancelled",
         failure_remarks: "Cancelled by user",
-        encrypted_checkout_data: null
       } as any)
       .eq("transaction_id", transactionId)
       .in("status", ["Payment Pending", "Processing"])

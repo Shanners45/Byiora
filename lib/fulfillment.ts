@@ -97,11 +97,17 @@ export async function fulfillOrderDirectly({
     }).catch(() => {})
 
     // 4. Fulfillment: Claim inventory gift card code if applicable
+    // Direct-login and topup categories NEVER have inventory codes — they require manual admin fulfillment!
+    const isManualCategory = 
+      txn.product_category === "direct-login" || 
+      txn.product_category === "topup" ||
+      Boolean(txn.encrypted_checkout_data)
+
     const categoriesWithInventory = ["digital-goods", "games"]
     let deliveredCode: string | null = null
     let decryptedCode: string | null = null
 
-    if (txn.product_category && categoriesWithInventory.includes(txn.product_category.toLowerCase())) {
+    if (!isManualCategory && txn.product_category && categoriesWithInventory.includes(txn.product_category.toLowerCase())) {
       console.log(`[FULFILLMENT] Claiming inventory code for ${transactionId}...`)
 
       const { data: claimData, error: claimError } = await supabase.rpc("claim_gift_card", {
@@ -120,7 +126,8 @@ export async function fulfillOrderDirectly({
         if (decryptedCode) {
           await supabase.from("transactions").update({
             giftcard_code: decryptedCode,
-            status: "Completed"
+            status: "Completed",
+            encrypted_checkout_data: null
           } as any).eq("transaction_id", transactionId)
         } else {
           console.error(`[FULFILLMENT] Failed to decrypt code for ${transactionId}`)
@@ -233,3 +240,70 @@ export async function fulfillOrderDirectly({
     return { success: false, error: error.message || "Failed to fulfill order" }
   }
 }
+
+/**
+ * Handles partial payment / underpayment detection:
+ * 1. Marks transaction as "Payment Failed" with clear failure_remarks (amount received).
+ * 2. Guarded with atomic status check so already paid/completed orders are never overwritten.
+ * 3. Sends a dedicated Discord alert with partial payment details.
+ */
+export async function handlePartialPayment({
+  transactionId,
+  expectedAmount,
+  paidAmount,
+  productName,
+  userEmail,
+  source,
+}: {
+  transactionId: string
+  expectedAmount: number
+  paidAmount: number
+  productName?: string
+  userEmail?: string
+  source?: string
+}) {
+  try {
+    const supabase = createServiceRoleClient()
+    const remarks = `Partial payment: Received Rs. ${paidAmount} of Rs. ${expectedAmount}`
+
+    await supabase
+      .from("transactions")
+      .update({
+        status: "Payment Failed",
+        failure_remarks: remarks,
+        updated_at: new Date().toISOString()
+      } as any)
+      .eq("transaction_id", transactionId)
+      .in("status", ["Payment Pending", "Processing"])
+
+    if (process.env.DISCORD_WEBHOOK_URL) {
+      try {
+        const shortfall = expectedAmount - paidAmount
+        await fetch(process.env.DISCORD_WEBHOOK_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            embeds: [{
+              title: "🚨 PARTIAL PAYMENT DETECTED - PAYMENT FAILED",
+              color: 0xE53935,
+              description: `⚠️ Customer paid **Rs. ${paidAmount}** instead of required **Rs. ${expectedAmount}** (Shortfall: Rs. ${shortfall}). Order marked as **Payment Failed**.`,
+              fields: [
+                { name: "Order ID", value: transactionId, inline: true },
+                { name: "Amount Expected", value: `Rs. ${expectedAmount}`, inline: true },
+                { name: "Amount Received", value: `Rs. ${paidAmount}`, inline: true },
+                { name: "Shortfall", value: `Rs. ${shortfall}`, inline: true },
+                { name: "Product", value: productName || "N/A", inline: false },
+                { name: "Customer Email", value: userEmail || "N/A", inline: true },
+                { name: "Source", value: source || "Dynamic QR", inline: true },
+              ],
+              timestamp: new Date().toISOString()
+            }]
+          })
+        })
+      } catch (e) {}
+    }
+  } catch (err: any) {
+    console.error("[PARTIAL PAYMENT] Handler error:", err)
+  }
+}
+

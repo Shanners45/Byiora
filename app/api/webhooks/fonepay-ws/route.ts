@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/app/actions/payment-credentials"
-import { fulfillOrderDirectly } from "@/lib/fulfillment"
+import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
 
 /**
  * Fonepay WebSocket Webhook
@@ -148,10 +148,14 @@ export async function POST(req: Request) {
           const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, '')))
           if (paidAmount > 0 && paidAmount < expectedAmount) {
             console.error(`[FONEPAY-WS FRAUD ALERT] Amount mismatch for ${transactionId}: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`)
-            await supabase.from("transactions").update({
-              status: "Payment Failed",
-              failure_remarks: `Amount discrepancy: Expected Rs. ${expectedAmount}, received Rs. ${paidAmount}`
-            } as any).eq("transaction_id", transactionId)
+            await handlePartialPayment({
+              transactionId,
+              expectedAmount,
+              paidAmount,
+              productName: txn.product_name,
+              userEmail: txn.user_email,
+              source: "Fonepay WS",
+            })
             return NextResponse.json({ error: "Amount mismatch" }, { status: 400 })
           }
         }

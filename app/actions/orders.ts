@@ -23,52 +23,12 @@ export async function updateTransactionStatusAction(
   try {
     const serviceSupabase = createServiceRoleClient()
 
-    let finalStatus = newStatus;
-    let deliveredCode: string | null = null;
-    let decryptedCode: string | null = null;
-    let emailSent = false;
-
-    // Fetch transaction details
-    const { data: _txn } = await serviceSupabase
-      .from("transactions")
-      .select("*, users(name)")
-      .eq("transaction_id", transactionId)
-      .single()
-    const txn = _txn as any;
-
-    // Auto-fulfill if status is Paid
-    if (newStatus === "Paid" && txn) {
-      const categoriesWithInventory = ["digital-goods", "games"]
-      
-      if ((txn as any).product_category && categoriesWithInventory.includes((txn as any).product_category.toLowerCase())) {
-        const { data: claimData, error: claimError } = await serviceSupabase.rpc("claim_gift_card", {
-          p_product_id: txn.product_id,
-          p_denomination_label: txn.amount,
-          p_transaction_id: transactionId,
-          p_user_id: txn.user_id || txn.user_email
-        } as any)
-
-        if (!claimError && claimData && (claimData as any).length > 0 && (claimData as any)[0].encrypted_code) {
-          deliveredCode = (claimData as any)[0].encrypted_code
-          decryptedCode = decryptInventoryCode(deliveredCode as string)
-          
-          if (decryptedCode) {
-            finalStatus = "Completed"
-          }
-        }
-      }
-    }
-
-    const updatePayload: any = { status: finalStatus }
+    const updatePayload: any = { status: newStatus }
     if (remarks !== undefined) updatePayload.failure_remarks = remarks
-    if (decryptedCode) {
-      updatePayload.giftcard_code = decryptedCode
-    } else if (deliveredCode) {
-      updatePayload.giftcard_code = deliveredCode
-    }
 
-    // PRIVACY: Auto-clear direct-login credentials on terminal states
-    if (["Completed", "Refunded", "Cancelled", "Payment Failed", "Failed"].includes(finalStatus)) {
+    // PRIVACY: Auto-clear direct-login credentials on terminal completed/refunded states
+    // For failed/cancelled orders, retain for 24h to allow recovery/verification before cron purges them.
+    if (["Completed", "Refunded"].includes(newStatus)) {
       updatePayload.encrypted_checkout_data = null
     }
 
@@ -82,71 +42,8 @@ export async function updateTransactionStatusAction(
       return { error: `Failed to update status: ${error.message}` }
     }
 
-    // Send emails if auto-fulfillment logic triggered
-    if (newStatus === "Paid" && txn) {
-      let userName = undefined
-      if (txn.users?.name) {
-        userName = txn.users.name
-      } else if (txn.guest_user_data?.name) {
-        userName = txn.guest_user_data.name
-      }
-
-      const { sendOrderPlacedEmail, sendGiftcardCodeEmail } = await import("@/lib/email/resend")
-
-      try {
-        if (decryptedCode) {
-          await sendGiftcardCodeEmail({
-            email: txn.user_email,
-            userName: userName,
-            productName: txn.product_name,
-            denomination: txn.amount,
-            transactionId: transactionId,
-            price: txn.price,
-            paymentMethod: txn.payment_method,
-            giftcardCode: decryptedCode,
-            isGuest: !txn.user_id
-          })
-          emailSent = true
-        } else {
-          await sendOrderPlacedEmail({
-            email: txn.user_email,
-            userName: userName,
-            productName: txn.product_name,
-            denomination: txn.amount,
-            transactionId: transactionId,
-            price: txn.price,
-            paymentMethod: txn.payment_method,
-            isGuest: !txn.user_id
-          })
-          
-          if (process.env.DISCORD_WEBHOOK_URL) {
-            try {
-              await fetch(process.env.DISCORD_WEBHOOK_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  embeds: [{
-                    title: "⚠️ MANUAL DELIVERY REQUIRED - PAID ORDER",
-                    color: 0xFF5722,
-                    fields: [
-                      { name: "Order ID", value: transactionId, inline: true },
-                      { name: "Product", value: txn.product_name, inline: false },
-                      { name: "Amount", value: `Rs. ${txn.price}`, inline: true },
-                    ],
-                    timestamp: new Date().toISOString()
-                  }]
-                })
-              })
-            } catch (e) {}
-          }
-        }
-      } catch (emailErr) {
-        console.error("Failed to send fulfillment email:", emailErr)
-      }
-    }
-
     revalidatePath("/admin/dashboard/orders")
-    return { success: true, finalStatus, giftcardCode: decryptedCode || null, emailSent }
+    return { success: true, finalStatus: newStatus, giftcardCode: null as string | null, emailSent: false }
   } catch (error: any) {
     console.error("Error in updateTransactionStatusAction:", error)
     return { error: error.message || "An unexpected error occurred" }
@@ -180,6 +77,7 @@ export async function sendGiftcardCodeAction(
       .update({
         giftcard_code: code,
         status: "Completed",
+        encrypted_checkout_data: null,
       })
       .eq("transaction_id", transactionId)
 
