@@ -9,6 +9,7 @@ interface FulfillOrderParams {
   validationTraceId?: string
   provider?: string
   bankTxnId?: string | null
+  source?: string
 }
 
 /**
@@ -22,7 +23,9 @@ interface FulfillOrderParams {
  */
 export async function fulfillOrderDirectly({
   transactionId,
+  provider,
   bankTxnId,
+  source,
 }: FulfillOrderParams) {
   try {
     const supabase = createServiceRoleClient()
@@ -193,10 +196,21 @@ export async function fulfillOrderDirectly({
     // 6. Discord Webhook Notification
     if (process.env.DISCORD_WEBHOOK_URL) {
       try {
+        const sourceTag = source ? ` (${source})` : (provider ? ` (${provider.toUpperCase()})` : "")
         const title = decryptedCode 
-          ? "✅ AUTO-FULFILLED - PAID ORDER" 
-          : "⚠️ MANUAL DELIVERY REQUIRED - PAID ORDER"
+          ? `✅ AUTO-FULFILLED${sourceTag} - PAID ORDER` 
+          : `⚠️ MANUAL DELIVERY REQUIRED${sourceTag} - PAID ORDER`
         const color = decryptedCode ? 0x4CAF50 : 0xFF5722
+
+        const fields: any[] = [
+          { name: "Order ID", value: transactionId, inline: true },
+          { name: "Bank Txn ID", value: bankTxnId || "N/A", inline: true },
+          { name: "Product", value: txn.product_name, inline: false },
+          { name: "Amount", value: `Rs. ${txn.price}`, inline: true },
+        ]
+        if (source) {
+          fields.push({ name: "Source", value: source, inline: true })
+        }
 
         await fetch(process.env.DISCORD_WEBHOOK_URL, {
           method: "POST",
@@ -205,12 +219,7 @@ export async function fulfillOrderDirectly({
             embeds: [{
               title,
               color,
-              fields: [
-                { name: "Order ID", value: transactionId, inline: true },
-                { name: "Bank Txn ID", value: bankTxnId || "N/A", inline: true },
-                { name: "Product", value: txn.product_name, inline: false },
-                { name: "Amount", value: `Rs. ${txn.price}`, inline: true },
-              ],
+              fields,
               timestamp: new Date().toISOString()
             }]
           })

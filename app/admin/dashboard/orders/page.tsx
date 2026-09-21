@@ -363,9 +363,9 @@ export default function OrdersPage() {
       // Update local state
       setTransactions((prev) => prev.map((t) => {
         if (t.transaction_id === transactionId) {
-          return { 
-            ...t, 
-            status: actualNewStatus, 
+          return {
+            ...t,
+            status: actualNewStatus,
             failure_remarks: remarks,
             ...(result.giftcardCode ? { giftcard_code: result.giftcardCode } : {})
           }
@@ -855,14 +855,14 @@ export default function OrdersPage() {
                                 placeholder="Enter Giftcard Code"
                                 value={giftcardCodes[transaction.id] !== undefined ? giftcardCodes[transaction.id] : (transaction.giftcard_code || '')}
                                 onChange={(e) => setGiftcardCodes(prev => ({ ...prev, [transaction.id]: e.target.value }))}
-                                disabled={["Processing", "Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status)}
+                                disabled={["Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status)}
                                 readOnly={transaction.status === "Completed"}
                                 className={`w-[170px] h-8 text-xs placeholder:text-gray-500 ${transaction.status === "Completed" ? "bg-green-50 border-green-200 text-green-800 font-mono" : ""}`}
                               />
                               <Button
                                 size="sm"
                                 onClick={() => handleSendGiftcardCode(transaction)}
-                                disabled={["Processing", "Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status) || sendingCodeIds[transaction.id]}
+                                disabled={["Failed", "Completed", "Payment Failed", "Payment Pending", "Refunded", "Cancelled", "Archived"].includes(transaction.status) || sendingCodeIds[transaction.id]}
                                 className={`h-8 px-2 flex-shrink-0 ${transaction.status === "Completed" ? "bg-green-500 hover:bg-green-500 text-white cursor-not-allowed" : "bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white"}`}
                               >
                                 {sendingCodeIds[transaction.id] ? "..." : (transaction.status === "Completed" ? "✓" : <Send className="h-3 w-3" />)}

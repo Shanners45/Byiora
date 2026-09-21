@@ -82,7 +82,7 @@ export async function signupWithPassword(
   // Security: Block banned users, IPs, or devices from creating new accounts
   const banCheck = await checkIsBanned({ email: cleanEmail, ip, deviceId })
   if (banCheck.banned) {
-    return { error: "Account registration is suspended on this device or network." }
+    return { error: banCheck.reason || "Account registration has been restricted on this device or network in accordance with our security policies." }
   }
 
   const supabase = await createClient()

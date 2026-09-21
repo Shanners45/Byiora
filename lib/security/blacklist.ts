@@ -56,16 +56,16 @@ export async function checkIsBanned({
   if (redis) {
     try {
       if (cleanDevice && (await redis.sismember("byiora:banned:devices", cleanDevice))) {
-        return { banned: true, reason: "Your browser device has been temporarily suspended from placing orders." }
+        return { banned: true, reason: "This device has been restricted from placing orders in accordance with our security policies. Please contact support for assistance." }
       }
       if (cleanEmail && (await redis.sismember("byiora:banned:emails", cleanEmail))) {
-        return { banned: true, reason: "Account suspended due to security policy." }
+        return { banned: true, reason: "This account has been restricted in accordance with our security policies. Please contact support for assistance." }
       }
       if (cleanIp && cleanIp !== "unknown" && (await redis.sismember("byiora:banned:ips", cleanIp))) {
-        return { banned: true, reason: "Network access suspended due to security policy." }
+        return { banned: true, reason: "Access from this network has been restricted in accordance with our security policies. Please contact support for assistance." }
       }
       if (domain && (await redis.sismember("byiora:banned:domains", domain))) {
-        return { banned: true, reason: "Email domain suspended due to security policy." }
+        return { banned: true, reason: "Email domain has been restricted in accordance with our security policies. Please contact support for assistance." }
       }
     } catch (e) {
       // Continue to Supabase if Redis is offline
@@ -121,7 +121,7 @@ export async function checkIsBanned({
 
       return {
         banned: true,
-        reason: match.reason || "Account suspended due to security policy.",
+        reason: match.reason || "This account or device has been restricted in accordance with our security policies. Please contact support for assistance.",
       }
     }
   } catch (err: any) {

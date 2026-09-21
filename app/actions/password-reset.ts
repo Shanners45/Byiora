@@ -4,6 +4,8 @@ import crypto from "crypto"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { sendPasswordChangedEmail } from "@/lib/email/resend"
 import { rateLimit } from "@/lib/rate-limit"
+import { verifyTurnstileToken } from "@/lib/captcha"
+import { checkIsBanned } from "@/lib/security/blacklist"
 import { headers } from "next/headers"
 import { Redis } from "@upstash/redis"
 
@@ -33,6 +35,15 @@ export async function validateResetTokenAction(rawToken: string): Promise<{
   maskedEmail?: string
   error?: string
 }> {
+  const h = await headers()
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+
+  // IP Rate limiting: Max 20 token validation attempts per minute
+  const rl = await rateLimit(`pw-reset-validate:${ip}`, { windowMs: 60_000, max: 20 })
+  if (!rl.ok) {
+    return { valid: false, error: "Too many validation attempts. Please wait a moment and try again." }
+  }
+
   if (!rawToken || typeof rawToken !== "string" || rawToken.trim().length < 20) {
     return { valid: false, error: "Invalid password reset link." }
   }
@@ -81,10 +92,12 @@ export async function resetPasswordWithTokenAction({
   token,
   newPassword,
   confirmPassword,
+  captchaToken,
 }: {
   token: string
   newPassword: string
   confirmPassword: string
+  captchaToken?: string | null
 }): Promise<{
   success: boolean
   error?: string
@@ -92,13 +105,49 @@ export async function resetPasswordWithTokenAction({
   const h = await headers()
   const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
 
-  // IP Rate limiting: Max 5 reset attempts per 15 minutes
+  // 1. IP Rate limiting: Max 5 reset attempts per 15 minutes
   const rl = await rateLimit(`pw-reset-submit:${ip}`, { windowMs: 900_000, max: 5 })
   if (!rl.ok) {
-    return { success: false, error: "Too many password reset attempts. Please wait a few minutes." }
+    const waitMinutes = Math.max(1, Math.ceil(rl.retryAfterSeconds / 60))
+    return {
+      success: false,
+      error: `Too many password reset attempts. Please wait ${waitMinutes} minute(s) before trying again.`
+    }
   }
 
-  if (!token || token.trim().length < 20) {
+  // 2. Token-level Rate limiting: Max 5 submissions per specific token
+  const cleanToken = token?.trim() || ""
+  if (cleanToken.length >= 20) {
+    const rlToken = await rateLimit(`pw-reset-token:${cleanToken.slice(0, 32)}`, { windowMs: 900_000, max: 5 })
+    if (!rlToken.ok) {
+      return {
+        success: false,
+        error: "Too many attempts with this link. For security, please request a new password reset link."
+      }
+    }
+  }
+
+  // 3. Security: Check if IP is banned
+  const banCheck = await checkIsBanned({ ip })
+  if (banCheck.banned) {
+    return {
+      success: false,
+      error: banCheck.reason || "Access restricted in accordance with our security policies."
+    }
+  }
+
+  // 4. Cloudflare Turnstile Captcha verification
+  if (process.env.TURNSTILE_SECRET_KEY) {
+    if (!captchaToken) {
+      return { success: false, error: "Security verification required. Please complete the captcha." }
+    }
+    const isCaptchaValid = await verifyTurnstileToken(captchaToken, ip)
+    if (!isCaptchaValid) {
+      return { success: false, error: "Security verification failed. Please refresh and try again." }
+    }
+  }
+
+  if (!token || cleanToken.length < 20) {
     return { success: false, error: "Invalid password reset token." }
   }
 
@@ -110,7 +159,7 @@ export async function resetPasswordWithTokenAction({
     return { success: false, error: "Passwords do not match." }
   }
 
-  const tokenHash = crypto.createHash("sha256").update(token.trim()).digest("hex")
+  const tokenHash = crypto.createHash("sha256").update(cleanToken).digest("hex")
 
   try {
     const supabase = createServiceRoleClient() as any

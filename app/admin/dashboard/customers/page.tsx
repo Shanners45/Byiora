@@ -155,6 +155,15 @@ export default function CustomersAndSecurityPage() {
   const [resetModalEmail, setResetModalEmail] = useState<string | null>(null)
   const [sendingReset, setSendingReset] = useState(false)
 
+  // Lift ban confirmation modal
+  const [unbanTarget, setUnbanTarget] = useState<{
+    id: string
+    target: string
+    isCustomerEmail: boolean
+    customerName?: string
+  } | null>(null)
+  const [submittingUnban, setSubmittingUnban] = useState(false)
+
   // Load all initial data (showSkeleton only on first mount; subsequent loads are silent)
   const loadData = async (showSkeleton = false) => {
     if (showSkeleton) {
@@ -294,31 +303,55 @@ export default function CustomersAndSecurityPage() {
     }
   }
 
-  const handleUnbanCustomer = async (email: string) => {
-    if (!confirm(`Lift all bans for ${email} and restore access?`)) return
+  const handleOpenUnbanForCustomer = (cust: CustomerProfile) => {
+    setUnbanTarget({
+      id: cust.email,
+      target: cust.email,
+      isCustomerEmail: true,
+      customerName: cust.name || undefined,
+    })
+  }
+
+  const handleOpenUnban = (item: { id: string; target: string; isCustomerEmail: boolean; customerName?: string }) => {
+    setUnbanTarget(item)
+  }
+
+  const handleConfirmUnban = async () => {
+    if (!unbanTarget) return
+    const item = unbanTarget
+    setSubmittingUnban(true)
     try {
       // Instant in-place optimistic state update (no full-page reload)
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.email.toLowerCase() === email.toLowerCase()
-            ? { ...c, isBanned: false, banReason: null, banId: null }
-            : c
+      if (item.isCustomerEmail) {
+        setCustomers((prev) =>
+          prev.map((c) =>
+            c.email.toLowerCase() === item.target.toLowerCase()
+              ? { ...c, isBanned: false, banReason: null, banId: null }
+              : c
+          )
         )
-      )
-      if (selectedCustomer?.email.toLowerCase() === email.toLowerCase()) {
-        setSelectedCustomer((prev) => (prev ? { ...prev, isBanned: false, banReason: null, banId: null } : null))
+        if (selectedCustomer?.email.toLowerCase() === item.target.toLowerCase()) {
+          setSelectedCustomer((prev) => (prev ? { ...prev, isBanned: false, banReason: null, banId: null } : null))
+        }
+        setBans((prev) =>
+          prev.filter(
+            (b) =>
+              b.value.toLowerCase() !== item.target.toLowerCase() &&
+              (!b.reason || !b.reason.toLowerCase().includes(item.target.toLowerCase()))
+          )
+        )
+      } else {
+        setBans((prev) => prev.filter((b) => b.id !== item.id))
       }
-      setBans((prev) =>
-        prev.filter(
-          (b) =>
-            b.value.toLowerCase() !== email.toLowerCase() &&
-            (!b.reason || !b.reason.toLowerCase().includes(email.toLowerCase()))
-        )
-      )
 
-      const res = await unbanEntireCustomerAction(email)
+      setUnbanTarget(null)
+
+      const res = item.isCustomerEmail
+        ? await unbanEntireCustomerAction(item.target)
+        : await unbanCustomerAction(item.id)
+
       if (res.success) {
-        toast.success(`All bans lifted for ${email}! Access restored.`)
+        toast.success(`Ban lifted for ${item.target}! Access restored.`)
         loadData(false)
       } else {
         toast.error(res.error || "Failed to lift ban")
@@ -327,6 +360,8 @@ export default function CustomersAndSecurityPage() {
     } catch (err: any) {
       toast.error(err.message || "An error occurred")
       loadData(false)
+    } finally {
+      setSubmittingUnban(false)
     }
   }
 
@@ -355,45 +390,6 @@ export default function CustomersAndSecurityPage() {
       toast.error(err.message || "An error occurred")
     } finally {
       setSubmittingBan(false)
-    }
-  }
-
-  const handleUnban = async (item: { id: string; target: string; isCustomerEmail: boolean }) => {
-    if (!confirm(`Are you sure you want to lift the ban for ${item.target}?`)) return
-    try {
-      // Instant in-place optimistic removal (no full-page reload)
-      if (item.isCustomerEmail) {
-        setCustomers((prev) =>
-          prev.map((c) =>
-            c.email.toLowerCase() === item.target.toLowerCase()
-              ? { ...c, isBanned: false, banReason: null, banId: null }
-              : c
-          )
-        )
-        setBans((prev) =>
-          prev.filter(
-            (b) =>
-              b.value.toLowerCase() !== item.target.toLowerCase() &&
-              (!b.reason || !b.reason.toLowerCase().includes(item.target.toLowerCase()))
-          )
-        )
-      } else {
-        setBans((prev) => prev.filter((b) => b.id !== item.id))
-      }
-
-      const res = item.isCustomerEmail
-        ? await unbanEntireCustomerAction(item.target)
-        : await unbanCustomerAction(item.id)
-      if (res.success) {
-        toast.success(`Ban lifted for ${item.target}!`)
-        loadData(false)
-      } else {
-        toast.error(res.error || "Failed to lift ban")
-        loadData(false)
-      }
-    } catch (err: any) {
-      toast.error(err.message || "An error occurred")
-      loadData(false)
     }
   }
 
@@ -659,15 +655,15 @@ export default function CustomersAndSecurityPage() {
       </CardHeader>
       <CardContent className="p-6">
         <div className="rounded-xl border-2 border-[#F59E0B]/20 bg-white shadow-sm overflow-x-auto w-full">
-          <Table className="w-full min-w-[650px]">
+          <Table className="w-full">
             <TableHeader className="bg-[#FEF7E0]/40 border-b border-[#F59E0B]/20">
               <TableRow>
-                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap w-28">Ticket #</TableHead>
-                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap">Customer</TableHead>
-                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5">Subject & Message</TableHead>
-                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap w-28">Status</TableHead>
-                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap w-24">Date</TableHead>
-                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap text-right w-32">Action</TableHead>
+                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap w-24">Ticket #</TableHead>
+                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap max-w-[140px]">Customer</TableHead>
+                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 max-w-[180px]">Subject & Message</TableHead>
+                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap w-24">Status</TableHead>
+                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap w-20">Date</TableHead>
+                <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap text-right w-28">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -690,16 +686,18 @@ export default function CustomersAndSecurityPage() {
                     <TableCell className="py-3 whitespace-nowrap">
                       <span className="font-mono text-xs font-bold text-[#92400E]">{t.ticket_number}</span>
                     </TableCell>
-                    <TableCell className="py-3 whitespace-nowrap">
-                      <div className="flex flex-col">
-                        <span className="font-bold text-[#111827] text-sm">{t.name || "Customer"}</span>
-                        <span className="text-xs text-[#4B5563]">{t.email}</span>
+                    <TableCell className="py-3 max-w-[140px] whitespace-nowrap">
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-bold text-[#111827] text-sm truncate" title={t.name || "Customer"}>{t.name || "Customer"}</span>
+                        <span className="text-xs text-[#4B5563] truncate" title={t.email}>{t.email}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="py-3 max-w-[200px] lg:max-w-xs xl:max-w-md">
+                    <TableCell className="py-3 max-w-[160px] md:max-w-[200px]">
                       <div className="flex flex-col min-w-0">
-                        <span className="font-bold text-sm text-[#111827] truncate">{t.subject}</span>
-                        <span className="text-xs text-[#4B5563] truncate">{t.message}</span>
+                        <span className="font-bold text-sm text-[#111827] truncate" title={t.subject}>{t.subject}</span>
+                        <span className="text-xs text-[#4B5563] truncate" title={t.message}>
+                          {t.message ? (t.message.length > 30 ? `${t.message.slice(0, 30)}...` : t.message) : ""}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell className="py-3 whitespace-nowrap">
@@ -728,7 +726,7 @@ export default function CustomersAndSecurityPage() {
                           setSelectedTicket(t)
                           setIsTicketModalOpen(true)
                         }}
-                        className="h-8 bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white text-xs flex items-center gap-1 font-semibold shadow-sm"
+                        className="h-8 px-2.5 bg-[#F59E0B] hover:bg-[#F59E0B]/90 text-white text-xs flex items-center gap-1 font-semibold shadow-sm ml-auto"
                       >
                         <MessageSquare className="h-3.5 w-3.5" />
                         View & Reply
@@ -837,7 +835,7 @@ export default function CustomersAndSecurityPage() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5 sm:space-y-6 w-full min-w-0">
           {/* Scrollable Tabs on Mobile */}
           <div className="w-full overflow-x-auto pb-1 -mb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            <TabsList className="inline-flex w-max min-w-full sm:w-auto justify-start bg-[#FEF7E0]/70 border-2 border-[#F59E0B]/30 p-1 rounded-xl shadow-xs gap-1">
+            <TabsList className="inline-flex w-auto justify-start bg-[#FEF7E0]/70 border-2 border-[#F59E0B]/30 p-1 rounded-xl shadow-xs gap-1">
               <TabsTrigger
                 value="customers"
                 className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap shrink-0"
@@ -1205,7 +1203,7 @@ export default function CustomersAndSecurityPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleUnban(ban)}
+                              onClick={() => handleOpenUnban(ban)}
                               className="h-8 px-3 text-xs border-emerald-500 text-emerald-900 hover:bg-emerald-50 bg-white font-semibold flex items-center gap-1.5 shadow-sm rounded-lg ml-auto"
                             >
                               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
@@ -1372,7 +1370,7 @@ export default function CustomersAndSecurityPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleUnbanCustomer(selectedCustomer.email)}
+                        onClick={() => handleOpenUnbanForCustomer(selectedCustomer)}
                         className="h-8 px-3 text-xs border-emerald-500 text-emerald-900 hover:bg-emerald-50 bg-white font-semibold flex items-center gap-1.5 shadow-sm shrink-0"
                       >
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
@@ -1924,6 +1922,72 @@ export default function CustomersAndSecurityPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* MODAL: LIFT BAN CONFIRMATION                                             */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      <Dialog open={!!unbanTarget} onOpenChange={(open) => !open && setUnbanTarget(null)}>
+        <DialogContent className="w-[94vw] sm:w-full sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-700 text-lg font-bold">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              Lift Security Ban
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Restore full platform access for this user or security rule.
+            </DialogDescription>
+          </DialogHeader>
+
+          {unbanTarget && (
+            <div className="space-y-3 py-3">
+              <div className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 rounded-xl p-3.5 flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-[#92400E] font-bold uppercase tracking-wider">
+                    {unbanTarget.isCustomerEmail ? "Customer Account" : "Blacklisted Target"}
+                  </p>
+                  <p className="font-bold text-sm text-[#111827] truncate mt-0.5" title={unbanTarget.target}>
+                    {unbanTarget.target}
+                  </p>
+                  {unbanTarget.customerName && (
+                    <p className="text-xs text-[#4B5563] font-medium truncate mt-0.5">
+                      {unbanTarget.customerName}
+                    </p>
+                  )}
+                </div>
+                <Badge
+                  variant="outline"
+                  className="bg-emerald-50 text-emerald-800 border-emerald-300 text-[11px] font-bold shrink-0"
+                >
+                  Active Ban
+                </Badge>
+              </div>
+
+              <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                Are you sure you want to lift the ban for <strong className="text-slate-900 font-semibold">{unbanTarget.target}</strong>?
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-0 pt-2 border-t border-slate-100">
+            <Button
+              variant="outline"
+              onClick={() => setUnbanTarget(null)}
+              disabled={submittingUnban}
+              className="w-full sm:w-auto border-slate-200 text-slate-700 font-medium"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmUnban}
+              disabled={submittingUnban}
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm justify-center flex items-center gap-1.5"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {submittingUnban ? "Lifting Ban..." : "Confirm & Lift Ban"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

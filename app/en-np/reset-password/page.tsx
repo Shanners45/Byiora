@@ -11,6 +11,7 @@ import { Header } from "@/components/header"
 import Link from "next/link"
 import { KeyRound, ShieldCheck, Loader2, CheckCircle2, AlertCircle, Eye, EyeOff, Lock } from "lucide-react"
 import { validateResetTokenAction, resetPasswordWithTokenAction } from "@/app/actions/password-reset"
+import { TurnstileWidget } from "@/components/turnstile-widget"
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams()
@@ -27,6 +28,8 @@ function ResetPasswordForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const [rateLimitCooldown, setRateLimitCooldown] = useState<number>(0)
 
   // Validate token on mount
   useEffect(() => {
@@ -69,8 +72,22 @@ function ResetPasswordForm() {
     }
   }, [token])
 
+  // Countdown timer for rate limiting
+  useEffect(() => {
+    if (rateLimitCooldown <= 0) return
+    const timer = setInterval(() => {
+      setRateLimitCooldown((prev) => (prev <= 1 ? 0 : prev - 1))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [rateLimitCooldown])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (rateLimitCooldown > 0) {
+      toast.error(`Rate limited. Please wait ${rateLimitCooldown} seconds before trying again.`)
+      return
+    }
 
     if (newPassword.length < 8) {
       toast.error("Password must be at least 8 characters long")
@@ -82,18 +99,30 @@ function ResetPasswordForm() {
       return
     }
 
+    const hasTurnstileKey = !!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+    if (hasTurnstileKey && !captchaToken) {
+      toast.error("Please complete the security verification challenge.")
+      return
+    }
+
     setIsSubmitting(true)
     try {
       const res = await resetPasswordWithTokenAction({
         token,
         newPassword,
         confirmPassword,
+        captchaToken,
       })
 
       if (res.success) {
         setIsSuccess(true)
         toast.success("Password updated successfully!")
       } else {
+        if (res.error?.toLowerCase().includes("too many") || res.error?.toLowerCase().includes("minute")) {
+          const match = res.error?.match(/(\d+)\s*minute/)
+          const minutes = match ? parseInt(match[1], 10) : 1
+          setRateLimitCooldown(Math.max(60, minutes * 60))
+        }
         toast.error(res.error || "Failed to update password")
       }
     } catch (err: any) {
@@ -224,9 +253,28 @@ function ResetPasswordForm() {
               </div>
             </div>
 
+            {/* Security Verification (Cloudflare Turnstile) */}
+            <div className="py-1">
+              <TurnstileWidget onToken={setCaptchaToken} />
+            </div>
+
+            {/* Rate Limit Alert */}
+            {rateLimitCooldown > 0 && (
+              <div className="bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs px-4 py-2.5 rounded-xl flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>Rate limit in effect: Please wait {rateLimitCooldown}s before resubmitting.</span>
+              </div>
+            )}
+
             <Button
               type="submit"
-              disabled={isSubmitting || newPassword.length < 8 || !confirmPassword}
+              disabled={
+                isSubmitting ||
+                newPassword.length < 8 ||
+                !confirmPassword ||
+                rateLimitCooldown > 0 ||
+                (!!process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY && !captchaToken)
+              }
               className="w-full h-12 bg-[#FFD700] hover:bg-[#FFD700]/90 text-[#311144] font-bold rounded-xl transition-all duration-200 disabled:opacity-50 mt-2 shadow-lg"
             >
               {isSubmitting ? (
@@ -234,6 +282,8 @@ function ResetPasswordForm() {
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Updating Password...
                 </>
+              ) : rateLimitCooldown > 0 ? (
+                `Please wait (${rateLimitCooldown}s)`
               ) : (
                 "Save New Password"
               )}
