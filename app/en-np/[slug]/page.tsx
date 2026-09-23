@@ -3,7 +3,9 @@
 import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, HelpCircle, QrCode, Download, Loader2 } from "lucide-react"
+import { ArrowLeft, HelpCircle, QrCode, Download, Loader2, CheckCircle2, ShieldAlert } from "lucide-react"
+import { TurnstileWidget } from "@/components/turnstile-widget"
+import { checkCheckoutSecurityAction } from "@/app/actions/transactions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -60,8 +62,24 @@ export default function ProductDetailPage() {
   const [selectedServer, setSelectedServer] = useState("")
   const [checkoutFieldValues, setCheckoutFieldValues] = useState<Record<string, string>>({})
   const [isProcessing, setIsProcessing] = useState(false)
+  const [requiresTurnstile, setRequiresTurnstile] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState("")
   const isSubmittingRef = useRef(false)
   const supabase = createClient()
+
+  // Security pre-flight check: Detect if visitor's IP is flagged and requires Cloudflare Turnstile
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const secRes = await checkCheckoutSecurityAction({ deviceId: getOrCreateDeviceId() })
+        if (secRes.requiresTurnstile) {
+          setRequiresTurnstile(true)
+        }
+      } catch (err) {
+        // Fallback gracefully
+      }
+    })()
+  }, [])
   const [product, setProduct] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showQRDialog, setShowQRDialog] = useState(false)
@@ -132,8 +150,21 @@ export default function ProductDetailPage() {
   const isDirectLoginProduct = product?.category === "direct-login"
   const checkoutFields = product?.checkout_fields || []
   const topupHasCheckout = isTopupProduct && checkoutFields.length > 0
+  const hasServers = product?.servers && product.servers.length > 0
 
+  const isServerValid = !isTopupProduct || topupHasCheckout || !hasServers || Boolean(selectedServer)
+  const isUserValid = !isTopupProduct || topupHasCheckout || Boolean(userId)
+  const areCheckoutFieldsValid = !(isDirectLoginProduct || topupHasCheckout) || !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim())
+  const isEmailValid = Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
 
+  const areAllFieldsFilled = Boolean(
+    selectedDenomination &&
+    selectedPayment &&
+    isEmailValid &&
+    isUserValid &&
+    isServerValid &&
+    areCheckoutFieldsValid
+  )
 
   if (isLoading) {
     return <ProductSkeleton />
@@ -169,7 +200,6 @@ export default function ProductDetailPage() {
       (f: any) => f.required && !checkoutFieldValues[f.key]?.trim()
     )
 
-    const hasServers = product.servers && product.servers.length > 0
     const missingServer = isTopupProduct && !topupHasCheckout && hasServers && !selectedServer
 
     if (!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !topupHasCheckout && !userId) || missingServer || missingCheckoutField) {
@@ -184,6 +214,11 @@ export default function ProductDetailPage() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
       toast.error("Please enter a valid email address")
+      return
+    }
+
+    if (requiresTurnstile && !turnstileToken) {
+      toast.error("Please complete the security verification challenge before proceeding.")
       return
     }
 
@@ -204,6 +239,7 @@ export default function ProductDetailPage() {
         email: email,
         productId: product?.id || productSlug,
         productCategory: product?.category || (isTopupProduct ? "topup" : isDirectLoginProduct ? "direct-login" : "digital-goods"),
+        turnstileToken: requiresTurnstile ? turnstileToken : undefined,
         guestData: {
           ...(isTopupProduct && !topupHasCheckout ? { userId, server: selectedServer } : {}),
           deviceId: getOrCreateDeviceId(),
@@ -887,6 +923,29 @@ export default function ProductDetailPage() {
                 </div>
               </RadioGroup>
 
+              {/* Cloudflare Turnstile Security Verification for Flagged IPs */}
+              {requiresTurnstile && areAllFieldsFilled && (
+                <div className="mt-5 p-3.5 bg-brand-sky-blue/5 border-2 border-brand-sky-blue/30 rounded-xl flex flex-col items-center justify-center animate-in fade-in duration-300">
+                  <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-brand-charcoal">
+                    <ShieldAlert className="w-4 h-4 text-[#00BCD4]" />
+                    <span>Security Verification Required</span>
+                  </div>
+                  <div className="w-full flex justify-center items-center overflow-hidden">
+                    <TurnstileWidget onToken={(token) => setTurnstileToken(token)} />
+                  </div>
+                  {turnstileToken ? (
+                    <p className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Verification passed
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-brand-light-gray mt-1">
+                      Please complete the verification check above to enable checkout
+                    </p>
+                  )}
+                </div>
+              )}
+
               <Button
                 onClick={() => {
                   const isAutomatedGateway = selectedPaymentMethod?.category === "nepalpay" || selectedPaymentMethod?.category === "fonepay" || selectedPaymentMethod?.category === "khalti"
@@ -896,7 +955,7 @@ export default function ProductDetailPage() {
                     setShowQRDialog(true)
                   }
                 }}
-                disabled={isProcessing || !selectedDenomination || !selectedPayment || !email || (isTopupProduct && !topupHasCheckout && (!userId || (product.servers && product.servers.length > 0 && !selectedServer))) || ((isDirectLoginProduct || topupHasCheckout) && checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim()))}
+                disabled={isProcessing || !areAllFieldsFilled || (requiresTurnstile && !turnstileToken)}
                 className="w-full mt-6 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white py-3 text-lg font-semibold flex items-center justify-center gap-2"
               >
                 {isProcessing ? (

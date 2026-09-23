@@ -728,6 +728,10 @@ export default function OrdersPage() {
                           ? transaction.failure_remarks.replace("Khalti Refunded", "Refunded").replace("Refunded (Portal)", "Refunded")
                           : null
 
+                        // Only show remarks for underpayments / partial payments (never for standard expiration/cancellation)
+                        const isPartialPayment = (status === "Payment Failed" || status === "Failed") &&
+                          Boolean(transaction.failure_remarks && transaction.failure_remarks.toLowerCase().includes("partial"))
+
                         // 1. Dynamic QR payments:
                         // - If "Paid": show dropdown with "Paid" and "Refunded"
                         // - Otherwise: show status badge
@@ -762,7 +766,7 @@ export default function OrdersPage() {
                                   {refundSubtext}
                                 </span>
                               )}
-                              {(status === "Payment Failed" || status === "Failed") && transaction.failure_remarks && (
+                              {isPartialPayment && transaction.failure_remarks && (
                                 <span className="text-[11px] font-semibold text-red-600 leading-tight bg-red-50 px-1.5 py-0.5 rounded border border-red-200 max-w-[200px] break-words">
                                   {transaction.failure_remarks}
                                 </span>
@@ -801,6 +805,11 @@ export default function OrdersPage() {
                             {refundSubtext && (
                               <span className="text-[11px] font-semibold text-purple-700 leading-tight bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
                                 {refundSubtext}
+                              </span>
+                            )}
+                            {isPartialPayment && transaction.failure_remarks && (
+                              <span className="text-[11px] font-semibold text-red-600 leading-tight bg-red-50 px-1.5 py-0.5 rounded border border-red-200 max-w-[200px] break-words">
+                                {transaction.failure_remarks}
                               </span>
                             )}
                           </div>

@@ -32,9 +32,51 @@ function isSchemaMissing(error: any): boolean {
   )
 }
 
+export interface BanCheckResult {
+  banned: boolean
+  requiresTurnstile?: boolean
+  reason?: string
+  banType?: "email" | "ip" | "device_id" | "email_domain"
+}
+
+/**
+ * Checks if an IP is currently blacklisted.
+ */
+export async function isIpBanned(ip: string): Promise<boolean> {
+  const cleanIp = ip?.trim() || ""
+  if (!cleanIp || cleanIp === "unknown") return false
+
+  const redis = getRedis()
+  if (redis) {
+    try {
+      if (await redis.sismember("byiora:banned:ips", cleanIp)) return true
+    } catch (_) {}
+  }
+
+  try {
+    const supabase = createServiceRoleClient() as any
+    const { data } = await supabase
+      .from("banned_entities")
+      .select("expires_at")
+      .eq("type", "ip")
+      .eq("value", cleanIp)
+      .limit(1)
+
+    if (data && data.length > 0) {
+      const match = data[0]
+      if (!match.expires_at || new Date(match.expires_at) >= new Date()) {
+        return true
+      }
+    }
+  } catch (_) {}
+
+  return false
+}
+
 /**
  * Checks if a given email, IP address, email domain, or device fingerprint is currently banned.
- * Checks fast in-memory Redis first (sub-1ms), falling back to Supabase query.
+ * If Email, Device ID, or Domain is banned -> HARD BAN (banned: true, checkout blocked).
+ * If ONLY IP is banned and Device/Email are different -> SOFT CHALLENGE (banned: false, requiresTurnstile: true).
  */
 export async function checkIsBanned({
   email,
@@ -44,7 +86,7 @@ export async function checkIsBanned({
   email?: string | null
   ip?: string | null
   deviceId?: string | null
-}): Promise<{ banned: boolean; reason?: string }> {
+}): Promise<BanCheckResult> {
   const cleanEmail = email?.trim().toLowerCase() || ""
   const cleanIp = ip?.trim() || ""
   const cleanDevice = deviceId?.trim() || ""
@@ -55,17 +97,19 @@ export async function checkIsBanned({
   // 1. Ultra-fast Redis in-memory check (takes <1ms, zero latency penalty)
   if (redis) {
     try {
+      // Hard bans first: Device, Email, Domain
       if (cleanDevice && (await redis.sismember("byiora:banned:devices", cleanDevice))) {
-        return { banned: true, reason: "This device has been restricted from placing orders in accordance with our security policies. Please contact support for assistance." }
+        return { banned: true, reason: "This device has been restricted from placing orders in accordance with our security policies. Please contact support for assistance.", banType: "device_id" }
       }
       if (cleanEmail && (await redis.sismember("byiora:banned:emails", cleanEmail))) {
-        return { banned: true, reason: "This account has been restricted in accordance with our security policies. Please contact support for assistance." }
-      }
-      if (cleanIp && cleanIp !== "unknown" && (await redis.sismember("byiora:banned:ips", cleanIp))) {
-        return { banned: true, reason: "Access from this network has been restricted in accordance with our security policies. Please contact support for assistance." }
+        return { banned: true, reason: "This account has been restricted in accordance with our security policies. Please contact support for assistance.", banType: "email" }
       }
       if (domain && (await redis.sismember("byiora:banned:domains", domain))) {
-        return { banned: true, reason: "Email domain has been restricted in accordance with our security policies. Please contact support for assistance." }
+        return { banned: true, reason: "Email domain has been restricted in accordance with our security policies. Please contact support for assistance.", banType: "email_domain" }
+      }
+      // Soft ban check for IP: if IP is banned but device & email are clean, require Turnstile
+      if (cleanIp && cleanIp !== "unknown" && (await redis.sismember("byiora:banned:ips", cleanIp))) {
+        return { banned: false, requiresTurnstile: true, reason: "Security verification required for this network connection.", banType: "ip" }
       }
     } catch (e) {
       // Continue to Supabase if Redis is offline
@@ -79,56 +123,72 @@ export async function checkIsBanned({
     const safeEmail = cleanEmail.replace(/[,()"]/g, "")
     const safeIp = cleanIp.replace(/[,()"]/g, "")
     const safeDomain = domain.replace(/[,()"]/g, "")
-    const conditions: string[] = []
 
-    if (safeDevice) conditions.push(`and(type.eq.device_id,value.eq.${safeDevice})`)
-    if (safeEmail) conditions.push(`and(type.eq.email,value.ilike.${safeEmail})`)
-    if (safeIp && safeIp !== "unknown") conditions.push(`and(type.eq.ip,value.eq.${safeIp})`)
-    if (safeDomain) conditions.push(`and(type.eq.email_domain,value.ilike.${safeDomain})`)
+    // A. Check Hard Bans: Device ID, Email, Email Domain
+    const hardConditions: string[] = []
+    if (safeDevice) hardConditions.push(`and(type.eq.device_id,value.eq.${safeDevice})`)
+    if (safeEmail) hardConditions.push(`and(type.eq.email,value.ilike.${safeEmail})`)
+    if (safeDomain) hardConditions.push(`and(type.eq.email_domain,value.ilike.${safeDomain})`)
 
-    if (conditions.length === 0) return { banned: false }
+    if (hardConditions.length > 0) {
+      const { data, error } = await supabase
+        .from("banned_entities")
+        .select("*")
+        .or(hardConditions.join(","))
+        .limit(1)
 
-    const { data, error } = await supabase
-      .from("banned_entities")
-      .select("*")
-      .or(conditions.join(","))
-      .limit(1)
+      if (!error && data && data.length > 0) {
+        const match = data[0]
+        if (!match.expires_at || new Date(match.expires_at) >= new Date()) {
+          if (redis) {
+            try {
+              if (match.type === "device_id") await redis.sadd("byiora:banned:devices", match.value)
+              if (match.type === "email") await redis.sadd("byiora:banned:emails", match.value.toLowerCase())
+              if (match.type === "email_domain") await redis.sadd("byiora:banned:domains", match.value.toLowerCase())
+            } catch (_) {}
+          }
 
-    if (error) {
-      if (isSchemaMissing(error)) {
-        return { banned: false }
+          return {
+            banned: true,
+            reason: match.reason || "This account or device has been restricted in accordance with our security policies. Please contact support for assistance.",
+            banType: match.type,
+          }
+        }
       }
-      return { banned: false }
     }
 
-    if (data && data.length > 0) {
-      const match = data[0]
+    // B. Check Soft Ban: IP Address only (requires Turnstile, not hard block)
+    if (safeIp && safeIp !== "unknown") {
+      const { data: ipData, error: ipError } = await supabase
+        .from("banned_entities")
+        .select("*")
+        .eq("type", "ip")
+        .eq("value", safeIp)
+        .limit(1)
 
-      // Check if ban has expired
-      if (match.expires_at && new Date(match.expires_at) < new Date()) {
-        return { banned: false }
-      }
+      if (!ipError && ipData && ipData.length > 0) {
+        const match = ipData[0]
+        if (!match.expires_at || new Date(match.expires_at) >= new Date()) {
+          if (redis) {
+            try {
+              await redis.sadd("byiora:banned:ips", match.value)
+            } catch (_) {}
+          }
 
-      // Sync to Redis cache
-      if (redis) {
-        try {
-          if (match.type === "device_id") await redis.sadd("byiora:banned:devices", match.value)
-          if (match.type === "email") await redis.sadd("byiora:banned:emails", match.value.toLowerCase())
-          if (match.type === "ip") await redis.sadd("byiora:banned:ips", match.value)
-          if (match.type === "email_domain") await redis.sadd("byiora:banned:domains", match.value.toLowerCase())
-        } catch (_) {}
-      }
-
-      return {
-        banned: true,
-        reason: match.reason || "This account or device has been restricted in accordance with our security policies. Please contact support for assistance.",
+          return {
+            banned: false,
+            requiresTurnstile: true,
+            reason: "Security verification required for this network connection.",
+            banType: "ip",
+          }
+        }
       }
     }
   } catch (err: any) {
     // Graceful fallback
   }
 
-  return { banned: false }
+  return { banned: false, requiresTurnstile: false }
 }
 
 /**

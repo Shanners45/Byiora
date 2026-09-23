@@ -44,8 +44,10 @@ export async function POST(req: Request) {
     // Handle intermediate QR_SCANNED event from WebSocket
     if (isScanEvent) {
       console.log(`[FONEPAY-WS] 📷 QR SCANNED event for ${transactionId}`)
+      // NOTE: Do NOT change status to "Processing" for dynamic QR orders.
+      // "Processing" is reserved for static QR (manual fulfillment) only.
+      // Just log the scan event as a remark for debugging, keep status as Payment Pending.
       await supabase.from("transactions").update({
-        status: "Processing",
         failure_remarks: "QR Scanned"
       } as any)
         .eq("transaction_id", transactionId)
@@ -162,10 +164,10 @@ export async function POST(req: Request) {
       }
     } catch (e: any) {
       console.error(`[FONEPAY-WS] Verification fetch failed:`, e.message)
-      // SECURITY: Do NOT fulfill without bank confirmation. Mark as Processing for cron/QStash to verify later.
-      // Guard: only update if still in a pending state (never overwrite Paid/Completed)
+      // SECURITY: Do NOT fulfill without bank confirmation. Keep as Payment Pending for cron to verify later.
+      // "Processing" is reserved for static QR only — dynamic QR stays in Payment Pending.
+      // Guard: only update remarks if still in a pending state (never overwrite Paid/Completed)
       await supabase.from("transactions").update({
-        status: "Processing",
         failure_remarks: "WS VERIFIED received but bank API unreachable — pending cron verification"
       } as any)
         .eq("transaction_id", transactionId)
@@ -176,9 +178,9 @@ export async function POST(req: Request) {
     // If bank API was reachable but payment not confirmed, don't fulfill
     if (!bankVerified) {
       console.log(`[FONEPAY-WS] WS event received but bank did not confirm payment for ${transactionId}`)
-      // Guard: only update if still in a pending state (never overwrite Paid/Completed)
+      // Keep as Payment Pending — "Processing" is for static QR only.
+      // Guard: only update remarks if still in a pending state (never overwrite Paid/Completed)
       await supabase.from("transactions").update({
-        status: "Processing",
         failure_remarks: "WS event received, bank verification pending"
       } as any)
         .eq("transaction_id", transactionId)

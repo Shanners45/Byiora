@@ -7,6 +7,7 @@ import crypto from "crypto"
 import { isDisposableEmail } from "@/lib/security/disposable-emails"
 import { checkIsBanned } from "@/lib/security/blacklist"
 import { checkStrikePenalty } from "@/lib/security/strike-counter"
+import { verifyTurnstileToken } from "@/lib/captcha"
 
 interface TransactionData {
   product: string
@@ -19,6 +20,32 @@ interface TransactionData {
   productCategory?: string
   guestData?: any
   userId?: string | null
+  turnstileToken?: string
+}
+
+/**
+ * Fast security pre-flight check for the checkout/product page.
+ * Detects whether the visitor's IP is flagged and requires Cloudflare Turnstile verification.
+ */
+export async function checkCheckoutSecurityAction(clientData?: { deviceId?: string }): Promise<{
+  requiresTurnstile: boolean
+  isBanned: boolean
+  reason?: string
+}> {
+  try {
+    const h = await headers()
+    const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+    const deviceId = clientData?.deviceId || null
+
+    const check = await checkIsBanned({ ip, deviceId })
+    return {
+      requiresTurnstile: Boolean(check.requiresTurnstile),
+      isBanned: Boolean(check.banned),
+      reason: check.reason,
+    }
+  } catch (e) {
+    return { requiresTurnstile: false, isBanned: false }
+  }
 }
 
 /**
@@ -47,6 +74,23 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       return {
         success: false,
         error: banCheck.reason || "Transaction declined. Please contact support.",
+      }
+    }
+
+    // ── LAYER 4.1: Cloudflare Turnstile Verification for Flagged IP (Anti-Bypass) ──
+    if (banCheck.requiresTurnstile) {
+      if (!transactionData.turnstileToken) {
+        return {
+          success: false,
+          error: "Security verification required. Please complete the verification challenge above.",
+        }
+      }
+      const isCaptchaValid = await verifyTurnstileToken(transactionData.turnstileToken, ip)
+      if (!isCaptchaValid) {
+        return {
+          success: false,
+          error: "Security verification failed or expired. Please complete the verification challenge again.",
+        }
       }
     }
 

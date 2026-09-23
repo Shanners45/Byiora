@@ -126,6 +126,8 @@ export default function CustomersAndSecurityPage() {
   const [customerToBan, setCustomerToBan] = useState<CustomerProfile | null>(null)
   const [customerBanReason, setCustomerBanReason] = useState("")
   const [customerBanDuration, setCustomerBanDuration] = useState("0")
+  const [customerBanIp, setCustomerBanIp] = useState(false)
+  const [customerBanDomain, setCustomerBanDomain] = useState(false)
   const [submittingCustomerBan, setSubmittingCustomerBan] = useState(false)
 
   // Manual Blacklist Modal
@@ -159,6 +161,7 @@ export default function CustomersAndSecurityPage() {
   const [unbanTarget, setUnbanTarget] = useState<{
     id: string
     target: string
+    type?: "email" | "ip" | "email_domain" | "device_id"
     isCustomerEmail: boolean
     customerName?: string
   } | null>(null)
@@ -263,6 +266,8 @@ export default function CustomersAndSecurityPage() {
     setCustomerToBan(cust)
     setCustomerBanReason("Suspicious activity / policy violation")
     setCustomerBanDuration("0") // default permanent
+    setCustomerBanIp(false)
+    setCustomerBanDomain(false)
   }
 
   const handleConfirmCustomerBan = async () => {
@@ -276,6 +281,8 @@ export default function CustomersAndSecurityPage() {
         email: targetEmail,
         reason,
         durationHours: hours > 0 ? hours : undefined,
+        banIp: customerBanIp,
+        banDomain: customerBanDomain,
       })
       if (res.success) {
         toast.success(res.message || `Customer ${targetEmail} banned successfully!`)
@@ -307,12 +314,19 @@ export default function CustomersAndSecurityPage() {
     setUnbanTarget({
       id: cust.email,
       target: cust.email,
+      type: "email",
       isCustomerEmail: true,
       customerName: cust.name || undefined,
     })
   }
 
-  const handleOpenUnban = (item: { id: string; target: string; isCustomerEmail: boolean; customerName?: string }) => {
+  const handleOpenUnban = (item: {
+    id: string
+    target: string
+    type?: "email" | "ip" | "email_domain" | "device_id"
+    isCustomerEmail: boolean
+    customerName?: string
+  }) => {
     setUnbanTarget(item)
   }
 
@@ -336,8 +350,9 @@ export default function CustomersAndSecurityPage() {
         setBans((prev) =>
           prev.filter(
             (b) =>
-              b.value.toLowerCase() !== item.target.toLowerCase() &&
-              (!b.reason || !b.reason.toLowerCase().includes(item.target.toLowerCase()))
+              b.id !== item.id &&
+              !(b.type === "email" && b.value.toLowerCase() === item.target.toLowerCase()) &&
+              !(b.type === "device_id" && b.reason?.toLowerCase().includes(item.target.toLowerCase()))
           )
         )
       } else {
@@ -448,7 +463,8 @@ export default function CustomersAndSecurityPage() {
 
     if (!matchesSearch) return false
 
-    if (customerFilter === "registered") return c.isRegistered
+    if (customerFilter === "registered") return c.isRegistered && c.isEmailVerified !== false
+    if (customerFilter === "unverified") return c.isRegistered && c.isEmailVerified === false
     if (customerFilter === "guest") return !c.isRegistered
     if (customerFilter === "banned") return c.isBanned
     return true
@@ -458,45 +474,58 @@ export default function CustomersAndSecurityPage() {
   const totalPages = Math.ceil(filteredCustomers.length / pageSize) || 1
   const paginatedCustomers = filteredCustomers.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 
-  // Consolidate bans so that auxiliary rules (IP, Device ID) created for a banned user
-  // are NOT displayed as separate split categories. Instead, display unified user details.
+  // Blacklist rules list: Displays customer email bans, IP address bans, and domain bans
+  // separately so that admins can lift bans from individual IP addresses or domains independently.
   const consolidatedBans = useMemo(() => {
     const emailBans = bans.filter((b) => b.type === "email")
+    const ipBans = bans.filter((b) => b.type === "ip")
+    const domainBans = bans.filter((b) => b.type === "email_domain")
+
+    // Standalone device ID bans (e.g. manually added, not internal auxiliary attached to an existing email ban)
     const bannedEmails = new Set(emailBans.map((b) => b.value.toLowerCase().trim()))
-
-    const standaloneBans: typeof bans = []
-
-    for (const b of bans) {
-      if (b.type === "email") continue
-
+    const standaloneDeviceBans = bans.filter((b) => {
+      if (b.type !== "device_id") return false
       const match = b.reason?.match(/\(Associated with ([^)]+)\)/i)
       const associatedEmail = match ? match[1].toLowerCase().trim() : null
-      if (associatedEmail && (bannedEmails.has(associatedEmail) || associatedEmail.includes("@"))) {
-        // Internal auxiliary rule (IP or Device ID) attached to that customer - consolidated under the user
-        continue
-      }
-      standaloneBans.push(b)
-    }
+      return !associatedEmail || !bannedEmails.has(associatedEmail)
+    })
 
     const combined: Array<{
       id: string
       target: string
+      type: "email" | "ip" | "email_domain" | "device_id"
       isCustomerEmail: boolean
       customerName?: string
+      associatedEmail?: string
+      linkedCustomers?: string[]
       reason: string
       expires_at?: string | null
       created_at: string
       rawBan: BannedEntity
     }> = []
 
+    // 1. Customer Email Bans
     for (const eb of emailBans) {
       const cust = customers.find((c) => c.email.toLowerCase() === eb.value.toLowerCase().trim())
       const cleanReason = (eb.reason || "Suspicious activity / policy violation").replace(/\s*\(Associated with [^)]+\)/i, "")
+      const linkedCustomers = customers
+        .filter(
+          (c) =>
+            c.isBanned &&
+            c.email.toLowerCase() !== eb.value.toLowerCase().trim() &&
+            (c.banReason?.toLowerCase().includes(eb.value.toLowerCase().trim()) ||
+              (cust?.lastDeviceId && c.lastDeviceId && c.lastDeviceId === cust.lastDeviceId) ||
+              (cust?.lastIp && c.lastIp && c.lastIp === cust.lastIp))
+        )
+        .map((c) => c.email)
+
       combined.push({
         id: eb.id,
         target: eb.value,
+        type: "email",
         isCustomerEmail: true,
         customerName: cust?.name,
+        linkedCustomers,
         reason: cleanReason,
         expires_at: eb.expires_at,
         created_at: eb.created_at,
@@ -504,16 +533,57 @@ export default function CustomersAndSecurityPage() {
       })
     }
 
-    for (const sb of standaloneBans) {
-      const cleanReason = (sb.reason || "Blacklist restriction").replace(/\s*\(Associated with [^)]+\)/i, "")
+    // 2. IP Address Bans (displayed separately so admin can lift ban from a single IP address)
+    for (const ib of ipBans) {
+      const match = ib.reason?.match(/\(Associated with ([^)]+)\)/i)
+      const associatedEmail = match ? match[1].trim() : undefined
+      const cleanReason = (ib.reason || "IP blacklist rule").replace(/\s*\(Associated with [^)]+\)/i, "")
+
       combined.push({
-        id: sb.id,
-        target: sb.value,
-        isCustomerEmail: sb.type === "email" || sb.value.includes("@"),
+        id: ib.id,
+        target: ib.value,
+        type: "ip",
+        isCustomerEmail: false,
+        associatedEmail,
         reason: cleanReason,
-        expires_at: sb.expires_at,
-        created_at: sb.created_at,
-        rawBan: sb,
+        expires_at: ib.expires_at,
+        created_at: ib.created_at,
+        rawBan: ib,
+      })
+    }
+
+    // 3. Domain Address Bans (displayed separately so admin can lift ban from a single domain address)
+    for (const db of domainBans) {
+      const match = db.reason?.match(/\((?:Domain banned for|Associated with) ([^)]+)\)/i)
+      const associatedEmail = match ? match[1].trim() : undefined
+      const cleanReason = (db.reason || "Domain blacklist rule").replace(/\s*\((?:Domain banned for|Associated with) [^)]+\)/i, "")
+      const displayTarget = db.value.startsWith("@") ? db.value : `@${db.value}`
+
+      combined.push({
+        id: db.id,
+        target: displayTarget,
+        type: "email_domain",
+        isCustomerEmail: false,
+        associatedEmail,
+        reason: cleanReason,
+        expires_at: db.expires_at,
+        created_at: db.created_at,
+        rawBan: db,
+      })
+    }
+
+    // 4. Standalone Device Bans (manually added)
+    for (const db of standaloneDeviceBans) {
+      const cleanReason = (db.reason || "Device blacklist rule").replace(/\s*\(Associated with [^)]+\)/i, "")
+      combined.push({
+        id: db.id,
+        target: db.value,
+        type: "device_id",
+        isCustomerEmail: false,
+        reason: cleanReason,
+        expires_at: db.expires_at,
+        created_at: db.created_at,
+        rawBan: db,
       })
     }
 
@@ -523,6 +593,7 @@ export default function CustomersAndSecurityPage() {
   const filteredBans = consolidatedBans.filter((b) =>
     b.target.toLowerCase().includes(banSearch.toLowerCase()) ||
     (b.customerName && b.customerName.toLowerCase().includes(banSearch.toLowerCase())) ||
+    (b.associatedEmail && b.associatedEmail.toLowerCase().includes(banSearch.toLowerCase())) ||
     b.reason.toLowerCase().includes(banSearch.toLowerCase())
   )
   const totalBlacklistPages = Math.ceil(filteredBans.length / pageSize) || 1
@@ -535,10 +606,10 @@ export default function CustomersAndSecurityPage() {
   const totalTicketsPages = Math.ceil(filteredTickets.length / pageSize) || 1
   const paginatedTickets = filteredTickets.slice((ticketsPage - 1) * pageSize, ticketsPage * pageSize)
 
-  // Customer statistics
+  // Customer statistics (count only verified registered accounts)
   const totalSpendRs = customers.reduce((acc, c) => acc + c.totalSpent, 0)
   const bannedCount = customers.filter((c) => c.isBanned).length
-  const registeredCount = customers.filter((c) => c.isRegistered).length
+  const registeredCount = customers.filter((c) => c.isRegistered && c.isEmailVerified !== false).length
   const guestCount = customers.filter((c) => !c.isRegistered).length
   const openTicketsCount = tickets.filter((t) => t.status === "open").length
 
@@ -930,7 +1001,8 @@ export default function CustomersAndSecurityPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Customers</SelectItem>
-                    <SelectItem value="registered">Registered Only</SelectItem>
+                    <SelectItem value="registered">Registered (Verified)</SelectItem>
+                    <SelectItem value="unverified">Unverified Accounts</SelectItem>
                     <SelectItem value="guest">Guest Buyers Only</SelectItem>
                     <SelectItem value="banned">Banned Accounts</SelectItem>
                   </SelectContent>
@@ -992,11 +1064,15 @@ export default function CustomersAndSecurityPage() {
                               variant="outline"
                               className={
                                 cust.isRegistered
-                                  ? "bg-purple-100 text-purple-900 border-purple-300 font-semibold text-[11px]"
+                                  ? (cust.isEmailVerified !== false
+                                      ? "bg-purple-100 text-purple-900 border-purple-300 font-semibold text-[11px]"
+                                      : "bg-orange-100 text-orange-900 border-orange-300 font-semibold text-[11px]")
                                   : "bg-amber-100 text-amber-900 border-amber-300 font-semibold text-[11px]"
                               }
                             >
-                              {cust.isRegistered ? "Registered" : "Guest"}
+                              {cust.isRegistered
+                                ? (cust.isEmailVerified !== false ? "Registered" : "Unverified")
+                                : "Guest"}
                             </Badge>
                           </TableCell>
                           <TableCell className="py-3 whitespace-nowrap">
@@ -1172,10 +1248,49 @@ export default function CustomersAndSecurityPage() {
                       paginatedBans.map((ban) => (
                         <TableRow key={ban.id} className="hover:bg-[#FEF7E0]/50 border-b border-gray-100">
                           <TableCell className="py-3.5 whitespace-nowrap">
-                            <div className="flex flex-col">
-                              <span className="font-mono font-bold text-[#111827] text-sm">{ban.target}</span>
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {ban.type === "email" && (
+                                  <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-[10px] font-bold px-1.5 py-0">
+                                    Email Account
+                                  </Badge>
+                                )}
+                                {ban.type === "ip" && (
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-[10px] font-bold px-1.5 py-0">
+                                    IP Address
+                                  </Badge>
+                                )}
+                                {ban.type === "email_domain" && (
+                                  <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] font-bold px-1.5 py-0">
+                                    Email Domain
+                                  </Badge>
+                                )}
+                                {ban.type === "device_id" && (
+                                  <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200 text-[10px] font-bold px-1.5 py-0">
+                                    Device ID
+                                  </Badge>
+                                )}
+                                <span className="font-mono font-bold text-[#111827] text-sm">{ban.target}</span>
+                              </div>
                               {ban.customerName && (
                                 <span className="text-xs text-[#4B5563] font-medium">{ban.customerName}</span>
+                              )}
+                              {ban.associatedEmail && (
+                                <span className="text-[11px] text-[#92400E] font-medium">
+                                  Associated with: <span className="font-semibold text-[#111827]">{ban.associatedEmail}</span>
+                                </span>
+                              )}
+                              {ban.linkedCustomers && ban.linkedCustomers.length > 0 && (
+                                <div className="mt-1 flex flex-col gap-0.5">
+                                  <span className="text-[10px] text-amber-800 font-bold">Also blocks linked accounts:</span>
+                                  <div className="flex flex-wrap gap-1 max-w-xs">
+                                    {ban.linkedCustomers.map((email) => (
+                                      <span key={email} className="text-[10px] bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded border border-amber-300 font-mono">
+                                        {email}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
                               )}
                             </div>
                           </TableCell>
@@ -1611,6 +1726,51 @@ export default function CustomersAndSecurityPage() {
                   className="mt-1.5 border-2 border-[#F59E0B]/30 bg-white text-[#1F2937] text-sm focus:border-[#F59E0B]"
                 />
               </div>
+
+              {/* Optional Advanced Ban Controls */}
+              <div className="space-y-2.5 pt-3 border-t border-red-100">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                  Optional Ban Scope Controls
+                </p>
+
+                {/* Option 1: Ban IP address */}
+                <div className="flex items-start gap-2.5 p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-xl">
+                  <input
+                    type="checkbox"
+                    id="banCustomerIpCheckbox"
+                    checked={customerBanIp}
+                    onChange={(e) => setCustomerBanIp(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="banCustomerIpCheckbox" className="text-xs font-bold text-[#1F2937] cursor-pointer block">
+                      Also ban IP address {customerToBan.lastIp ? `(${customerToBan.lastIp})` : ""}
+                    </label>
+                    <p className="text-[11px] text-[#92400E] leading-relaxed mt-0.5">
+                      Nepal ISPs use CGNAT where multiple users share an IP. If enabled, other innocent users on this IP will be prompted with Cloudflare Turnstile verification.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Option 2: Ban whole domain */}
+                <div className="flex items-start gap-2.5 p-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+                  <input
+                    type="checkbox"
+                    id="banCustomerDomainCheckbox"
+                    checked={customerBanDomain}
+                    onChange={(e) => setCustomerBanDomain(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <label htmlFor="banCustomerDomainCheckbox" className="text-xs font-bold text-[#1F2937] cursor-pointer block">
+                      Ban whole email domain (@{customerToBan.email.split("@")[1]})
+                    </label>
+                    <p className="text-[11px] text-gray-500 leading-relaxed mt-0.5">
+                      Blocks all existing and future customer accounts ending in @{customerToBan.email.split("@")[1]}. Recommended for burner/disposable domains.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1943,7 +2103,15 @@ export default function CustomersAndSecurityPage() {
               <div className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 rounded-xl p-3.5 flex items-center justify-between gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-[#92400E] font-bold uppercase tracking-wider">
-                    {unbanTarget.isCustomerEmail ? "Customer Account" : "Blacklisted Target"}
+                    {unbanTarget.type === "ip"
+                      ? "Banned IP Address"
+                      : unbanTarget.type === "email_domain"
+                      ? "Banned Domain Address"
+                      : unbanTarget.type === "device_id"
+                      ? "Banned Device ID"
+                      : unbanTarget.isCustomerEmail
+                      ? "Customer Account"
+                      : "Blacklisted Target"}
                   </p>
                   <p className="font-bold text-sm text-[#111827] truncate mt-0.5" title={unbanTarget.target}>
                     {unbanTarget.target}
@@ -1964,6 +2132,16 @@ export default function CustomersAndSecurityPage() {
 
               <p className="text-xs text-slate-600 leading-relaxed font-medium">
                 Are you sure you want to lift the ban for <strong className="text-slate-900 font-semibold">{unbanTarget.target}</strong>?
+                {unbanTarget.type === "ip" && (
+                  <span className="block mt-1 text-slate-500 font-normal">
+                    This will remove security restrictions and Turnstile requirements specifically for this IP address.
+                  </span>
+                )}
+                {unbanTarget.type === "email_domain" && (
+                  <span className="block mt-1 text-slate-500 font-normal">
+                    This will allow customers with this email domain to purchase again.
+                  </span>
+                )}
               </p>
             </div>
           )}

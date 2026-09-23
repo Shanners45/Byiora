@@ -13,6 +13,7 @@ export interface CustomerProfile {
   email: string
   name: string
   isRegistered: boolean
+  isEmailVerified?: boolean
   isGoogleUser?: boolean
   provider?: string | null
   userId?: string | null
@@ -27,6 +28,7 @@ export interface CustomerProfile {
   isBanned: boolean
   banReason?: string | null
   banId?: string | null
+  banVector?: "email" | "ip" | "device_id" | "domain"
   createdAt?: string
 }
 
@@ -43,6 +45,10 @@ export async function getCustomersOverviewAction(): Promise<{
 
   try {
     const supabase = createServiceRoleClient() as any
+
+    // 0. Fetch admin accounts to exclude them from the customer directory
+    const { data: adminRows } = await supabase.from("admin_users").select("email")
+    const adminEmails = new Set((adminRows || []).map((a: any) => a.email?.toLowerCase().trim()).filter(Boolean))
 
     // 1. Fetch registered users from public.users & Supabase Auth for last_sign_in_at
     const { data: registeredUsers, error: usersErr } = await supabase
@@ -94,10 +100,12 @@ export async function getCustomersOverviewAction(): Promise<{
     // Map to group all customer profiles by email
     const customerMap = new Map<string, CustomerProfile>()
 
-    // Seed registered users first
+    // Seed registered users first (excluding admin accounts)
     for (const u of registeredUsers || []) {
       if (!u.email) continue
       const cleanEmail = u.email.trim().toLowerCase()
+      if (adminEmails.has(cleanEmail)) continue // Do not list admin staff as customers
+
       const domain = cleanEmail.split("@")[1] || ""
       const directBan = bannedEmailMap.get(cleanEmail)
       const domainBan = bannedDomainSet.has(domain)
@@ -112,6 +120,7 @@ export async function getCustomersOverviewAction(): Promise<{
         email: cleanEmail,
         name: u.name || authUser?.user_metadata?.full_name || cleanEmail.split("@")[0],
         isRegistered: true,
+        isEmailVerified: Boolean(authUser?.email_confirmed_at),
         isGoogleUser: Boolean(isGoogle),
         provider: isGoogle ? "google" : "email",
         userId: u.id,
@@ -130,9 +139,11 @@ export async function getCustomersOverviewAction(): Promise<{
       })
     }
 
-    // Seed any auth users not present in public.users
+    // Seed any auth users not present in public.users (excluding admin accounts)
     if (authUsersMap.size > 0) {
       for (const [cleanEmail, au] of authUsersMap.entries()) {
+        if (adminEmails.has(cleanEmail)) continue // Do not list admin staff as customers
+
         if (!customerMap.has(cleanEmail)) {
           const isGoogle =
             au.app_metadata?.provider === "google" ||
@@ -147,6 +158,7 @@ export async function getCustomersOverviewAction(): Promise<{
             email: cleanEmail,
             name: au.user_metadata?.full_name || au.user_metadata?.name || cleanEmail.split("@")[0],
             isRegistered: true,
+            isEmailVerified: Boolean(au.email_confirmed_at),
             isGoogleUser: Boolean(isGoogle),
             provider: isGoogle ? "google" : "email",
             userId: au.id,
@@ -171,6 +183,8 @@ export async function getCustomersOverviewAction(): Promise<{
     for (const t of transactions || []) {
       if (!t.user_email) continue
       const cleanEmail = t.user_email.trim().toLowerCase()
+      if (adminEmails.has(cleanEmail)) continue
+
       const domain = cleanEmail.split("@")[1] || ""
       const directBan = bannedEmailMap.get(cleanEmail)
       const domainBan = bannedDomainSet.has(domain)
@@ -189,6 +203,7 @@ export async function getCustomersOverviewAction(): Promise<{
           email: cleanEmail,
           name: guestName,
           isRegistered,
+          isEmailVerified: Boolean(authUser?.email_confirmed_at),
           isGoogleUser: Boolean(isGoogle),
           provider: isGoogle ? "google" : (isRegistered ? "email" : null),
           userId: t.user_id || authUser?.id || null,
@@ -243,11 +258,12 @@ export async function getCustomersOverviewAction(): Promise<{
       const ipBan = profile.lastIp ? bannedIpMap.get(profile.lastIp) : null
       const deviceBan = profile.lastDeviceId ? bannedDeviceMap.get(profile.lastDeviceId) : null
 
-      const activeBan = directBan || ipBan || deviceBan
-      if (activeBan || domainBan) {
+      const hardBan = directBan || deviceBan
+      if (hardBan || domainBan) {
         profile.isBanned = true
-        profile.banReason = activeBan?.reason || (domainBan ? "Domain blacklisted" : "Banned by administrator")
-        profile.banId = activeBan?.id || null
+        profile.banReason = hardBan?.reason || (domainBan ? "Domain blacklisted" : "Banned by administrator")
+        profile.banId = hardBan?.id || null
+        profile.banVector = directBan ? "email" : (deviceBan ? "device_id" : "domain")
       }
     }
 
@@ -467,10 +483,14 @@ export async function banEntireCustomerAction({
   email,
   reason,
   durationHours,
+  banIp = false,
+  banDomain = false,
 }: {
   email: string
   reason?: string
   durationHours?: number
+  banIp?: boolean
+  banDomain?: boolean
 }): Promise<{ success: boolean; error?: string; message?: string }> {
   const session = await getAdminSessionAction()
   if (!session.success) return { success: false, error: "Unauthorized" }
@@ -532,18 +552,7 @@ export async function banEntireCustomerAction({
       durationHours,
     })
 
-    // 4. Ban associated IP addresses
-    for (const ip of ips) {
-      await banEntity({
-        type: "ip",
-        value: ip,
-        reason: `${banReason} (Associated with ${cleanEmail})`,
-        bannedBy: adminEmail,
-        durationHours,
-      })
-    }
-
-    // 5. Ban associated Device IDs (anti-VPN)
+    // 4. Ban associated Device IDs (anti-VPN & hardware anchor)
     for (const deviceId of deviceIds) {
       await banEntity({
         type: "device_id",
@@ -554,9 +563,40 @@ export async function banEntireCustomerAction({
       })
     }
 
+    // 5. Optionally ban associated IP addresses (kept optional due to Nepal CGNAT)
+    if (banIp) {
+      for (const ip of ips) {
+        await banEntity({
+          type: "ip",
+          value: ip,
+          reason: `${banReason} (Associated with ${cleanEmail})`,
+          bannedBy: adminEmail,
+          durationHours,
+        })
+      }
+    }
+
+    // 6. Optionally ban entire email domain
+    if (banDomain) {
+      const domain = cleanEmail.split("@")[1]?.trim()
+      if (domain) {
+        await banEntity({
+          type: "email_domain",
+          value: domain,
+          reason: `${banReason} (Domain banned for ${cleanEmail})`,
+          bannedBy: adminEmail,
+          durationHours,
+        })
+      }
+    }
+
+    const summaryParts = [`Email (${cleanEmail})`, `${deviceIds.size} Device(s)`]
+    if (banIp) summaryParts.push(`${ips.size} IP(s)`)
+    if (banDomain) summaryParts.push(`Domain (@${cleanEmail.split("@")[1]})`)
+
     return {
       success: true,
-      message: `Customer banned successfully across all vectors (Email, ${ips.size} IP(s), ${deviceIds.size} Device(s), and Account suspended).`,
+      message: `Customer banned successfully across: ${summaryParts.join(", ")}.`,
     }
   } catch (err: any) {
     console.error("Error banning customer completely:", err)
@@ -618,12 +658,12 @@ export async function unbanEntireCustomerAction(email: string): Promise<{ succes
 
     for (const b of matchingBans || []) {
       const val = b.value?.toLowerCase()
-      const isMatch =
-        valuesToUnban.has(b.value) ||
-        valuesToUnban.has(val) ||
-        (b.reason && b.reason.toLowerCase().includes(cleanEmail))
+      // Only lift direct email and associated device ID for this customer.
+      // IP and Domain bans are maintained as distinct blacklist rules that can be lifted independently!
+      const isDirectEmail = b.type === "email" && (val === cleanEmail || valuesToUnban.has(b.value))
+      const isDevice = b.type === "device_id" && (valuesToUnban.has(b.value) || (b.reason && b.reason.toLowerCase().includes(cleanEmail)))
 
-      if (isMatch) {
+      if (isDirectEmail || isDevice) {
         await unbanEntity(b.id)
       }
     }

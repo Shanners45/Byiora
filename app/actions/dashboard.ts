@@ -18,18 +18,30 @@ export async function getDashboardStatsAction() {
     const serviceSupabase = createServiceRoleClient()
 
     const [
-      { count: usersCount },
+      { data: adminRows },
+      authUsersRes,
       { count: productsCount },
       { data: transactions, error: transactionsError },
       { data: completedTransactions, error: completedError },
       { data: products }
     ] = await Promise.all([
-      serviceSupabase.from("users").select("*", { count: "exact", head: true }),
+      serviceSupabase.from("admin_users").select("email"),
+      serviceSupabase.auth.admin.listUsers({ perPage: 1000 }).catch(() => ({ data: { users: [] } })),
       serviceSupabase.from("products").select("*", { count: "exact", head: true }),
       serviceSupabase.from("transactions").select("*").order("created_at", { ascending: false }),
       serviceSupabase.from("transactions").select("price,product_name").eq("status", "Completed"),
       serviceSupabase.from("products").select("*").eq("is_active", true).limit(5)
     ])
+
+    const adminEmails = new Set((adminRows || []).map((a: any) => a.email?.toLowerCase().trim()).filter(Boolean))
+
+    // Count only registered & verified accounts, excluding admin accounts
+    const verifiedUsersCount = (authUsersRes?.data?.users || []).filter((u: any) => {
+      const email = u.email?.toLowerCase().trim()
+      if (!email) return false
+      if (adminEmails.has(email)) return false
+      return !!u.email_confirmed_at
+    }).length
 
     if (transactionsError) {
       console.error("Error loading transactions:", transactionsError)
@@ -52,7 +64,7 @@ export async function getDashboardStatsAction() {
     return {
       success: true,
       stats: {
-        totalUsers: usersCount || 0,
+        totalUsers: verifiedUsersCount,
         totalProducts: productsCount || 0,
         totalOrders,
         totalRevenue,

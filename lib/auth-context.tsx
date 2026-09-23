@@ -46,6 +46,7 @@ interface AuthContextType {
       productId?: string
       productCategory?: string
       guestData?: any
+      turnstileToken?: string
     },
   ) => Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean }>
   refreshTransactions: () => Promise<void>
@@ -265,6 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       productId?: string
       productCategory?: string
       guestData?: any
+      turnstileToken?: string
     },
   ): Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean }> => {
     try {
