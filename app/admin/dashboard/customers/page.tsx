@@ -1734,41 +1734,31 @@ export default function CustomersAndSecurityPage() {
                 </p>
 
                 {/* Option 1: Ban IP address */}
-                <div className="flex items-start gap-2.5 p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-xl">
+                <div className="flex items-center gap-2.5 p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-xl">
                   <input
                     type="checkbox"
                     id="banCustomerIpCheckbox"
                     checked={customerBanIp}
                     onChange={(e) => setCustomerBanIp(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                    className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
                   />
-                  <div className="flex-1">
-                    <label htmlFor="banCustomerIpCheckbox" className="text-xs font-bold text-[#1F2937] cursor-pointer block">
-                      Also ban IP address {customerToBan.lastIp ? `(${customerToBan.lastIp})` : ""}
-                    </label>
-                    <p className="text-[11px] text-[#92400E] leading-relaxed mt-0.5">
-                      Nepal ISPs use CGNAT where multiple users share an IP. If enabled, other innocent users on this IP will be prompted with Cloudflare Turnstile verification.
-                    </p>
-                  </div>
+                  <label htmlFor="banCustomerIpCheckbox" className="text-xs font-bold text-[#1F2937] cursor-pointer block">
+                    Also ban IP address {customerToBan.lastIp ? `(${customerToBan.lastIp})` : ""}
+                  </label>
                 </div>
 
                 {/* Option 2: Ban whole domain */}
-                <div className="flex items-start gap-2.5 p-2.5 bg-gray-50 border border-gray-200 rounded-xl">
+                <div className="flex items-center gap-2.5 p-2.5 bg-gray-50 border border-gray-200 rounded-xl">
                   <input
                     type="checkbox"
                     id="banCustomerDomainCheckbox"
                     checked={customerBanDomain}
                     onChange={(e) => setCustomerBanDomain(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
+                    className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500 cursor-pointer"
                   />
-                  <div className="flex-1">
-                    <label htmlFor="banCustomerDomainCheckbox" className="text-xs font-bold text-[#1F2937] cursor-pointer block">
-                      Ban whole email domain (@{customerToBan.email.split("@")[1]})
-                    </label>
-                    <p className="text-[11px] text-gray-500 leading-relaxed mt-0.5">
-                      Blocks all existing and future customer accounts ending in @{customerToBan.email.split("@")[1]}. Recommended for burner/disposable domains.
-                    </p>
-                  </div>
+                  <label htmlFor="banCustomerDomainCheckbox" className="text-xs font-bold text-[#1F2937] cursor-pointer block">
+                    Ban whole email domain (@{customerToBan.email.split("@")[1]})
+                  </label>
                 </div>
               </div>
             </div>

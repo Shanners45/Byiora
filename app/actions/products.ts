@@ -3,28 +3,28 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
-import { sanitizeHtml } from "@/lib/sanitize"
+import { sanitizeHtml, sanitizePlainText } from "@/lib/sanitize"
 
 import { verifyAdmin } from "./admin-utils"
 
 function sanitizeProductData<T extends Record<string, any>>(data: T): T {
   const result: any = { ...data }
-  if (result.name) result.name = sanitizeHtml(result.name)
+  if (result.name) result.name = sanitizePlainText(result.name)
   if (result.description) result.description = sanitizeHtml(result.description)
-  if (result.ribbon_text) result.ribbon_text = sanitizeHtml(result.ribbon_text)
-  if (result.uid_instructions) result.uid_instructions = sanitizeHtml(result.uid_instructions)
+  if (result.ribbon_text) result.ribbon_text = sanitizePlainText(result.ribbon_text)
+  if (result.uid_instructions) result.uid_instructions = sanitizePlainText(result.uid_instructions)
   
   if (result.denominations) {
     result.denominations = result.denominations.map((d: any) => ({
       ...d,
-      label: d.label ? sanitizeHtml(d.label) : ""
+      label: d.label ? sanitizePlainText(d.label) : ""
     }))
   }
   
   if (result.denomination_categories) {
     result.denomination_categories = result.denomination_categories.map((c: any) => ({
       ...c,
-      name: c.name ? sanitizeHtml(c.name) : "",
+      name: c.name ? sanitizePlainText(c.name) : "",
       description: c.description ? sanitizeHtml(c.description) : undefined
     }))
   }
@@ -32,7 +32,7 @@ function sanitizeProductData<T extends Record<string, any>>(data: T): T {
   if (result.faqs) {
     result.faqs = result.faqs.map((f: any) => ({
       ...f,
-      question: f.question ? sanitizeHtml(f.question) : "",
+      question: f.question ? sanitizePlainText(f.question) : "",
       answer: f.answer ? sanitizeHtml(f.answer) : ""
     }))
   }
@@ -40,7 +40,7 @@ function sanitizeProductData<T extends Record<string, any>>(data: T): T {
   if (result.checkout_fields) {
     result.checkout_fields = result.checkout_fields.map((f: any) => ({
       ...f,
-      label: f.label ? sanitizeHtml(f.label) : ""
+      label: f.label ? sanitizePlainText(f.label) : ""
     }))
   }
 

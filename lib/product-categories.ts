@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client"
+import { decodeHtmlEntities } from "@/lib/sanitize"
 
 export interface Product {
   id: string
@@ -69,7 +70,7 @@ export async function getAllProducts(): Promise<Product[]> {
     // Transform Supabase data to our Product interface
     const products: Product[] = data.map((product: any) => ({
       id: product.id,
-      name: product.name,
+      name: decodeHtmlEntities(product.name || ""),
       slug: product.slug,
       logo: product.logo,
       category: product.category,
@@ -78,10 +79,19 @@ export async function getAllProducts(): Promise<Product[]> {
       isActive: product.is_active,
       description: product.description,
       denom_icon_url: product.denom_icon_url || undefined,
-      ribbon_text: product.ribbon_text || undefined,
-      denominations: product.denominations || [],
-      denomination_categories: product.denomination_categories || [],
-      faqs: product.faqs || [],
+      ribbon_text: decodeHtmlEntities(product.ribbon_text || "") || undefined,
+      denominations: (product.denominations || []).map((d: any) => ({
+        ...d,
+        label: decodeHtmlEntities(d.label || ""),
+      })),
+      denomination_categories: (product.denomination_categories || []).map((c: any) => ({
+        ...c,
+        name: decodeHtmlEntities(c.name || ""),
+      })),
+      faqs: (product.faqs || []).map((f: any) => ({
+        ...f,
+        question: decodeHtmlEntities(f.question || ""),
+      })),
       checkout_fields: product.checkout_fields || [],
       uid_instructions: product.uid_instructions || null,
       uid_guide_image: product.uid_guide_image || null,

@@ -19,6 +19,7 @@ import Image from "next/image"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { createProductAction } from "@/app/actions/products"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { decodeHtmlEntities, stripHtmlTags } from "@/lib/sanitize"
 
 export default function AddProductPage() {
   const supabase = createClient()
@@ -277,11 +278,13 @@ export default function AddProductPage() {
       return
     }
 
+    const cleanLabel = decodeHtmlEntities(newDenomLabel.trim())
+
     if (editingDenomIndex !== null) {
       const updated = [...denominations]
       updated[editingDenomIndex] = { 
         price: newDenomPrice, 
-        label: newDenomLabel,
+        label: cleanLabel,
         bestseller: newDenomInStock ? newDenomBestseller : false,
         in_stock: newDenomInStock,
         categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined
@@ -289,7 +292,7 @@ export default function AddProductPage() {
       setDenominations(updated)
       setEditingDenomIndex(null)
     } else {
-      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }])
+      setDenominations([...denominations, { price: newDenomPrice, label: cleanLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }])
     }
 
     setNewDenomPrice("")
@@ -306,7 +309,7 @@ export default function AddProductPage() {
   const editDenomination = (index: number) => {
     const denom = denominations[index]
     setNewDenomPrice(denom.price)
-    setNewDenomLabel(denom.label)
+    setNewDenomLabel(decodeHtmlEntities(denom.label))
     setNewDenomBestseller(denom.bestseller || false)
     setNewDenomInStock(denom.in_stock !== false)
     setNewDenomCategoryId(denom.categoryId || "")
@@ -1188,7 +1191,7 @@ export default function AddProductPage() {
                   {faqs.map((faq, index) => (
                     <TableRow key={index} className="border-t border-[#F59E0B]/10 hover:bg-[#FEF7E0]/50">
                       <TableCell className="font-medium text-[#1F2937] break-words">{faq.question}</TableCell>
-                      <TableCell className="text-[#4B5563] break-words">{faq.answer}</TableCell>
+                      <TableCell className="text-[#4B5563] break-words">{stripHtmlTags(faq.answer)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="sm" onClick={() => editFaq(index)} className="h-8 w-8 p-0 text-blue-500 hover:bg-blue-50"><Pencil className="h-4 w-4" /></Button>

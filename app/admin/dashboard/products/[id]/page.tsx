@@ -20,6 +20,7 @@ import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { RichTextEditor } from "@/components/rich-text-editor"
+import { decodeHtmlEntities, stripHtmlTags } from "@/lib/sanitize"
 
 export default function ProductEditPage() {
   const supabase = createClient()
@@ -107,24 +108,35 @@ export default function ProductEditPage() {
         const productData = result.data as any
 
         setProduct(productData)
-        setName(productData.name || "")
+        setName(decodeHtmlEntities(productData.name || ""))
         setSlug(productData.slug || "")
         setSlugManuallyEdited(!!productData.slug)
         setCategory(productData.category || "digital-goods")
         setLogo(productData.logo || "")
         setDescription(productData.description || "")
         setIsActive(productData.is_active !== false)
-        setRibbonText(productData.ribbon_text || "")
+        setRibbonText(decodeHtmlEntities(productData.ribbon_text || ""))
         if (productData.denom_icon_url) setDenomIconUrl(productData.denom_icon_url)
 
         if (productData.denominations && Array.isArray(productData.denominations)) {
-          setDenominations(productData.denominations)
+          setDenominations(productData.denominations.map((d: any) => ({
+            ...d,
+            label: decodeHtmlEntities(d.label || ""),
+          })))
         }
 
-
+        if (productData.denomination_categories && Array.isArray(productData.denomination_categories)) {
+          setDenominationCategories(productData.denomination_categories.map((c: any) => ({
+            ...c,
+            name: decodeHtmlEntities(c.name || ""),
+          })))
+        }
 
         if (productData.faqs && Array.isArray(productData.faqs)) {
-          setFaqs(productData.faqs)
+          setFaqs(productData.faqs.map((f: any) => ({
+            ...f,
+            question: decodeHtmlEntities(f.question || ""),
+          })))
         }
 
         if (productData.checkout_fields && Array.isArray(productData.checkout_fields)) {
@@ -391,13 +403,15 @@ export default function ProductEditPage() {
       return
     }
 
+    const cleanLabel = decodeHtmlEntities(newDenomLabel.trim())
+
     if (editingDenomIndex !== null) {
       const updated = [...denominations]
-      updated[editingDenomIndex] = { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }
+      updated[editingDenomIndex] = { price: newDenomPrice, label: cleanLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }
       setDenominations(updated)
       setEditingDenomIndex(null)
     } else {
-      setDenominations([...denominations, { price: newDenomPrice, label: newDenomLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }])
+      setDenominations([...denominations, { price: newDenomPrice, label: cleanLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }])
     }
 
     setNewDenomPrice("")
@@ -414,7 +428,7 @@ export default function ProductEditPage() {
   const editDenomination = (index: number) => {
     const denom = denominations[index]
     setNewDenomPrice(denom.price)
-    setNewDenomLabel(denom.label)
+    setNewDenomLabel(decodeHtmlEntities(denom.label))
     setNewDenomBestseller(denom.bestseller || false)
     setNewDenomInStock(denom.in_stock !== false)
     setNewDenomCategoryId(denom.categoryId || "")
@@ -1216,7 +1230,7 @@ export default function ProductEditPage() {
                   {faqs.map((faq, index) => (
                     <TableRow key={index} className="border-t border-[#F59E0B]/10 hover:bg-[#FEF7E0]/50">
                       <TableCell className="font-medium text-[#1F2937] break-words">{faq.question}</TableCell>
-                      <TableCell className="text-[#4B5563] break-words">{faq.answer}</TableCell>
+                      <TableCell className="text-[#4B5563] break-words">{stripHtmlTags(faq.answer)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="sm" onClick={() => editFaq(index)} className="h-8 w-8 p-0 text-blue-500 hover:bg-blue-50"><Pencil className="h-4 w-4" /></Button>

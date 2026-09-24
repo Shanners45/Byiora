@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, HelpCircle, QrCode, Download, Loader2, CheckCircle2, ShieldAlert } from "lucide-react"
+import { ArrowLeft, HelpCircle, QrCode, Download, Loader2, CheckCircle2 } from "lucide-react"
 import { TurnstileWidget } from "@/components/turnstile-widget"
 import { checkCheckoutSecurityAction } from "@/app/actions/transactions"
 import { Button } from "@/components/ui/button"
@@ -925,24 +925,8 @@ export default function ProductDetailPage() {
 
               {/* Cloudflare Turnstile Security Verification for Flagged IPs */}
               {requiresTurnstile && areAllFieldsFilled && (
-                <div className="mt-5 p-3.5 bg-brand-sky-blue/5 border-2 border-brand-sky-blue/30 rounded-xl flex flex-col items-center justify-center animate-in fade-in duration-300">
-                  <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold text-brand-charcoal">
-                    <ShieldAlert className="w-4 h-4 text-[#00BCD4]" />
-                    <span>Security Verification Required</span>
-                  </div>
-                  <div className="w-full flex justify-center items-center overflow-hidden">
-                    <TurnstileWidget onToken={(token) => setTurnstileToken(token)} />
-                  </div>
-                  {turnstileToken ? (
-                    <p className="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      Verification passed
-                    </p>
-                  ) : (
-                    <p className="text-[11px] text-brand-light-gray mt-1">
-                      Please complete the verification check above to enable checkout
-                    </p>
-                  )}
+                <div className="mt-4 flex justify-center items-center">
+                  <TurnstileWidget onToken={(token) => setTurnstileToken(token)} />
                 </div>
               )}
 
