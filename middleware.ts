@@ -13,8 +13,8 @@ export const config = {
      * - _next/image (image optimization)
      * - monitoring-tunnel (Sentry telemetry)
      * - favicon.ico (browser icon)
-     * - Static assets (svg, png, jpg, jpeg, gif, webp, ico)
+     * - Static assets (svg, png, jpg, jpeg, gif, webp, ico, txt)
      */
-    "/((?!_next/static|_next/image|monitoring-tunnel|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|monitoring-tunnel|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt)$).*)",
   ],
 }

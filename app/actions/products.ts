@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache"
 import { sanitizeHtml, sanitizePlainText } from "@/lib/sanitize"
 
 import { verifyAdmin } from "./admin-utils"
+import { submitToIndexNow, submitAllSiteUrlsToIndexNow } from "@/lib/indexnow"
 
 function sanitizeProductData<T extends Record<string, any>>(data: T): T {
   const result: any = { ...data }
@@ -90,6 +91,11 @@ export async function createProductAction(productData: {
 
     revalidatePath("/admin/dashboard/products")
     revalidatePath("/")
+    if (data?.slug) {
+      submitToIndexNow([`https://www.byiora.com.np/en-np/${data.slug}`, "https://www.byiora.com.np"]).catch((err) =>
+        console.warn("[IndexNow] Ping failed on product create:", err)
+      )
+    }
     return { success: true, data }
   } catch (error: any) {
     console.error("Error in createProductAction:", error)
@@ -151,6 +157,9 @@ export async function updateProductAction(
     revalidatePath("/")
     if (data?.slug) {
       revalidatePath(`/en-np/${data.slug}`)
+      submitToIndexNow([`https://www.byiora.com.np/en-np/${data.slug}`, "https://www.byiora.com.np"]).catch((err) =>
+        console.warn("[IndexNow] Ping failed on product update:", err)
+      )
     }
     return { success: true, data }
   } catch (error: any) {
@@ -253,4 +262,21 @@ export async function updateProductStatusAction(id: string, isActive: boolean) {
     return { error: "An unexpected error occurred" }
   }
 }
+
+/**
+ * Triggers batch IndexNow submission of all site URLs to Bing & Search Engines (admin only)
+ */
+export async function triggerSiteIndexNowAction() {
+  if (!(await verifyAdmin())) {
+    return { error: "Unauthorized: Admin access required", success: false, submittedCount: 0, urls: [] }
+  }
+
+  try {
+    return await submitAllSiteUrlsToIndexNow()
+  } catch (error: any) {
+    console.error("Error in triggerSiteIndexNowAction:", error)
+    return { error: error.message || "Failed to submit to IndexNow", success: false, submittedCount: 0, urls: [] }
+  }
+}
+
 

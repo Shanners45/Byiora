@@ -30,7 +30,7 @@ export const metadata: Metadata = {
     template: "%s | Byiora",
   },
   description:
-    "Nepal's #1 platform for game top-ups & gift cards. Buy Steam, PUBG UC, Valorant Points, Free Fire Diamonds, Netflix & more. Pay via eSewa, Khalti, Fonepay. Instant digital delivery.",
+    "Buy premium game top-ups and gift cards in Nepal instantly. Secure local payments with eSewa, Khalti, and Fonepay QR. Instant digital delivery.",
   keywords: [
     "gift cards Nepal",
     "game top-up Nepal",
