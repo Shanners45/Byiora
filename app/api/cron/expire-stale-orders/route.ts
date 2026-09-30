@@ -3,6 +3,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/app/actions/payment-credentials"
 import { fulfillOrderDirectly } from "@/lib/fulfillment"
 import { incrementFailureStrike } from "@/lib/security/strike-counter"
+import { cleanupExpiredBans } from "@/lib/security/blacklist"
 
 const PROXY_SECRET = process.env.INTERNAL_API_SECRET!
 if (!PROXY_SECRET) {
@@ -192,6 +193,7 @@ export async function GET(req: Request) {
       incrementFailureStrike({
         email: txn.user_email,
         ip: typedTxn.guest_user_data?.ip,
+        deviceId: typedTxn.guest_user_data?.deviceId,
       }).catch(() => {})
 
       // Send Payment Failed email for nepalpay and fonepay
@@ -268,13 +270,27 @@ export async function GET(req: Request) {
       console.error("[CRON] Unexpected error purging credentials:", purgeErr)
     }
 
-    console.log(`[CRON] Results: ${results.recovered} recovered, ${results.expired} expired, ${purgedCredentials} credentials purged, ${results.errors} errors`)
+    // ============================================
+    // PART 4: Automatically uplift expired customer & IP bans
+    // ============================================
+    let liftedBans = 0
+    try {
+      liftedBans = await cleanupExpiredBans()
+      if (liftedBans > 0) {
+        console.log(`[CRON] 🛡️ Automatically uplifted ${liftedBans} expired security ban(s)`)
+      }
+    } catch (banErr) {
+      console.error("[CRON] Unexpected error cleaning up expired bans:", banErr)
+    }
+
+    console.log(`[CRON] Results: ${results.recovered} recovered, ${results.expired} expired, ${purgedCredentials} credentials purged, ${liftedBans} bans uplifted, ${results.errors} errors`)
 
     return NextResponse.json({
       success: true,
       recovered: results.recovered,
       expired: results.expired,
       purgedCredentials,
+      liftedBans,
       errors: results.errors,
       timestamp: new Date().toISOString()
     })

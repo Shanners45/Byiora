@@ -91,6 +91,21 @@ export async function getOrGenerateQRAction(transactionId: string) {
       }
     }
 
+    // 1c. 100% FREE PROMO ORDER GUARD: If price is 0, never call payment proxy; auto-fulfill
+    if (parseFloat(String(txn.price).replace(/,/g, '')) <= 0) {
+      await fulfillOrderDirectly({ transactionId, source: "zero_price_qr_guard" })
+      return {
+        success: true,
+        status: "Paid",
+        isGuest: !txn.user_id,
+        product: txn.product_name,
+        productName: txn.product_name,
+        denomination: txn.amount,
+        amount: "0",
+        price: "0",
+      }
+    }
+
     const currentStatus = txn.status as string;
     const isCancelledByUser = currentStatus === "Cancelled" || (currentStatus === "Payment Failed" && txn.failure_remarks?.includes("Cancelled by user"));
     if (isCancelledByUser) {
@@ -895,6 +910,7 @@ export async function cancelTransactionAction(transactionId: string) {
     incrementFailureStrike({
       email: txn.user_email,
       ip: (txn.guest_user_data as any)?.ip,
+      deviceId: (txn.guest_user_data as any)?.deviceId,
     }).catch(() => {})
 
     return { success: true }

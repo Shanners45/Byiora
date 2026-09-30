@@ -3,7 +3,7 @@
 import crypto from "crypto"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { getAdminSessionAction } from "./admin-utils"
-import { banEntity, unbanEntity, getBannedEntities, BannedEntity } from "@/lib/security/blacklist"
+import { banEntity, unbanEntity, getBannedEntities, cleanupExpiredBans, BannedEntity } from "@/lib/security/blacklist"
 import { sendPasswordResetEmail } from "@/lib/email/resend"
 import { Resend } from "resend"
 
@@ -44,6 +44,9 @@ export async function getCustomersOverviewAction(): Promise<{
   if (!session.success) return { success: false, error: "Unauthorized" }
 
   try {
+    // Proactively clean up any expired bans before aggregating
+    await cleanupExpiredBans().catch(() => {})
+
     const supabase = createServiceRoleClient() as any
 
     // 0. Fetch admin accounts to exclude them from the customer directory
@@ -686,6 +689,7 @@ export async function getBannedListAction(): Promise<{
   if (!session.success) return { success: false, error: "Unauthorized" }
   if (session.data.role !== "admin") return { success: true, data: [] }
 
+  await cleanupExpiredBans().catch(() => {})
   const data = await getBannedEntities()
   return { success: true, data }
 }

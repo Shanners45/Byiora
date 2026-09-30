@@ -3,9 +3,10 @@
 import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, HelpCircle, QrCode, Download, Loader2, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, HelpCircle, QrCode, Download, Loader2, CheckCircle2, Tag, X as XIcon, ChevronDown, ChevronUp } from "lucide-react"
 import { TurnstileWidget } from "@/components/turnstile-widget"
 import { checkCheckoutSecurityAction } from "@/app/actions/transactions"
+import { validatePromoCodeAction, getPromoVisibilityAction } from "@/app/actions/promo-codes"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -41,7 +42,7 @@ interface PaymentMethod {
 }
 
 
-import { getOrCreateDeviceId } from "@/lib/security/device"
+import { getOrCreateDeviceId, initDeviceFingerprint } from "@/lib/security/device"
 
 export default function ProductDetailPage() {
   const params = useParams()
@@ -68,9 +69,12 @@ export default function ProductDetailPage() {
   const supabase = createClient()
 
   // Security pre-flight check: Detect if visitor's IP is flagged and requires Cloudflare Turnstile
+  // Also initializes FingerprintJS for stronger device tracking
   useEffect(() => {
     ;(async () => {
       try {
+        // Initialize FingerprintJS in the background (stores result in localStorage)
+        initDeviceFingerprint().catch(() => {})
         const secRes = await checkCheckoutSecurityAction({ deviceId: getOrCreateDeviceId() })
         if (secRes.requiresTurnstile) {
           setRequiresTurnstile(true)
@@ -90,6 +94,39 @@ export default function ProductDetailPage() {
   const [faqExpanded, setFaqExpanded] = useState(false)
   const DESC_LIMIT = 600
   const FAQ_LIMIT = 3
+
+  // Promo code state
+  const [promoExpanded, setPromoExpanded] = useState(false)
+  const [promoInput, setPromoInput] = useState("")
+  const [isValidatingPromo, setIsValidatingPromo] = useState(false)
+  const [showPromoInput, setShowPromoInput] = useState(false)
+  const [showPromoCelebration, setShowPromoCelebration] = useState(false)
+  const [appliedPromo, setAppliedPromo] = useState<{
+    code: string
+    discountAmount: number
+    finalPrice: number
+    originalPrice: number
+    message: string
+    promoDescription?: string
+  } | null>(null)
+  const [promoError, setPromoError] = useState("")
+
+  // Check if promo code input should be visible for this user type
+  useEffect(() => {
+    getPromoVisibilityAction(!!user).then(res => {
+      setShowPromoInput(res.showPromoInput)
+    }).catch(() => {})
+  }, [user])
+
+  // Clear promo when denomination changes (discount may differ)
+  useEffect(() => {
+    if (appliedPromo && selectedDenomination) {
+      setAppliedPromo(null)
+      setPromoInput("")
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedDenomination])
+
 
   const categorySlug = (params.category as string | undefined) ?? ""
   const productSlug = params.slug as string
@@ -157,9 +194,11 @@ export default function ProductDetailPage() {
   const areCheckoutFieldsValid = !(isDirectLoginProduct || topupHasCheckout) || !checkoutFields.some((f: any) => f.required && !checkoutFieldValues[f.key]?.trim())
   const isEmailValid = Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
 
+  const isFreeOrder = Boolean(appliedPromo && appliedPromo.finalPrice === 0)
+
   const areAllFieldsFilled = Boolean(
     selectedDenomination &&
-    selectedPayment &&
+    (isFreeOrder || selectedPayment) &&
     isEmailValid &&
     isUserValid &&
     isServerValid &&
@@ -192,8 +231,56 @@ export default function ProductDetailPage() {
     }
   }
 
+  // Promo code apply handler
+  const handleApplyPromo = async () => {
+    if (!promoInput.trim() || isValidatingPromo || !selectedDenomination) return
+    setIsValidatingPromo(true)
+    setPromoError("")
+
+    try {
+      const selectedDenom = giftCard?.denominations?.find((d: any) => d.label === selectedDenomination)
+      if (!selectedDenom) {
+        setPromoError("Please select a denomination first.")
+        setIsValidatingPromo(false)
+        return
+      }
+
+      const result = await validatePromoCodeAction({
+        code: promoInput.trim(),
+        productId: product?.id || productSlug,
+        productCategory: product?.category || "digital-goods",
+        denominationLabel: selectedDenom.label,
+        email: email || "guest@preview.com", // Preview only — server re-checks at order time
+        userId: user?.id || null,
+        deviceId: getOrCreateDeviceId(),
+      })
+
+      if (result.valid) {
+        setAppliedPromo({
+          code: result.code!,
+          discountAmount: result.discountAmount!,
+          finalPrice: result.finalPrice!,
+          originalPrice: result.originalPrice!,
+          message: result.message,
+          promoDescription: result.promoDescription,
+        })
+        setPromoError("")
+        setShowPromoCelebration(true) // Show celebration dialog
+      } else {
+        setPromoError(result.message)
+      }
+    } catch (err: any) {
+      setPromoError("Something went wrong. Please try again.")
+    } finally {
+      setIsValidatingPromo(false)
+    }
+  }
+
+
   const handlePurchase = async () => {
     if (isProcessing || isSubmittingRef.current) return
+
+    const isFreeOrder = Boolean(appliedPromo && appliedPromo.finalPrice === 0)
 
     // Validate checkout fields for direct-login and topup
     const missingCheckoutField = (isDirectLoginProduct || isTopupProduct) && checkoutFields.some(
@@ -202,7 +289,7 @@ export default function ProductDetailPage() {
 
     const missingServer = isTopupProduct && !topupHasCheckout && hasServers && !selectedServer
 
-    if (!selectedDenomination || !selectedPayment || !email || (isTopupProduct && !topupHasCheckout && !userId) || missingServer || missingCheckoutField) {
+    if (!selectedDenomination || (!isFreeOrder && !selectedPayment) || !email || (isTopupProduct && !topupHasCheckout && !userId) || missingServer || missingCheckoutField) {
       if (missingServer) {
         toast.error("Please select a server")
       } else {
@@ -226,20 +313,23 @@ export default function ProductDetailPage() {
     setIsProcessing(true)
 
     const selectedDenom = giftCard.denominations.find((d: any) => d.label === selectedDenomination)
-    const paymentMethodName = paymentMethods.find((p) => p.id === selectedPayment)?.name || selectedPayment
+    const paymentMethodName = isFreeOrder
+      ? `Promo Code (100% Discount - ${appliedPromo?.code})`
+      : (paymentMethods.find((p) => p.id === selectedPayment)?.name || selectedPayment)
 
     try {
       // Add transaction and keep it as "Processing" - no status updates
-      const { transactionId, paymentUrl, isDuplicate } = await addTransaction({
+      const { transactionId, paymentUrl, isDuplicate, isFreeOrder: freeFromAction } = await addTransaction({
         product: `${giftCard.name}`,
         amount: selectedDenom?.label || selectedDenomination,
         price: `${selectedDenom?.price}`,
-        status: "Processing", // Always keep as Processing
+        status: isFreeOrder ? "Paid" : "Processing",
         paymentMethod: paymentMethodName,
         email: email,
         productId: product?.id || productSlug,
         productCategory: product?.category || (isTopupProduct ? "topup" : isDirectLoginProduct ? "direct-login" : "digital-goods"),
         turnstileToken: requiresTurnstile ? turnstileToken : undefined,
+        promoCode: appliedPromo?.code || undefined,
         guestData: {
           ...(isTopupProduct && !topupHasCheckout ? { userId, server: selectedServer } : {}),
           deviceId: getOrCreateDeviceId(),
@@ -261,6 +351,41 @@ export default function ProductDetailPage() {
           setIsProcessing(false)
           return
         }
+      }
+
+      // ── 100% FREE ORDER: Instant fulfillment & confirmation (No gateway redirect) ──
+      if (isFreeOrder || freeFromAction) {
+        setIsProcessing(false)
+        setShowQRDialog(false)
+        toast.success("Order Placed Successfully! 🎉", {
+          description: `Your free order with promo code ${appliedPromo?.code} has been confirmed.`,
+        })
+
+        if (user) {
+          try {
+            await sendNotification({
+              title: "Order Placed Successfully! 🎉",
+              message: `Your free order for ${giftCard.name} (${selectedDenom?.label}) has been placed and is being processed.`,
+              type: "success",
+              userId: user.id,
+            })
+          } catch (notifError) {
+            console.error("Failed to send notification:", notifError)
+          }
+          router.push("/transactions?paid=success")
+        } else {
+          router.push("/?paid=success")
+        }
+
+        // Reset form after free order
+        setSelectedDenomination("")
+        setSelectedPayment("")
+        setUserId("")
+        setSelectedServer("")
+        if (!user) setEmail("")
+        setCheckoutFieldValues({})
+        setAppliedPromo(null)
+        return
       }
 
       // Order placed email is sent server-side (non-blocking) during transaction creation.
@@ -616,7 +741,7 @@ export default function ProductDetailPage() {
                   return (
                     <div key={denom.label} className={`relative ${isSelected && hasIcon ? "z-10" : ""}`}>
                       {denom.bestseller && !isOutOfStock && (
-                        <div className="absolute -top-3 -left-2 z-20 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
+                        <div className="absolute -top-3 -left-2 z-20 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
                           <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current">
                             <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
                           </svg>
@@ -893,6 +1018,13 @@ export default function ProductDetailPage() {
                 <h2 className="text-xl font-semibold text-brand-charcoal">Select payment</h2>
               </div>
 
+              {appliedPromo && appliedPromo.finalPrice === 0 && (
+                <div className="mb-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2.5 text-emerald-800 text-sm font-medium">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>100% Discount Applied! Total is Rs. 0. No payment required — click Claim Free Order below.</span>
+                </div>
+              )}
+
               <RadioGroup value={selectedPayment} onValueChange={handlePaymentMethodSelect}>
                 <div className="space-y-3">
                   {paymentMethods.map((method) => (
@@ -923,6 +1055,95 @@ export default function ProductDetailPage() {
                 </div>
               </RadioGroup>
 
+              {/* Promo Code Section */}
+              {showPromoInput && (
+                <div className="mt-5">
+                  {appliedPromo ? (
+                    /* Applied state */
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center">
+                            <CheckCircle2 className="w-4 h-4 text-white" />
+                          </div>
+                          <span className="font-semibold text-emerald-700">{appliedPromo.code} Applied!</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setAppliedPromo(null)
+                            setPromoInput("")
+                            setPromoError("")
+                          }}
+                          className="text-sm text-gray-500 hover:text-red-500 transition-colors font-medium"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <p className="text-sm text-emerald-600 mt-1 ml-8">
+                        You&apos;re saving Rs. {appliedPromo.discountAmount.toLocaleString()} on this order!
+                      </p>
+                    </div>
+                  ) : (
+                    /* Input state */
+                    <div>
+                      <button
+                        onClick={() => setPromoExpanded(!promoExpanded)}
+                        className="flex items-center justify-between w-full text-left py-2 group"
+                      >
+                        <span className="flex items-center gap-2 text-sm font-medium text-brand-charcoal">
+                          <Tag className="w-4 h-4 text-[#00BCD4]" />
+                          Have a promo code?
+                        </span>
+                        {promoExpanded ? (
+                          <ChevronUp className="w-4 h-4 text-gray-400" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-gray-400" />
+                        )}
+                      </button>
+                      {promoExpanded && (
+                        <div className="mt-2">
+                          <div className="flex gap-2">
+                            <Input
+                              value={promoInput}
+                              onChange={(e) => {
+                                setPromoInput(e.target.value.toUpperCase())
+                                setPromoError("")
+                              }}
+                              placeholder="Enter code"
+                              maxLength={30}
+                              className="bg-white border-gray-200 text-brand-charcoal placeholder:text-gray-400 uppercase font-medium"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  handleApplyPromo()
+                                }
+                              }}
+                            />
+                            <Button
+                              onClick={handleApplyPromo}
+                              disabled={!promoInput.trim() || isValidatingPromo || !selectedDenomination}
+                              className="bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white px-6 min-w-[80px]"
+                            >
+                              {isValidatingPromo ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                "Apply"
+                              )}
+                            </Button>
+                          </div>
+                          {promoError && (
+                            <p className="text-sm text-red-500 mt-2 ml-1">{promoError}</p>
+                          )}
+                          {!selectedDenomination && promoExpanded && (
+                            <p className="text-xs text-gray-400 mt-1.5 ml-1">Select a denomination first to apply a code.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Cloudflare Turnstile Security Verification for Flagged IPs */}
               {requiresTurnstile && areAllFieldsFilled && (
                 <div className="mt-4 flex justify-center items-center">
@@ -932,6 +1153,11 @@ export default function ProductDetailPage() {
 
               <Button
                 onClick={() => {
+                  const isFreeOrder = appliedPromo && appliedPromo.finalPrice === 0
+                  if (isFreeOrder) {
+                    handlePurchase()
+                    return
+                  }
                   const isAutomatedGateway = selectedPaymentMethod?.category === "nepalpay" || selectedPaymentMethod?.category === "fonepay" || selectedPaymentMethod?.category === "khalti"
                   if (isAutomatedGateway) {
                     handlePurchase()
@@ -947,6 +1173,8 @@ export default function ProductDetailPage() {
                     <Loader2 className="w-5 h-5 animate-spin" />
                     <span>Processing...</span>
                   </>
+                ) : appliedPromo && appliedPromo.finalPrice === 0 ? (
+                  "Claim Free Order"
                 ) : (
                   "Proceed to Payment"
                 )}
@@ -1002,18 +1230,20 @@ export default function ProductDetailPage() {
         </div>
       </div>
 
-      {/* QR Code Payment Dialog */}
+      {/* QR Code Payment Dialog - Clean Brand Theme (Yellow Removed) */}
       <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
-        <DialogContent className="sm:max-w-md bg-[#FFF8E7] border-[#F5D98E]" aria-describedby={undefined}>
+        <DialogContent className="sm:max-w-md bg-white border border-gray-200 shadow-2xl rounded-2xl p-6" aria-describedby={undefined}>
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <QrCode className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-2 text-brand-charcoal text-lg font-bold">
+              <div className="w-8 h-8 rounded-lg bg-brand-sky-blue/10 flex items-center justify-center text-brand-sky-blue">
+                <QrCode className="h-4 w-4" />
+              </div>
               Complete Payment - {selectedPaymentMethod?.name}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-6">
+          <div className="space-y-6 pt-2">
             <div className="text-center">
-              <div className="w-48 h-48 mx-auto bg-gray-100 rounded-lg flex items-center justify-center mb-4 overflow-hidden">
+              <div className="w-48 h-48 mx-auto bg-gray-50 border border-gray-200/80 rounded-xl flex items-center justify-center mb-4 overflow-hidden shadow-inner">
                 {selectedPaymentMethod?.qr_url ? (
                   <img
                     src={selectedPaymentMethod.qr_url}
@@ -1029,7 +1259,7 @@ export default function ProductDetailPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mb-4 text-brand-sky-blue border-brand-sky-blue/20 hover:bg-brand-sky-blue/10"
+                  className="mb-4 text-brand-sky-blue border-brand-sky-blue/30 hover:bg-brand-sky-blue/10 rounded-lg"
                   onClick={async () => {
                     try {
                       const response = await fetch(selectedPaymentMethod.qr_url!);
@@ -1051,33 +1281,52 @@ export default function ProductDetailPage() {
                 </Button>
               )}
 
-              <p className="text-sm text-gray-600 mb-2">
+              <p className="text-xs text-gray-500 mb-2">
                 Scan this QR code with your {selectedPaymentMethod?.name} app
               </p>
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="text-sm font-medium text-yellow-800">
-                  📝 {selectedPaymentMethod?.instructions || "In remarks, please enter your name"}
+              <div className="bg-brand-sky-blue/5 border border-brand-sky-blue/20 rounded-xl p-3 text-center">
+                <p className="text-xs sm:text-sm font-medium text-brand-charcoal">
+                  {selectedPaymentMethod?.instructions || "In remarks, please enter your name"}
                 </p>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Product:</span>
-                <span className="font-medium">{giftCard.name}</span>
+            <div className="space-y-2.5 bg-gray-50/70 border border-gray-100 rounded-xl p-3.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Product:</span>
+                <span className="font-semibold text-brand-charcoal">{giftCard.name}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Amount:</span>
-                <span className="font-medium">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Amount:</span>
+                <span className="font-medium text-brand-charcoal">
                   {selectedDenomination && giftCard.denominations.find((d: any) => d.label === selectedDenomination)?.label}
                 </span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">Price:</span>
-                <span className="font-medium text-lg text-brand-sky-blue">
-                  {selectedDenomination &&
-                    `Rs. ${giftCard.denominations.find((d: any) => d.label === selectedDenomination)?.price}`}
-                </span>
+              {appliedPromo && (
+                <div className="flex justify-between text-emerald-600">
+                  <span className="flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5" />
+                    Promo ({appliedPromo.code}):
+                  </span>
+                  <span className="font-semibold">-Rs. {appliedPromo.discountAmount.toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex justify-between pt-2 border-t border-gray-200/80 items-center">
+                <span className="text-gray-700 font-medium">Final Price:</span>
+                {appliedPromo ? (
+                  <div className="text-right">
+                    <span className="line-through text-xs text-gray-400 mr-2">
+                      Rs. {appliedPromo.originalPrice.toLocaleString()}
+                    </span>
+                    <span className="font-bold text-xl text-emerald-600">
+                      Rs. {appliedPromo.finalPrice.toLocaleString()}
+                    </span>
+                  </div>
+                ) : (
+                  <span className="font-bold text-xl text-brand-sky-blue">
+                    Rs. {selectedDenomination && giftCard.denominations.find((d: any) => d.label === selectedDenomination)?.price}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1085,7 +1334,7 @@ export default function ProductDetailPage() {
               <Button
                 variant="outline"
                 onClick={() => setShowQRDialog(false)}
-                className="flex-1"
+                className="flex-1 rounded-xl border-gray-200 text-gray-600 hover:bg-gray-50"
                 disabled={isProcessing}
               >
                 Cancel
@@ -1093,7 +1342,7 @@ export default function ProductDetailPage() {
               <Button
                 onClick={handlePurchase}
                 disabled={isProcessing}
-                className="flex-1 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white flex items-center justify-center gap-2"
+                className="flex-1 bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white rounded-xl font-semibold shadow-md flex items-center justify-center gap-2"
               >
                 {isProcessing ? (
                   <>
@@ -1108,6 +1357,52 @@ export default function ProductDetailPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+
+      {/* Promo Code Celebration Dialog - Clean Brand Theme */}
+      <Dialog open={showPromoCelebration} onOpenChange={setShowPromoCelebration}>
+        <DialogContent className="sm:max-w-sm bg-white border border-gray-200 shadow-2xl rounded-2xl text-center p-6" aria-describedby="promo-celebration-desc">
+          <div className="flex flex-col items-center py-2">
+            {/* Animated Tag Icon */}
+            <div className="w-16 h-16 rounded-2xl bg-brand-sky-blue/10 border border-brand-sky-blue/20 flex items-center justify-center mb-4 animate-promo-bounce text-brand-sky-blue">
+              <Tag className="w-8 h-8" />
+            </div>
+
+            {/* Code Badge */}
+            <span className="font-mono font-bold text-xs uppercase tracking-wider text-brand-sky-blue bg-brand-sky-blue/10 px-3 py-1 rounded-full border border-brand-sky-blue/20 mb-2 inline-block">
+              {appliedPromo?.code} APPLIED
+            </span>
+
+            <h3 className="text-2xl font-bold text-brand-charcoal mb-1">
+              Save Rs. {appliedPromo?.discountAmount?.toLocaleString()}
+            </h3>
+            <p id="promo-celebration-desc" className="text-xs text-gray-500 mb-6">
+              Discount successfully applied to this order
+            </p>
+
+            {/* Got It Button */}
+            <Button
+              onClick={() => setShowPromoCelebration(false)}
+              className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white px-8 py-2.5 text-sm font-semibold rounded-xl shadow-md w-full"
+            >
+              Continue to Payment
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Promo bounce animation */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @keyframes promoBounce {
+          0% { transform: scale(0.3) rotate(-15deg); opacity: 0; }
+          50% { transform: scale(1.15) rotate(5deg); opacity: 1; }
+          70% { transform: scale(0.95) rotate(-2deg); }
+          100% { transform: scale(1) rotate(0deg); }
+        }
+        .animate-promo-bounce {
+          animation: promoBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+      `}} />
 
       <Footer />
     </div>

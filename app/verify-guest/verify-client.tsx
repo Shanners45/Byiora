@@ -77,14 +77,14 @@ export function VerifyGuestPaymentClient({
   return (
     <div className="w-full">
       {/* MOBILE LAYOUT: Single unified compact card */}
-      <div className="block md:hidden bg-white rounded-2xl shadow-xl shadow-purple-500/5 border border-purple-100 overflow-hidden">
-        <div className="bg-gradient-to-r from-[#6B3FA0] to-[#8B5CF6] p-5 text-white flex items-center gap-3.5">
+      <div className="block md:hidden bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+        <div className="bg-gradient-to-r from-[#4DA8DA] to-[#80D8C3] p-5 text-white flex items-center gap-3.5">
           <div className="w-11 h-11 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center shrink-0">
             <ShieldCheck className="h-6 w-6 text-white" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight leading-tight">Verify Your Payment</h2>
-            <p className="text-purple-100 text-xs mt-0.5">
+            <p className="text-white/90 text-xs mt-0.5">
               Enter your phone number or the Transaction ID from your bank receipt.
             </p>
           </div>
@@ -92,14 +92,14 @@ export function VerifyGuestPaymentClient({
 
         <div className="p-4 sm:p-5 space-y-4">
           {/* Compact Order Pill */}
-          <div className="bg-purple-50/70 border border-purple-100/80 rounded-xl p-3.5 flex items-center justify-between">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-3.5 flex items-center justify-between">
             <div className="pr-3">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Order Item</span>
               <span className="text-sm font-semibold text-gray-900 line-clamp-1">{productName}</span>
             </div>
             <div className="text-right shrink-0">
               <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block">Total</span>
-              <span className="text-base font-bold text-[#6B3FA0]">NPR {price}</span>
+              <span className="text-base font-bold text-[#4DA8DA]">NPR {price}</span>
             </div>
           </div>
 
@@ -187,14 +187,14 @@ export function VerifyGuestPaymentClient({
 
         {/* RIGHT COLUMN: Actions */}
         <div className="w-full md:w-7/12">
-          <div className="bg-white rounded-2xl shadow-xl shadow-purple-500/5 border border-purple-100 overflow-hidden">
-            <div className="bg-gradient-to-r from-[#6B3FA0] to-[#8B5CF6] p-6 md:p-8 text-white flex flex-col sm:flex-row gap-6 items-center sm:items-start text-center sm:text-left">
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-[#4DA8DA] to-[#80D8C3] p-6 md:p-8 text-white flex flex-col sm:flex-row gap-6 items-center sm:items-start text-center sm:text-left">
               <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center shrink-0">
                 <ShieldCheck className="h-8 w-8 text-white" />
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">Verify Your Payment</h2>
-                <p className="text-purple-100 text-sm leading-relaxed">
+                <p className="text-white/90 text-sm leading-relaxed">
                   Enter your mobile number or the Bank Transaction ID / Reference No. from your payment receipt. We will securely verify the banking ledger to fulfill your order.
                 </p>
               </div>

@@ -136,11 +136,11 @@ export default function CategoryPage() {
               >
                 <div className="relative bg-gray-800 rounded-xl p-4 cursor-pointer transition-all duration-300 hover:scale-105 hover:shadow-xl overflow-hidden h-full">
                   {/* Background gradient overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-600/20 to-blue-600/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <div className="absolute inset-0 bg-gradient-to-br from-[#4DA8DA]/20 to-[#80D8C3]/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
 
                   {/* Ribbon badge */}
                   {product.ribbon_text ? (
-                    <div className="absolute top-2 left-2 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase tracking-wide">
+                    <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase tracking-wide">
                       {product.ribbon_text}
                     </div>
                   ) : product.isNew ? (

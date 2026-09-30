@@ -170,3 +170,29 @@ body > nextjs-portal {
   scrollbar-width: thin;
   scrollbar-color: #CBD5E1 transparent;
 }
+
+/* Accessible high-contrast Radix Switch controls */
+button[role="switch"] {
+  background-color: #D1D5DB !important;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+button[role="switch"][data-state="checked"] {
+  background-color: #F59E0B !important;
+}
+
+button[role="switch"][data-state="unchecked"] {
+  background-color: #D1D5DB !important;
+}
+
+button[role="switch"] > span {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+button[role="switch"][data-state="checked"] > span {
+  transform: translateX(1.25rem) !important;
+}
+
+button[role="switch"][data-state="unchecked"] > span {
+  transform: translateX(0) !important;
+}

@@ -704,14 +704,14 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-2xl shadow-xl shadow-purple-500/5 border border-purple-100 overflow-hidden">
-                  <div className="bg-gradient-to-r from-[#6B3FA0] to-[#8B5CF6] p-6 md:p-8 text-white flex flex-col sm:flex-row gap-6 items-center sm:items-start text-center sm:text-left">
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+                  <div className="bg-gradient-to-r from-[#4DA8DA] to-[#80D8C3] p-6 md:p-8 text-white flex flex-col sm:flex-row gap-6 items-center sm:items-start text-center sm:text-left">
                     <div className="w-16 h-16 bg-white/20 backdrop-blur-md rounded-full flex items-center justify-center shrink-0">
                       <ShieldCheck className="h-8 w-8 text-white" />
                     </div>
                     <div>
                       <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">Verify Your Payment</h2>
-                      <p className="text-purple-100 text-sm leading-relaxed">
+                      <p className="text-white/90 text-sm leading-relaxed">
                         Enter the exact phone number you used to make the payment. We will securely check the banking records to fulfill your order.
                       </p>
                     </div>

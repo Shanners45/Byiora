@@ -42,6 +42,9 @@ interface Transaction {
     name: string
   } | null
   encrypted_checkout_data?: string | null
+  promo_code?: string | null
+  discount_amount?: number | null
+  original_price?: number | null
 }
 
 // Component to handle decryption and display of direct-login checkout data
@@ -329,6 +332,13 @@ export default function OrdersPage() {
 
   const updateTransactionStatus = async (transactionId: string, newStatus: Transaction["status"], remarks?: string) => {
     const transaction = transactions.find((t) => t.transaction_id === transactionId)
+
+    // Safety lock: Completed or Refunded orders are locked and cannot be modified
+    if (transaction && (transaction.status === "Completed" || transaction.status === "Refunded")) {
+      toast.error(`Order is already ${transaction.status} and cannot be modified.`)
+      return
+    }
+
     const isKhalti = transaction?.payment_category === "khalti" || transaction?.payment_method?.toLowerCase().includes("khalti")
 
     // If marking as Refunded for Khalti, open the refund modal
@@ -511,7 +521,7 @@ export default function OrdersPage() {
   }
 
   const exportTransactions = () => {
-    const headers = ["Order ID", "Bank Txn ID", "Product", "Amount", "Price", "Status", "Payment Method", "Customer", "Type", "UID", "Date"]
+    const headers = ["Order ID", "Bank Txn ID", "Product", "Amount", "Price", "Original Price", "Promo Code", "Discount", "Status", "Payment Method", "Customer", "Type", "UID", "Date"]
 
     const rows = filteredTransactions.map((t) => [
       t.transaction_id,
@@ -519,6 +529,9 @@ export default function OrdersPage() {
       t.product_name,
       t.amount,
       `Rs. ${t.price}`,
+      t.original_price ? `Rs. ${t.original_price}` : "—",
+      t.promo_code || "—",
+      t.discount_amount ? `Rs. ${t.discount_amount}` : "—",
       t.status,
       t.payment_method,
       t.user_email,
@@ -692,10 +705,35 @@ export default function OrdersPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[#1F2937] font-medium">Rs. {transaction.price}</span>
-                        <span className="text-xs text-[#4B5563]">{transaction.payment_method}</span>
-                      </div>
+                      {(() => {
+                        const discount = transaction.discount_amount != null && Number(transaction.discount_amount) > 0
+                          ? transaction.discount_amount
+                          : transaction.original_price && Number(transaction.original_price) > Number(transaction.price)
+                            ? Number((Number(transaction.original_price) - Number(transaction.price)).toFixed(2))
+                            : null
+
+                        return (
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[#1F2937] font-semibold text-sm">Rs. {transaction.price}</span>
+                              {transaction.original_price && Number(transaction.original_price) > Number(transaction.price) && (
+                                <span className="text-xs text-gray-400 line-through">
+                                  Rs. {transaction.original_price}
+                                </span>
+                              )}
+                              {discount != null && discount > 0 && (
+                                <span
+                                  className="text-xs text-[#92400E] font-medium"
+                                  title={transaction.promo_code ? `Promo Code: ${transaction.promo_code}` : undefined}
+                                >
+                                  (-Rs. {discount})
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs text-[#4B5563]">{transaction.payment_method}</span>
+                          </div>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1">
@@ -716,10 +754,10 @@ export default function OrdersPage() {
                           transaction.payment_method?.toLowerCase().includes("fonepay") ||
                           transaction.payment_method?.toLowerCase().includes("khalti")
 
-                        const isDigitalGoods =
-                          transaction.product_category === "digital-goods" ||
-                          transaction.product_category === "games" ||
-                          (!transaction.product_category && transaction.product_name)
+                        const isDirectLoginOrTopup =
+                          transaction.product_category === "direct-login" ||
+                          transaction.product_category === "topup" ||
+                          Boolean(transaction.encrypted_checkout_data)
 
                         const isPartialRefund = status === "Refunded" && transaction.failure_remarks && (
                           transaction.failure_remarks.toLowerCase().includes("partial")
@@ -732,32 +770,9 @@ export default function OrdersPage() {
                         const isPartialPayment = (status === "Payment Failed" || status === "Failed") &&
                           Boolean(transaction.failure_remarks && transaction.failure_remarks.toLowerCase().includes("partial"))
 
-                        // 1. Dynamic QR payments:
-                        // - If "Paid": show dropdown with "Paid" and "Refunded"
-                        // - Otherwise: show status badge
-                        if (isDynamic) {
-                          if (status === "Paid") {
-                            return (
-                              <div className="flex flex-col gap-1 items-start">
-                                <Select
-                                  value={status}
-                                  onValueChange={(value) =>
-                                    updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
-                                  }
-                                >
-                                  <SelectTrigger className="w-[140px] h-9 p-1 flex justify-between items-center">
-                                    <Badge className={`${getStatusColor(status)} whitespace-nowrap w-full justify-center`}>{status}</Badge>
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="Paid">Paid</SelectItem>
-                                    <SelectItem value="Completed">Completed</SelectItem>
-                                    <SelectItem value="Refunded">Refunded</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            )
-                          }
-
+                        // ── 1. LOCKED STATUSES: "Completed" and "Refunded" ──
+                        // Once an order is Completed or Refunded, lock it permanently so it cannot be changed.
+                        if (status === "Completed" || status === "Refunded") {
                           return (
                             <div className="flex flex-col gap-1 items-start">
                               <Badge className={`${getStatusColor(status)} whitespace-nowrap w-fit`}>{status}</Badge>
@@ -766,6 +781,45 @@ export default function OrdersPage() {
                                   {refundSubtext}
                                 </span>
                               )}
+                            </div>
+                          )
+                        }
+
+                        // ── 2. "Paid" STATUS (Dynamic QR orders or verified paid transactions) ──
+                        // - For digital-goods & games (products with input holder & send button):
+                        //   Do NOT show "Completed" in the dropdown! Only "Paid" and "Refunded".
+                        // - For direct-login & topup:
+                        //   "Completed" IS required, so show "Paid", "Completed", and "Refunded".
+                        if (status === "Paid") {
+                          return (
+                            <div className="flex flex-col gap-1 items-start">
+                              <Select
+                                value={status}
+                                onValueChange={(value) =>
+                                  updateTransactionStatus(transaction.transaction_id, value as Transaction["status"])
+                                }
+                              >
+                                <SelectTrigger className="w-[140px] h-9 p-1 flex justify-between items-center">
+                                  <Badge className={`${getStatusColor(status)} whitespace-nowrap w-full justify-center`}>{status}</Badge>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Paid">Paid</SelectItem>
+                                  {isDirectLoginOrTopup && (
+                                    <SelectItem value="Completed">Completed</SelectItem>
+                                  )}
+                                  <SelectItem value="Refunded">Refunded</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )
+                        }
+
+                        // ── 3. Static QR or non-dynamic orders ──
+                        // Cancelled, Payment Failed, Failed, Payment Pending
+                        if (status === "Cancelled" || status === "Payment Failed" || status === "Payment Pending") {
+                          return (
+                            <div className="flex flex-col gap-1 items-start">
+                              <Badge className={`${getStatusColor(status)} whitespace-nowrap w-fit`}>{status}</Badge>
                               {isPartialPayment && transaction.failure_remarks && (
                                 <span className="text-[11px] font-semibold text-red-600 leading-tight bg-red-50 px-1.5 py-0.5 rounded border border-red-200 max-w-[200px] break-words">
                                   {transaction.failure_remarks}
@@ -775,16 +829,7 @@ export default function OrdersPage() {
                           )
                         }
 
-                        // 2. Static QR payments:
-                        // Show dropdown with Processing, Completed, Failed
-                        if (status === "Cancelled") {
-                          return (
-                            <div className="flex flex-col gap-1 items-start">
-                              <Badge className={`${getStatusColor(status)} whitespace-nowrap w-fit`}>{status}</Badge>
-                            </div>
-                          )
-                        }
-
+                        // Static QR Processing orders
                         return (
                           <div className="flex flex-col gap-1 items-start">
                             <Select
@@ -798,15 +843,12 @@ export default function OrdersPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="Processing">Processing</SelectItem>
-                                <SelectItem value="Completed">Completed</SelectItem>
+                                {isDirectLoginOrTopup && (
+                                  <SelectItem value="Completed">Completed</SelectItem>
+                                )}
                                 <SelectItem value="Failed">Failed</SelectItem>
                               </SelectContent>
                             </Select>
-                            {refundSubtext && (
-                              <span className="text-[11px] font-semibold text-purple-700 leading-tight bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
-                                {refundSubtext}
-                              </span>
-                            )}
                             {isPartialPayment && transaction.failure_remarks && (
                               <span className="text-[11px] font-semibold text-red-600 leading-tight bg-red-50 px-1.5 py-0.5 rounded border border-red-200 max-w-[200px] break-words">
                                 {transaction.failure_remarks}

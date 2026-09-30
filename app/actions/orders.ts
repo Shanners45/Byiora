@@ -23,6 +23,17 @@ export async function updateTransactionStatusAction(
   try {
     const serviceSupabase = createServiceRoleClient()
 
+    // Safety lock: check existing transaction status in database
+    const { data: existingTxn } = await serviceSupabase
+      .from("transactions")
+      .select("status, user_id, product_name, amount, user_email")
+      .eq("transaction_id", transactionId)
+      .single()
+
+    if (existingTxn && (existingTxn.status === "Completed" || existingTxn.status === "Refunded")) {
+      return { error: `This order is already marked as ${existingTxn.status} and is locked from modification.` }
+    }
+
     const updatePayload: any = { status: newStatus }
     if (remarks !== undefined) updatePayload.failure_remarks = remarks
 
@@ -40,6 +51,36 @@ export async function updateTransactionStatusAction(
     if (error) {
       console.error("Error updating transaction status:", error)
       return { error: `Failed to update status: ${error.message}` }
+    }
+
+    // Insert in-app notification for registered users upon completion or failure
+    if (existingTxn && existingTxn.user_id && existingTxn.status !== newStatus) {
+      if (newStatus === "Completed") {
+        await serviceSupabase.from("notifications").insert([
+          {
+            title: "Order Completed! 🎉",
+            message: `Your order for ${existingTxn.product_name || "your item"} (${existingTxn.amount || ""}) is complete! Thank you for shopping with Byiora.`,
+            type: "success",
+            user_id: existingTxn.user_id,
+            is_read: false,
+          },
+        ]).then(({ error: notifErr }) => {
+          if (notifErr) console.error("Error inserting order completion notification:", notifErr)
+        })
+      } else if (newStatus === "Failed") {
+        const remarksText = remarks?.trim() ? remarks : "Please contact support for details."
+        await serviceSupabase.from("notifications").insert([
+          {
+            title: "Order Failed ⚠️",
+            message: `Your order for ${existingTxn.product_name || "your item"} (${existingTxn.amount || ""}) could not be completed. Reason: ${remarksText}`,
+            type: "error",
+            user_id: existingTxn.user_id,
+            is_read: false,
+          },
+        ]).then(({ error: notifErr }) => {
+          if (notifErr) console.error("Error inserting order failed notification:", notifErr)
+        })
+      }
     }
 
     revalidatePath("/admin/dashboard/orders")
@@ -72,6 +113,10 @@ export async function sendGiftcardCodeAction(
       .single()
     const txn = _txn as any;
 
+    if (txn && (txn.status === "Completed" || txn.status === "Refunded")) {
+      return { error: `This order is already marked as ${txn.status} and is locked.` }
+    }
+
     const { error } = await serviceSupabase
       .from("transactions")
       .update({
@@ -84,6 +129,21 @@ export async function sendGiftcardCodeAction(
     if (error) {
       console.error("Error sending giftcard code:", error)
       return { error: `Failed to send giftcard code: ${error.message}` }
+    }
+
+    // Insert in-app completion notification for registered users
+    if (txn && txn.user_id) {
+      await serviceSupabase.from("notifications").insert([
+        {
+          title: "Order Completed! 🎉",
+          message: `Your order for ${txn.product_name || "Gift Card"} (${txn.amount || ""}) is complete! Your gift card code has been sent to your email and is available in your transaction history.`,
+          type: "success",
+          user_id: txn.user_id,
+          is_read: false,
+        },
+      ]).then(({ error: notifErr }) => {
+        if (notifErr) console.error("Error inserting gift code completion notification:", notifErr)
+      })
     }
 
     if (txn && txn.user_email) {

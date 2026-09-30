@@ -8,6 +8,7 @@ import { isDisposableEmail } from "@/lib/security/disposable-emails"
 import { checkIsBanned } from "@/lib/security/blacklist"
 import { checkStrikePenalty } from "@/lib/security/strike-counter"
 import { verifyTurnstileToken } from "@/lib/captcha"
+import { trackRateLimitViolation, trackEmailVelocity, isTrustedBuyer } from "@/lib/security/spam-detection"
 
 interface TransactionData {
   product: string
@@ -21,6 +22,7 @@ interface TransactionData {
   guestData?: any
   userId?: string | null
   turnstileToken?: string
+  promoCode?: string
 }
 
 /**
@@ -52,7 +54,7 @@ export async function checkCheckoutSecurityAction(clientData?: { deviceId?: stri
  * Adds a new transaction (for both guest and authenticated users)
  * Uses Service Role to bypass RLS and allow returning inserted data
  */
-export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any; paymentUrl?: string; isDuplicate?: boolean }> {
+export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any; paymentUrl?: string; isDuplicate?: boolean; isFreeOrder?: boolean }> {
   try {
     const h = await headers()
     const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
@@ -103,6 +105,13 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       }
     }
 
+    // ── LAYER 5: Multi-Email Velocity Check ──
+    // Detects email cycling attacks (3+ distinct emails from same IP/device in 30 min)
+    const velocityCheck = await trackEmailVelocity({ email: cleanEmail, ip, deviceId })
+    if (velocityCheck.blocked) {
+      return { success: false, error: "Something went wrong. Please try again later." }
+    }
+
     // SECURITY: Double-submission / Rapid-click cooldown (1 order every 6 seconds per IP)
     const cooldownIp = await rateLimit(`order-cooldown:${ip}`, { windowMs: 6_000, max: 1 })
     if (!cooldownIp.ok) {
@@ -117,17 +126,22 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       }
     }
 
-    // SECURITY: Per-IP rate limiting (5 orders per 10 minutes per IP)
-    const rl = await rateLimit(`order:${ip}`, { windowMs: 600_000, max: 5 })
+    // SECURITY: Per-IP rate limiting with trust tiers
+    // Trusted buyers (have completed a payment before) get 10 orders/10min, others get 5
+    const trusted = await isTrustedBuyer({ userId: transactionData.userId, ip })
+    const orderLimit = trusted ? 10 : 5
+    const rl = await rateLimit(`order:${ip}`, { windowMs: 600_000, max: orderLimit })
     if (!rl.ok) {
-      return { success: false, error: "Too many orders. Please wait a few minutes and try again." }
+      // Track this violation — repeated hits trigger auto-ban
+      trackRateLimitViolation({ ip, deviceId }).catch(() => {})
+      return { success: false, error: "Something went wrong. Please try again later." }
     }
 
     // SECURITY: Per-user daily limit (30 orders per day for logged-in users)
     if (transactionData.userId) {
       const userRl = await rateLimit(`order-user:${transactionData.userId}`, { windowMs: 86_400_000, max: 30 })
       if (!userRl.ok) {
-        return { success: false, error: "You have reached the maximum number of orders for today. Please try again tomorrow." }
+        return { success: false, error: "Something went wrong. Please try again later." }
       }
     }
 
@@ -135,6 +149,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
     // ── LAYER 2: Single Active Pending Order Concurrency Lock ──
     // Stops bots/users from creating multiple unpaid Dynamic QR orders within 10 minutes
+    // Now includes device_id to prevent VPN+new-email bypass
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
     try {
       let activeOrderQuery = serviceSupabase
@@ -143,12 +158,14 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         .eq("status", "Payment Pending")
         .gte("created_at", tenMinutesAgo)
 
-      if (cleanEmail && ip && ip !== "unknown") {
-        activeOrderQuery = activeOrderQuery.or(`user_email.ilike.${cleanEmail},guest_user_data->>ip.eq.${ip}`)
-      } else if (cleanEmail) {
-        activeOrderQuery = activeOrderQuery.ilike("user_email", cleanEmail)
-      } else if (ip && ip !== "unknown") {
-        activeOrderQuery = activeOrderQuery.filter("guest_user_data->>ip", "eq", ip)
+      // Build OR conditions: match by email, IP, or device_id
+      const orConditions: string[] = []
+      if (cleanEmail) orConditions.push(`user_email.ilike.${cleanEmail}`)
+      if (ip && ip !== "unknown") orConditions.push(`guest_user_data->>ip.eq.${ip}`)
+      if (deviceId) orConditions.push(`guest_user_data->>deviceId.eq.${deviceId}`)
+
+      if (orConditions.length > 0) {
+        activeOrderQuery = activeOrderQuery.or(orConditions.join(","))
       }
 
       const { data: activeOrders } = await activeOrderQuery.limit(1)
@@ -216,6 +233,36 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     const random = crypto.randomUUID().split("-")[0].toUpperCase().substring(0, 5)
     const transactionId = `BYI-${yy}${mm}${dd}-${random}`
 
+    // ── PROMO CODE: Server-side application ──
+    let promoDiscountAmount = 0
+    let promoOriginalPrice: number | null = null
+    let appliedPromoCode: string | null = null
+
+    if (transactionData.promoCode && transactionData.promoCode.trim()) {
+      const { applyPromoCodeServerSide } = await import("@/app/actions/promo-codes")
+      const promoResult = await applyPromoCodeServerSide({
+        code: transactionData.promoCode,
+        productId: productId,
+        productCategory: transactionData.productCategory || "",
+        denominationLabel: transactionData.amount,
+        email: transactionData.email,
+        userId: transactionData.userId,
+        deviceId: deviceId,
+        ip: ip,
+        transactionId: transactionId,
+        verifiedPrice: numericPrice,
+      })
+
+      if (promoResult.success) {
+        promoDiscountAmount = promoResult.discountAmount
+        promoOriginalPrice = promoResult.originalPrice
+        appliedPromoCode = transactionData.promoCode.trim().toUpperCase()
+        // Update verifiedPrice to the discounted price
+        verifiedPrice = String(promoResult.finalPrice)
+      }
+      // If promo fails, silently proceed with original price (don't block the order)
+    }
+
     // SECURITY: Authenticate userId strictly from server-side session to prevent user enumeration & impersonation
     let actualUserId: string | null = null
     let actualUserName: string | undefined = undefined
@@ -263,20 +310,28 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     }
 
     // Look up the payment method category from the database
+    const isFreeOrder = parseFloat(verifiedPrice) <= 0
     let paymentCategory = "static"
-    const { data: pmData } = await serviceSupabase
-      .from("payment_methods")
-      .select("category")
-      .eq("name", transactionData.paymentMethod)
-      .single()
-    if (pmData && (pmData as any).category) {
-      paymentCategory = (pmData as any).category
+    let initialStatus = "Processing"
+
+    if (isFreeOrder) {
+      paymentCategory = "free"
+      initialStatus = "Paid" // 100% discounted orders are immediately marked as Paid
+      transactionData.paymentMethod = `Promo Code (100% Discount - ${appliedPromoCode || "FREE"})`
+    } else {
+      const { data: pmData } = await serviceSupabase
+        .from("payment_methods")
+        .select("category")
+        .eq("name", transactionData.paymentMethod)
+        .single()
+      if (pmData && (pmData as any).category) {
+        paymentCategory = (pmData as any).category
+      }
+      const isDynamic = paymentCategory === "nepalpay" || paymentCategory === "fonepay" || paymentCategory === "khalti"
+      initialStatus = isDynamic ? "Payment Pending" : "Processing"
     }
 
-    const isDynamic = paymentCategory === "nepalpay" || paymentCategory === "fonepay" || paymentCategory === "khalti"
-
-    // Static payments start as Processing, Dynamic as Payment Pending
-    const initialStatus = isDynamic ? "Payment Pending" : "Processing"
+    const isDynamic = !isFreeOrder && (paymentCategory === "nepalpay" || paymentCategory === "fonepay" || paymentCategory === "khalti")
 
     const guestDataWithIp = {
       ...(transactionData.guestData || {}),
@@ -296,6 +351,11 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       user_email: transactionData.email,
       guest_user_data: Object.keys(guestDataWithIp).length > 0 ? guestDataWithIp : null,
       payment_category: paymentCategory,
+      ...(appliedPromoCode ? {
+        promo_code: appliedPromoCode,
+        discount_amount: promoDiscountAmount,
+        original_price: promoOriginalPrice,
+      } : {}),
     }
 
     if (transactionData.productCategory) {
@@ -346,8 +406,10 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       return { success: false, error: error.message || error.code || "Failed to add transaction" }
     }
 
-    // Send Discord Webhook Notification
-    if (process.env.DISCORD_WEBHOOK_URL && (!isDynamic || transactionData.productCategory === "direct-login")) {
+    // Send Discord Webhook Notification ONLY for static (manual) QR payments.
+    // Dynamic payments (Fonepay, NepalPay, Khalti) are "Payment Pending" and MUST ONLY trigger
+    // the Discord webhook once payment is actually verified and paid (handled via fulfillOrderDirectly).
+    if (process.env.DISCORD_WEBHOOK_URL && !isDynamic) {
       try {
         const webhookUrl = process.env.DISCORD_WEBHOOK_URL
         const embed = {
@@ -368,6 +430,10 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
         if (transactionData.guestData && transactionData.guestData.userId) {
           embed.fields.push({ name: "User ID / Account", value: transactionData.guestData.userId, inline: true })
+        }
+
+        if (appliedPromoCode) {
+          embed.fields.push({ name: "Promo Code", value: `${appliedPromoCode} (-Rs. ${promoDiscountAmount})`, inline: true })
         }
 
         await fetch(webhookUrl, {
@@ -498,6 +564,17 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         console.error("Khalti setup error:", err)
         return { success: false, error: "Failed to connect to Khalti" }
       }
+    }
+
+    // ── 100% FREE PROMO ORDER: Bypass payment gateways & auto-fulfill ──
+    if (isFreeOrder) {
+      try {
+        const { fulfillOrderDirectly } = await import("@/lib/fulfillment")
+        await fulfillOrderDirectly({ transactionId, source: "promo_100_free" })
+      } catch (fulfillErr) {
+        console.error("[Checkout] Free promo order auto-fulfillment error:", fulfillErr)
+      }
+      return { success: true, transactionId, data, isFreeOrder: true }
     }
 
     return { success: true, transactionId, data, paymentUrl }

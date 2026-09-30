@@ -96,6 +96,13 @@ export async function fulfillOrderDirectly({
       ip: (txn.guest_user_data as any)?.ip,
     }).catch(() => {})
 
+    // Mark this buyer as trusted for higher rate limits on future orders
+    const { markTrustedBuyer } = await import("@/lib/security/spam-detection")
+    markTrustedBuyer({
+      userId: txn.user_id,
+      ip: (txn.guest_user_data as any)?.ip,
+    }).catch(() => {})
+
     // 4. Fulfillment: Claim inventory gift card code if applicable
     // Direct-login and topup categories NEVER have inventory codes — they require manual admin fulfillment!
     const isManualCategory = 
@@ -214,7 +221,24 @@ export async function fulfillOrderDirectly({
           { name: "Bank Txn ID", value: bankTxnId || "N/A", inline: true },
           { name: "Product", value: txn.product_name, inline: false },
           { name: "Amount", value: `Rs. ${txn.price}`, inline: true },
+          { name: "Email", value: txn.user_email || "N/A", inline: true },
+          { name: "Payment Method", value: txn.payment_method || "N/A", inline: true },
         ]
+        if (txn.promo_code) {
+          const discountInfo = txn.discount_amount ? ` (-Rs. ${txn.discount_amount})` : ""
+          fields.push({
+            name: "Promo Code",
+            value: `${txn.promo_code}${discountInfo}`,
+            inline: true,
+          })
+        }
+        if (isManualCategory) {
+          fields.push({
+            name: "Type",
+            value: txn.product_category === "direct-login" ? "Direct Login (Credentials in Admin Dashboard)" : "Manual Top-Up",
+            inline: false
+          })
+        }
         if (source) {
           fields.push({ name: "Source", value: source, inline: true })
         }

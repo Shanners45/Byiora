@@ -121,9 +121,6 @@ export async function replyToSupportTicketAction({
         <p style="margin: 0; font-size: 13px; color: #4B5563;">
           <strong style="color: #111827;">Ticket Number:</strong> <span style="font-family: monospace; font-weight: 700; color: #7E3AF2;">#${ticket.ticket_number}</span>
         </p>
-        <p style="margin: 4px 0 0 0; font-size: 13px; color: #4B5563;">
-          <strong style="color: #111827;">Subject:</strong> ${ticket.subject}
-        </p>
       </div>
 
       <div class="message-body">${cleanReply}</div>

@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { loginWithPassword, signupWithPassword, logoutUser } from "@/app/actions/auth"
 import { addTransactionAction } from "@/app/actions/transactions"
-import { getOrCreateDeviceId } from "@/lib/security/device"
+import { getOrCreateDeviceId, initDeviceFingerprint } from "@/lib/security/device"
 import * as Sentry from "@sentry/nextjs"
 
 interface User {
@@ -47,8 +47,9 @@ interface AuthContextType {
       productCategory?: string
       guestData?: any
       turnstileToken?: string
+      promoCode?: string
     },
-  ) => Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean }>
+  ) => Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean, isFreeOrder?: boolean }>
   refreshTransactions: () => Promise<void>
   isLoading: boolean
 }
@@ -63,6 +64,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
+        // Initialize FingerprintJS in the background (app-wide)
+        initDeviceFingerprint().catch(() => {})
+
         const supabase = createClient()
         // SECURITY: Use getUser() instead of getSession() — getSession() reads
         // from storage without JWT validation and can return tampered data.
@@ -267,8 +271,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       productCategory?: string
       guestData?: any
       turnstileToken?: string
+      promoCode?: string
     },
-  ): Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean }> => {
+  ): Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean, isFreeOrder?: boolean }> => {
     try {
       const enrichedGuestData = {
         ...(transactionData.guestData || {}),
@@ -311,7 +316,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setTransactions((prev) => [newTransaction, ...prev])
       }
 
-      return { transactionId: result.transactionId!, paymentUrl: (result as any).paymentUrl }
+      return {
+        transactionId: result.transactionId!,
+        paymentUrl: (result as any).paymentUrl,
+        isFreeOrder: (result as any).isFreeOrder,
+      }
     } catch (error) {
       console.error("Add transaction error:", error)
       throw error

@@ -90,10 +90,18 @@ export async function getAllTransactionsAction() {
   try {
     const serviceSupabase = createServiceRoleClient()
 
-    const { data, error } = await serviceSupabase
-      .from("transactions")
-      .select("*, users(id, name)")
-      .order("created_at", { ascending: false })
+    const [
+      { data, error },
+      { data: productsData }
+    ] = await Promise.all([
+      serviceSupabase
+        .from("transactions")
+        .select("*, users(id, name)")
+        .order("created_at", { ascending: false }),
+      serviceSupabase
+        .from("products")
+        .select("id, name, slug")
+    ])
 
     if (error) {
       console.error("Error loading transactions:", error)
@@ -196,7 +204,7 @@ export async function getAllTransactionsAction() {
       }
     }
 
-    return { success: true, data: transactionsList }
+    return { success: true, data: transactionsList, products: productsData || [] }
   } catch (error: any) {
     console.error("Error in getAllTransactionsAction:", error)
     return { error: error.message || "An unexpected error occurred" }

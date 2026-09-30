@@ -33,68 +33,81 @@ export default function TermsAndConditionsPage() {
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 uppercase tracking-wide mb-3">
               Terms and Conditions
             </h1>
-            <p className="text-gray-500 text-sm font-medium">Last Updated: April 2026</p>
+            <p className="text-gray-500 text-sm font-medium">Last Updated: September 2026</p>
           </div>
 
           <div className="space-y-8 text-gray-700 leading-relaxed text-sm md:text-base">
             <p>
-              Welcome to Byiora! These Terms and Conditions outline the rules and regulations for the use of Byiora's website and services. By accessing this website and purchasing our digital goods, you accept these terms and conditions in full.
+              Welcome to Byiora! These Terms and Conditions govern your access to and use of Byiora's website (<a href="https://www.byiora.com.np" className="text-brand-sky-blue hover:underline">byiora.com.np</a>) and our digital gaming and voucher distribution services. By browsing our website, creating an account, placing an order, or redeeming a promotional voucher, you agree to be bound by these Terms and Conditions.
             </p>
 
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-3">1. General Provisions</h2>
               <p>
-                Byiora is a digital goods and game voucher platform operating within Nepal. By placing an order, you confirm that you have read, understood, and agree to be bound by these terms.
+                Byiora is an online digital gaming distribution platform operating in Nepal. We facilitate the purchase of digital game activation codes, gift cards, and direct in-game account top-ups (including in-game credits, points, and items). By placing an order, you represent that you have legal capacity to enter into binding agreements.
               </p>
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-3">2. User Accounts and Guest Checkout</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">2. User Accounts & Platform Integrity</h2>
               <ul className="list-disc pl-5 space-y-2">
-                <li><strong>Checkout Options:</strong> You may purchase digital goods through a registered account or via Guest Checkout.</li>
-                <li><strong>Account Accuracy:</strong> Whether registering an account or checking out as a guest, you are solely responsible for providing a correct and accessible email address. Byiora is not responsible for digital keys sent to an incorrect email address provided by the user.</li>
-                <li><strong>Security:</strong> If you create an account, you are responsible for maintaining the confidentiality of your login credentials.</li>
+                <li><strong>Checkout Methods:</strong> You may purchase products through a registered user account or via guest checkout.</li>
+                <li><strong>Contact Accuracy:</strong> You are responsible for providing an accurate and accessible email address during checkout. All digital vouchers, keys, and order updates are delivered electronically to the contact details provided. Byiora is not responsible for misdelivery resulting from customer data entry errors.</li>
+                <li><strong>Account Confidentiality:</strong> Registered users are responsible for maintaining the confidentiality of their credentials and for all activities conducted under their account.</li>
+                <li><strong>Platform Security & Abuse:</strong> To protect platform integrity, Byiora utilizes automated security screening and verification controls. The use of automated bots, unauthorized scripts, disposable email services, or any fraudulent manipulation during checkout or voucher redemption is strictly prohibited and may result in immediate cancellation of orders and account restriction.</li>
               </ul>
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-3">3. Age Requirements</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">3. Age & Publisher Restrictions</h2>
               <p>
-                While creating an account on Byiora does not have a strict age limit, certain digital goods and game keys (such as mature-rated games) carry age restrictions established by the game publishers. By purchasing an age-restricted product, you certify that you meet the minimum age requirement to play that game, or that you have obtained consent from a parent or legal guardian.
+                Certain games and digital content carry age ratings or publisher-specific terms. By purchasing restricted content, you confirm that you meet the necessary age requirements or have obtained appropriate parental or guardian consent.
               </p>
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-3">4. Delivery of Digital Goods</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">4. Delivery of Digital Goods & Game Top-Ups</h2>
               <ul className="list-disc pl-5 space-y-2">
-                <li><strong>Processing Time:</strong> We pride ourselves on speed. Delivery of digital keys is typically "almost instant." However, to protect against fraud, all orders are subject to automated and manual backend security checks.</li>
-                <li><strong>Delays:</strong> In the event your transaction is flagged for review, delivery may be temporarily delayed until our team verifies the purchase. We reserve the right to withhold delivery if a transaction appears suspicious.</li>
+                <li><strong>Digital Voucher Delivery:</strong> Digital codes and gift cards are delivered electronically following successful payment confirmation, displayed on-screen and transmitted via email.</li>
+                <li><strong>Direct-to-Account Top-Ups:</strong> For top-ups credited directly to your game account, you are solely responsible for ensuring the accuracy of the Player ID (UID), Server/Zone ID, or required login details submitted. Once in-game currency or items are successfully credited to the specified player account, the delivery is final, complete, and irreversible.</li>
+                <li><strong>Security Verifications:</strong> Orders flagged by automated security or payment verification filters may be held temporarily for review. Byiora reserves the right to cancel and refund any order that fails security validation.</li>
               </ul>
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-3">5. Refund and Return Policy (Strictly Enforced)</h2>
-              <p className="mb-2">Due to the nature of digital goods, all sales are final.</p>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">5. Promotional Codes & Vouchers</h2>
+              <p className="mb-2">
+                Byiora may periodically offer promotional codes, discount vouchers, or special offers. The following general terms apply to all promotions:
+              </p>
               <ul className="list-disc pl-5 space-y-2">
-                <li><strong>No Returns:</strong> Once a digital key, gift card, or voucher code has been emailed to you or viewed on your screen, it cannot be returned, exchanged, or refunded.</li>
-                <li><strong>Exceptions:</strong> A refund or replacement will only be issued if you can definitively prove the digital key was invalid before it was delivered to you. You must contact our support team within 24 hours of purchase if you encounter an issue with a key.</li>
-                <li><strong>Used Keys:</strong> We maintain strict logs of when keys are dispatched. Claims of "the key was already used" will be investigated with the publisher. If the publisher confirms the key was redeemed after our system delivered it to you, no refund will be provided.</li>
+                <li><strong>Terms & Eligibility:</strong> Promotional codes are subject to specific promotional terms, eligibility criteria, qualifying order requirements, and validity periods as defined by Byiora.</li>
+                <li><strong>Non-Transferable & No Cash Value:</strong> Promotional codes, discounts, and vouchers have zero cash surrender value and are non-transferable. They cannot be exchanged for cash, credited to bank accounts, or applied retroactively to previous transactions.</li>
+                <li><strong>Redemption Limits:</strong> Unless explicitly stated otherwise, promotional codes are limited to one redemption per customer or household and cannot be combined with other concurrent offers.</li>
+                <li><strong>Right of Revocation:</strong> Byiora reserves the right to modify, cancel, or suspend any promotional campaign or discount at any time. Any fraudulent redemption, unauthorized duplication, or manipulation of promotional vouchers will result in order cancellation and revocation of promotional benefits.</li>
               </ul>
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-3">6. Pricing and Payments</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">6. Pricing & Payments</h2>
               <ul className="list-disc pl-5 space-y-2">
-                <li><strong>Currency:</strong> All prices are listed in Nepalese Rupees (NPR).</li>
-                <li><strong>Payment Gateways:</strong> All payments are processed securely through authorized third-party gateways (e.g., eSewa, Khalti, Fonepay). Byiora does not handle or store any of your direct financial or banking information.</li>
-                <li><strong>Order Cancellation:</strong> We reserve the right to cancel any order due to pricing errors, suspected fraud, or stock unavailability. If an order is canceled by us after payment, a full refund will be issued.</li>
+                <li><strong>Currency:</strong> All prices are displayed and billed in Nepalese Rupees (NPR).</li>
+                <li><strong>Payment Gateways:</strong> Payments are processed through authorized digital payment providers and electronic banking channels in Nepal. Byiora does not store your direct banking passwords, PINs, or sensitive payment credentials.</li>
+                <li><strong>Incomplete & Underpayments:</strong> Orders require full settlement of the billed amount before digital items or top-ups can be released. Partial payments or underpayments will cause the order to remain on hold until the balance is settled or a refund is processed according to our Refund Policy.</li>
+                <li><strong>Payment Windows:</strong> Electronic payment sessions have designated time limits. Payments submitted after session expiry may require manual reconciliation by our support team before fulfillment or refund.</li>
               </ul>
             </div>
 
             <div>
-              <h2 className="text-xl font-bold text-gray-900 mb-3">7. Governing Law</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">7. Refund and Return Policy</h2>
               <p>
-                These terms and conditions are governed by and construed in accordance with the laws of Nepal, including the Electronic Transactions Act, 2063. Any disputes relating to these terms and conditions will be subject to the exclusive jurisdiction of the courts of Nepal.
+                Due to the non-tangible, irreversible nature of digital game codes, gift cards, and direct in-game top-ups, all sales are final once delivered. For full details regarding defect investigations, underpayments, and refund terms, please consult our <a href="/refund-policy" className="text-brand-sky-blue font-semibold hover:underline">Refund & Return Policy</a>, which is incorporated herein by reference.
+              </p>
+            </div>
+
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-3">8. Governing Law & Dispute Resolution</h2>
+              <p>
+                These Terms and Conditions are governed by and construed in accordance with the laws of Nepal, including the Electronic Transactions Act, 2063 and applicable digital commerce regulations. Any disputes arising out of or related to these terms shall be subject to the exclusive jurisdiction of the competent courts of Nepal.
               </p>
             </div>
           </div>
