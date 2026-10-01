@@ -279,7 +279,7 @@ export default function InventoryPage() {
         <Button
           variant="outline"
           onClick={loadData}
-          className="border-[#F59E0B] text-[#92400E] hover:bg-[#FEF7E0] self-start sm:self-auto"
+          className="border border-[#F59E0B] text-[#92400E] bg-[#FEF7E0] hover:bg-[#FEF7E0]/80 font-semibold shadow-xs self-start sm:self-auto"
         >
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh

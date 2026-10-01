@@ -103,6 +103,12 @@ export async function fulfillOrderDirectly({
       ip: (txn.guest_user_data as any)?.ip,
     }).catch(() => {})
 
+    // Industry Standard: Reclaim promo code usage if this was a recovered order
+    if (txn.promo_code) {
+      const { reclaimPromoCodeOnRecovery } = await import("@/app/actions/promo-codes")
+      reclaimPromoCodeOnRecovery(transactionId).catch(() => {})
+    }
+
     // 4. Fulfillment: Claim inventory gift card code if applicable
     // Direct-login and topup categories NEVER have inventory codes — they require manual admin fulfillment!
     const isManualCategory = 

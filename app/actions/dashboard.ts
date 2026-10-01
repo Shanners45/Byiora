@@ -21,14 +21,14 @@ export async function getDashboardStatsAction() {
       { data: adminRows },
       authUsersRes,
       { count: productsCount },
-      { data: transactions, error: transactionsError },
+      { data: recentTransactions, count: transactionsCount, error: transactionsError },
       { data: completedTransactions, error: completedError },
       { data: products }
     ] = await Promise.all([
       serviceSupabase.from("admin_users").select("email"),
       serviceSupabase.auth.admin.listUsers({ perPage: 1000 }).catch(() => ({ data: { users: [] } })),
       serviceSupabase.from("products").select("*", { count: "exact", head: true }),
-      serviceSupabase.from("transactions").select("*").order("created_at", { ascending: false }),
+      serviceSupabase.from("transactions").select("*", { count: "exact" }).order("created_at", { ascending: false }).limit(5),
       serviceSupabase.from("transactions").select("price,product_name").eq("status", "Completed"),
       serviceSupabase.from("products").select("*").eq("is_active", true).limit(5)
     ])
@@ -52,14 +52,14 @@ export async function getDashboardStatsAction() {
     }
 
     // Calculate stats
-    const totalOrders = transactions?.length || 0
+    const totalOrders = transactionsCount ?? (recentTransactions?.length || 0)
     const totalRevenue = completedTransactions
       ?.reduce((sum, t) => {
         const cleanPrice = String(t.price).replace(/,/g, '')
         const parsed = Number.parseFloat(cleanPrice)
         return sum + (isNaN(parsed) ? 0 : parsed)
       }, 0) || 0
-    const recentOrders = transactions?.slice(0, 5) || []
+    const recentOrders = recentTransactions || []
 
     return {
       success: true,
@@ -78,11 +78,19 @@ export async function getDashboardStatsAction() {
   }
 }
 
+export interface GetAllTransactionsOptions {
+  page?: number
+  pageSize?: number
+  status?: string
+  search?: string
+}
+
 /**
- * Gets all transactions for orders page (admin only)
+ * Gets transactions for orders page (admin only)
+ * Supports optional server-side pagination, status filtering, and search
  * Uses Service Role to bypass RLS
  */
-export async function getAllTransactionsAction() {
+export async function getAllTransactionsAction(options?: GetAllTransactionsOptions) {
   if (!(await verifyAdmin())) {
     return { error: "Unauthorized: Admin access required" }
   }
@@ -90,14 +98,31 @@ export async function getAllTransactionsAction() {
   try {
     const serviceSupabase = createServiceRoleClient()
 
+    let txQuery = serviceSupabase
+      .from("transactions")
+      .select("*, users(id, name)", { count: "exact" })
+      .order("created_at", { ascending: false })
+
+    if (options?.status && options.status !== "all") {
+      txQuery = txQuery.eq("status", options.status as any)
+    }
+
+    if (options?.search && options.search.trim()) {
+      const s = options.search.trim()
+      txQuery = txQuery.or(`product_name.ilike.%${s}%,user_email.ilike.%${s}%,transaction_id.ilike.%${s}%`)
+    }
+
+    if (options?.page && options?.pageSize) {
+      const from = (options.page - 1) * options.pageSize
+      const to = from + options.pageSize - 1
+      txQuery = txQuery.range(from, to)
+    }
+
     const [
-      { data, error },
+      { data, count, error },
       { data: productsData }
     ] = await Promise.all([
-      serviceSupabase
-        .from("transactions")
-        .select("*, users(id, name)")
-        .order("created_at", { ascending: false }),
+      txQuery,
       serviceSupabase
         .from("products")
         .select("id, name, slug")
@@ -148,12 +173,13 @@ export async function getAllTransactionsAction() {
     }
 
     // Background auto-sync: Check if any Paid/Completed Khalti transactions were refunded via Khalti App/Portal
+    // Limit to at most 10 recent transactions to prevent blocking server responses
     const paidKhaltiTxns = transactionsList.filter(
       (t: any) =>
         (t.status === "Paid" || t.status === "Completed") &&
         (t.payment_category === "khalti" || t.payment_method?.toLowerCase().includes("khalti")) &&
         (t.validation_trace_id || t.bank_txn_id)
-    )
+    ).slice(0, 10)
 
     if (paidKhaltiTxns.length > 0) {
       try {
@@ -204,7 +230,15 @@ export async function getAllTransactionsAction() {
       }
     }
 
-    return { success: true, data: transactionsList, products: productsData || [] }
+    return {
+      success: true,
+      data: transactionsList,
+      totalCount: count ?? transactionsList.length,
+      page: options?.page || 1,
+      pageSize: options?.pageSize || transactionsList.length,
+      totalPages: options?.pageSize ? Math.ceil((count ?? transactionsList.length) / options.pageSize) : 1,
+      products: productsData || []
+    }
   } catch (error: any) {
     console.error("Error in getAllTransactionsAction:", error)
     return { error: error.message || "An unexpected error occurred" }

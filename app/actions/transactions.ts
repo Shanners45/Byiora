@@ -54,8 +54,19 @@ export async function checkCheckoutSecurityAction(clientData?: { deviceId?: stri
  * Adds a new transaction (for both guest and authenticated users)
  * Uses Service Role to bypass RLS and allow returning inserted data
  */
+import { transactionInputSchema } from "@/lib/validations/checkout"
+
 export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any; paymentUrl?: string; isDuplicate?: boolean; isFreeOrder?: boolean }> {
   try {
+    // ── LAYER 0: Zod Runtime Schema Validation ──
+    const parseResult = transactionInputSchema.safeParse(transactionData)
+    if (!parseResult.success) {
+      return {
+        success: false,
+        error: parseResult.error.issues[0]?.message || "Invalid order details provided.",
+      }
+    }
+
     const h = await headers()
     const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
     const cleanEmail = transactionData.email?.trim().toLowerCase() || ""
@@ -465,6 +476,23 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       } catch (emailErr) {
         console.error("Failed to send static order confirmation email:", emailErr)
       }
+    }
+
+    // Insert in-app notification server-side for registered user (avoids client RLS violation)
+    if (actualUserId) {
+      Promise.resolve(
+        serviceSupabase
+          .from("notifications")
+          .insert({
+            title: "Order Placed Successfully! 🎉",
+            message: `Your order for ${transactionData.product} (${transactionData.amount}) has been placed and is being processed.`,
+            type: "success",
+            user_id: actualUserId,
+            is_read: false,
+          })
+      ).catch((err) => {
+        console.error("Failed to insert order notification:", err)
+      })
     }
 
     // Sync customer email to Resend audience for broadcasts (both static & dynamic QR, with anti-spam check)

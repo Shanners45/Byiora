@@ -18,8 +18,8 @@ interface Announcement {
   message: string
   type: "banner" | "modal"
   theme: string
-  link_url?: string
-  link_text?: string
+  link_url?: string | null
+  link_text?: string | null
   is_active: boolean
 }
 
@@ -33,12 +33,38 @@ interface Announcement {
 //   is_active: true,
 // }
 
+function isHostAdmin(): boolean {
+  if (typeof window === "undefined") return false
+  const host = window.location.hostname.toLowerCase()
+  return (
+    host === "admin.byiora.com.np" ||
+    host === "www.admin.byiora.com.np" ||
+    host.startsWith("admin.") ||
+    host.includes("admin.byiora")
+  )
+}
+
 export function GlobalAnnouncement() {
   const [isVisible, setIsVisible] = useState(false)
   const [announcement, setAnnouncement] = useState<Announcement | null>(null)
+  const [isAdminSubdomain, setIsAdminSubdomain] = useState(false)
   const pathname = usePathname()
 
   useEffect(() => {
+    // Check if client is on admin subdomain
+    if (isHostAdmin()) {
+      setIsAdminSubdomain(true)
+      return
+    }
+
+    // Restrict strictly to customer storefront homepage ("/")
+    if (pathname !== "/" || pathname?.startsWith("/admin")) {
+      return
+    }
+
+    // Avoid refetching if already loaded
+    if (announcement) return
+
     const fetchAnnouncement = async () => {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -78,7 +104,7 @@ export function GlobalAnnouncement() {
     }
 
     fetchAnnouncement()
-  }, [])
+  }, [pathname, announcement])
 
   const handleDismiss = () => {
     setIsVisible(false)
@@ -94,8 +120,13 @@ export function GlobalAnnouncement() {
     }
   }
 
-  // Do not show on admin pages
-  if (pathname?.startsWith("/admin")) return null
+  // Must ONLY show on customer storefront homepage ("/")
+  // Never show on:
+  // 1. Admin domain (admin.byiora.com.np)
+  // 2. Admin routes (/admin/*)
+  // 3. Any customer route other than homepage ("/")
+  if (isAdminSubdomain || isHostAdmin()) return null
+  if (pathname !== "/" || pathname?.startsWith("/admin")) return null
   if (!isVisible || !announcement) return null
 
   // --- MODAL RENDER ---

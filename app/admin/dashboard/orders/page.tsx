@@ -583,7 +583,7 @@ export default function OrdersPage() {
             variant="outline"
             onClick={() => loadTransactions()}
             disabled={loading}
-            className="border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
+            className="border border-[#F59E0B] text-[#92400E] bg-[#FEF7E0] hover:bg-[#FEF7E0]/80 font-semibold shadow-xs"
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
             Refresh
@@ -591,7 +591,7 @@ export default function OrdersPage() {
           <Button
             variant="outline"
             onClick={exportTransactions}
-            className="border-[#E5E7EB] text-[#4B5563] hover:bg-[#F9FAFB]"
+            className="border border-[#F59E0B] text-[#92400E] bg-[#FEF7E0] hover:bg-[#FEF7E0]/80 font-semibold shadow-xs"
           >
             <Download className="h-4 w-4 mr-2" />
             Export CSV

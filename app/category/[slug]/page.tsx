@@ -140,7 +140,7 @@ export default function CategoryPage() {
 
                   {/* Ribbon badge */}
                   {product.ribbon_text ? (
-                    <div className="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase tracking-wide">
+                    <div className="absolute top-2 left-2 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-2 py-1 rounded shadow z-10 uppercase tracking-wide">
                       {product.ribbon_text}
                     </div>
                   ) : product.isNew ? (

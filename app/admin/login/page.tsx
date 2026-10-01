@@ -51,8 +51,8 @@ export default function AdminLogin() {
 
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#7E3AF2]">
-      <div className="w-full max-w-md px-4">
+    <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] px-4 py-8" style={{ colorScheme: "light" }}>
+      <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
             <Image
@@ -65,14 +65,15 @@ export default function AdminLogin() {
               unoptimized={true}
             />
           </div>
-          <h1 className="text-2xl font-bold text-white">Admin Portal</h1>
+          <h1 className="text-2xl font-bold text-[#1F2937] tracking-tight">Admin Portal</h1>
+          <p className="text-sm text-[#4B5563] mt-1">Sign in to access your admin dashboard</p>
         </div>
 
-        <Card className="border-none shadow-lg">
+        <Card className="border border-[#E5E7EB] shadow-xl bg-white rounded-2xl overflow-hidden">
           <CardHeader className="space-y-1 pb-2">
             <CardTitle className="text-center text-2xl font-bold text-[#1F2937]">Welcome Back</CardTitle>
             <CardDescription className="text-center text-[#4B5563]">
-              Sign in to access the admin dashboard
+              Enter your credentials to continue
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleLogin}>
@@ -88,7 +89,7 @@ export default function AdminLogin() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="bg-[#F9FAFB] border-[#E5E7EB] placeholder:text-gray-400"
+                  className="bg-[#F9FAFB] border-[#E5E7EB] text-gray-900 placeholder:text-gray-400 focus:border-[#7E3AF2] focus:ring-[#7E3AF2]"
                   disabled={isLoading}
                 />
               </div>
@@ -103,7 +104,7 @@ export default function AdminLogin() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="bg-[#F9FAFB] border-[#E5E7EB] placeholder:text-gray-400"
+                  className="bg-[#F9FAFB] border-[#E5E7EB] text-gray-900 placeholder:text-gray-400 focus:border-[#7E3AF2] focus:ring-[#7E3AF2]"
                   disabled={isLoading}
                 />
               </div>
@@ -112,7 +113,7 @@ export default function AdminLogin() {
             <CardFooter>
               <Button
                 type="submit"
-                className="w-full bg-[#7E3AF2] hover:bg-[#7E3AF2]/90 text-white font-medium py-2"
+                className="w-full bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white font-medium py-2.5 rounded-xl shadow-md transition-colors"
                 disabled={isLoading}
               >
                 {isLoading ? (

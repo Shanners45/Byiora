@@ -171,7 +171,7 @@ export default function ProductsPage() {
           <Button
             variant="outline"
             onClick={loadProducts}
-            className="border-[#F59E0B] text-[#F59E0B] hover:bg-[#FEF7E0]"
+            className="border border-[#F59E0B] text-[#92400E] bg-[#FEF7E0] hover:bg-[#FEF7E0]/80 font-semibold shadow-xs"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh

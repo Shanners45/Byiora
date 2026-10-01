@@ -4,6 +4,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { headers } from "next/headers"
 import { rateLimit } from "@/lib/rate-limit"
 import { customAlphabet } from "nanoid"
+import { promoValidationInputSchema, createPromoCodeSchema } from "@/lib/validations/promo-code"
 
 // Cryptographically secure code generator — no ambiguous characters (0/O, 1/I/L)
 const generateRandomCode = customAlphabet("ABCDEFGHJKMNPQRSTUVWXYZ23456789", 8)
@@ -63,6 +64,169 @@ export interface PromoValidationResult {
   promoDescription?: string
 }
 
+// ── Industry Standard: Promo Reservation & Release ──────────────────────────
+
+/**
+ * Industry Standard: Releases a promo code reservation when an order fails, is cancelled, or expires.
+ * 1. Checks if a promo_code_usage record exists for this transaction_id.
+ * 2. Decrements promo_codes.usage_count safely (never below 0).
+ * 3. Deletes the promo_code_usage record so the user and code limits are restored.
+ */
+export async function releasePromoCodeOnFailure(transactionId: string): Promise<boolean> {
+  if (!transactionId) return false
+  try {
+    const supabase = createServiceRoleClient() as any
+
+    // 1. Find if a promo was used on this transaction
+    const { data: usage, error: usageErr } = await supabase
+      .from("promo_code_usage")
+      .select("id, promo_code_id, code")
+      .eq("transaction_id", transactionId)
+      .maybeSingle()
+
+    if (usageErr || !usage) {
+      return false
+    }
+
+    // 2. Fetch the promo code to safely decrement usage_count
+    const { data: promo } = await supabase
+      .from("promo_codes")
+      .select("id, usage_count")
+      .eq("id", usage.promo_code_id)
+      .single()
+
+    if (promo) {
+      const newCount = Math.max(0, (promo.usage_count || 1) - 1)
+      await supabase
+        .from("promo_codes")
+        .update({
+          usage_count: newCount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", promo.id)
+    }
+
+    // 3. Remove the usage record so the user/device is free to use the promo code again
+    await supabase
+      .from("promo_code_usage")
+      .delete()
+      .eq("id", usage.id)
+
+    console.log(`[PROMO RELEASE] Successfully released promo code ${usage.code} for failed/cancelled order ${transactionId}`)
+    return true
+  } catch (err: any) {
+    console.error(`[PROMO RELEASE ERROR] Failed to release promo for ${transactionId}:`, err.message)
+    return false
+  }
+}
+
+/**
+ * Industry Standard Reclaim: If a previously failed transaction is successfully recovered/verified,
+ * re-applies the promo code usage so it cannot be double-spent.
+ */
+export async function reclaimPromoCodeOnRecovery(transactionId: string): Promise<boolean> {
+  if (!transactionId) return false
+  try {
+    const supabase = createServiceRoleClient() as any
+
+    // Check if the transaction actually had a promo code applied
+    const { data: txn } = await supabase
+      .from("transactions")
+      .select("transaction_id, promo_code, discount_amount, original_price, price, user_email, user_id, product_id, guest_user_data")
+      .eq("transaction_id", transactionId)
+      .single()
+
+    if (!txn || !txn.promo_code) return false
+
+    // Check if promo_code_usage is already recorded
+    const { data: existingUsage } = await supabase
+      .from("promo_code_usage")
+      .select("id")
+      .eq("transaction_id", transactionId)
+      .maybeSingle()
+
+    if (existingUsage) return false // Already recorded
+
+    // Fetch the promo code
+    const { data: promo } = await supabase
+      .from("promo_codes")
+      .select("id, usage_count")
+      .ilike("code", txn.promo_code)
+      .maybeSingle()
+
+    if (promo) {
+      await supabase
+        .from("promo_codes")
+        .update({
+          usage_count: (promo.usage_count || 0) + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", promo.id)
+
+      await supabase.from("promo_code_usage").insert({
+        promo_code_id: promo.id,
+        code: txn.promo_code.toUpperCase(),
+        user_email: txn.user_email?.trim().toLowerCase() || "",
+        user_id: txn.user_id || null,
+        transaction_id: transactionId,
+        product_id: txn.product_id || null,
+        original_price: txn.original_price || parseFloat(txn.price),
+        discount_amount: txn.discount_amount || 0,
+        final_price: parseFloat(txn.price) || 0,
+        ip_address: txn.guest_user_data?.ip || null,
+        device_id: txn.guest_user_data?.deviceId || null,
+      })
+
+      console.log(`[PROMO RECLAIM] Reclaimed promo code ${txn.promo_code} for recovered order ${transactionId}`)
+      return true
+    }
+    return false
+  } catch (err: any) {
+    console.error(`[PROMO RECLAIM ERROR] Failed to reclaim promo for ${transactionId}:`, err.message)
+    return false
+  }
+}
+
+/**
+ * Helper to count only valid/active promo code usages for a set of usage records.
+ * If any usage record points to a Failed/Cancelled/Refunded transaction, it releases that usage.
+ */
+async function getEffectiveUsageCount(
+  supabase: any,
+  usages: Array<{ id: string; transaction_id: string }>
+): Promise<number> {
+  if (!usages || usages.length === 0) return 0
+
+  const txnIds = usages.map((u) => u.transaction_id).filter(Boolean)
+  if (txnIds.length === 0) return usages.length
+
+  const { data: txns } = await supabase
+    .from("transactions")
+    .select("transaction_id, status")
+    .in("transaction_id", txnIds)
+
+  const terminalFailedStatuses = ["Payment Failed", "Cancelled", "Refunded", "Failed"]
+  let validCount = 0
+
+  for (const usage of usages) {
+    const matchedTxn = txns?.find((t: any) => t.transaction_id === usage.transaction_id)
+    if (!matchedTxn) {
+      // Transaction row not found or discarded — release usage
+      releasePromoCodeOnFailure(usage.transaction_id).catch(() => {})
+      continue
+    }
+    if (terminalFailedStatuses.includes(matchedTxn.status)) {
+      // Order failed or was cancelled — release usage!
+      releasePromoCodeOnFailure(usage.transaction_id).catch(() => {})
+      continue
+    }
+    // Completed, Paid, or actively pending/processing
+    validCount++
+  }
+
+  return validCount
+}
+
 // ── Promo Code Validation (Product Page — Preview Only) ──────────────────────
 
 /**
@@ -87,6 +251,19 @@ export async function validatePromoCodeAction({
   deviceId?: string
 }): Promise<PromoValidationResult> {
   try {
+    const parse = promoValidationInputSchema.safeParse({
+      code,
+      productId,
+      productCategory,
+      denominationLabel,
+      email,
+      userId,
+      deviceId,
+    })
+    if (!parse.success) {
+      return { valid: false, message: parse.error.issues[0]?.message || "Invalid or expired promo code." }
+    }
+
     const h = await headers()
     const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
 
@@ -167,26 +344,28 @@ export async function validatePromoCodeAction({
 
     // ── CHECK 6: Per-user usage (by email) ──
     if (promo.per_user_limit && promo.per_user_limit > 0) {
-      const { count: emailUsageCount } = await supabase
+      const { data: emailUsages } = await supabase
         .from("promo_code_usage")
-        .select("id", { count: "exact", head: true })
+        .select("id, transaction_id")
         .eq("promo_code_id", promo.id)
         .ilike("user_email", cleanEmail)
 
-      if (emailUsageCount !== null && emailUsageCount >= promo.per_user_limit) {
+      const activeEmailUsageCount = await getEffectiveUsageCount(supabase, emailUsages || [])
+      if (activeEmailUsageCount >= promo.per_user_limit) {
         return { valid: false, message: "You've already used this promo code." }
       }
     }
 
     // ── CHECK 7: Per-user usage (by device — prevents email cycling) ──
     if (deviceId && promo.per_user_limit && promo.per_user_limit > 0) {
-      const { count: deviceUsageCount } = await supabase
+      const { data: deviceUsages } = await supabase
         .from("promo_code_usage")
-        .select("id", { count: "exact", head: true })
+        .select("id, transaction_id")
         .eq("promo_code_id", promo.id)
         .eq("device_id", deviceId)
 
-      if (deviceUsageCount !== null && deviceUsageCount >= promo.per_user_limit) {
+      const activeDeviceUsageCount = await getEffectiveUsageCount(supabase, deviceUsages || [])
+      if (activeDeviceUsageCount >= promo.per_user_limit) {
         return { valid: false, message: "You've already used this promo code." }
       }
     }
@@ -397,16 +576,30 @@ export async function applyPromoCodeServerSide({
       return { success: false, discountAmount: 0, finalPrice: verifiedPrice, originalPrice: verifiedPrice, error: "Promo code expired." }
     }
 
-    // Per-user check
+    // Per-user check (by email & device)
     if (promo.per_user_limit && promo.per_user_limit > 0) {
-      const { count } = await supabase
+      const { data: usages } = await supabase
         .from("promo_code_usage")
-        .select("id", { count: "exact", head: true })
+        .select("id, transaction_id")
         .eq("promo_code_id", promo.id)
         .ilike("user_email", cleanEmail)
 
-      if (count !== null && count >= promo.per_user_limit) {
-        return { success: false, discountAmount: 0, finalPrice: verifiedPrice, originalPrice: verifiedPrice, error: "Already used." }
+      const activeCount = await getEffectiveUsageCount(supabase, usages || [])
+      if (activeCount >= promo.per_user_limit) {
+        return { success: false, discountAmount: 0, finalPrice: verifiedPrice, originalPrice: verifiedPrice, error: "You've already used this promo code." }
+      }
+
+      if (deviceId) {
+        const { data: deviceUsages } = await supabase
+          .from("promo_code_usage")
+          .select("id, transaction_id")
+          .eq("promo_code_id", promo.id)
+          .eq("device_id", deviceId)
+
+        const activeDeviceCount = await getEffectiveUsageCount(supabase, deviceUsages || [])
+        if (activeDeviceCount >= promo.per_user_limit) {
+          return { success: false, discountAmount: 0, finalPrice: verifiedPrice, originalPrice: verifiedPrice, error: "You've already used this promo code." }
+        }
       }
     }
 
@@ -589,6 +782,11 @@ export async function createPromoCodeAction(input: {
   try {
     const admin = await requireAdmin()
     const supabase = createServiceRoleClient() as any
+
+    const parse = createPromoCodeSchema.safeParse(input)
+    if (!parse.success) {
+      return { success: false, error: parse.error.issues[0]?.message || "Invalid promo code input." }
+    }
 
     const cleanCode = input.code.trim().toUpperCase().replace(/[^A-Z0-9\-_]/g, "")
     if (!cleanCode || cleanCode.length < 2) {

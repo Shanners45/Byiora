@@ -53,6 +53,15 @@ export async function updateTransactionStatusAction(
       return { error: `Failed to update status: ${error.message}` }
     }
 
+    // Industry Standard: Release promo on failure/cancellation/refund, or reclaim on completion
+    if (["Cancelled", "Payment Failed", "Refunded"].includes(newStatus)) {
+      const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+      releasePromoCodeOnFailure(transactionId).catch(() => {})
+    } else if (newStatus === "Completed" || newStatus === "Paid") {
+      const { reclaimPromoCodeOnRecovery } = await import("@/app/actions/promo-codes")
+      reclaimPromoCodeOnRecovery(transactionId).catch(() => {})
+    }
+
     // Insert in-app notification for registered users upon completion or failure
     if (existingTxn && existingTxn.user_id && existingTxn.status !== newStatus) {
       if (newStatus === "Completed") {

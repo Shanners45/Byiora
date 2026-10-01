@@ -1,17 +1,5 @@
 import { Ratelimit } from "@upstash/ratelimit"
-import { Redis } from "@upstash/redis"
-
-// ── Shared Redis instance (reuse from upstash-rate-limit.ts pattern) ────────
-
-let redis: Redis | null = null
-function getRedis(): Redis | null {
-  if (redis) return redis
-  const url = process.env.UPSTASH_REDIS_REST_URL
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN
-  if (!url || !token) return null
-  redis = new Redis({ url, token })
-  return redis
-}
+import { getRedis } from "@/lib/redis"
 
 // ── Per-route limiters ──────────────────────────────────────────────────────
 

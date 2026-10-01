@@ -129,7 +129,7 @@ export default function AdminDashboardPage() {
         <Button
           onClick={() => loadDashboardStats(false)}
           variant="outline"
-          className="flex items-center gap-2 border-[#F59E0B] text-[#92400E] hover:bg-[#FEF7E0] self-start sm:self-auto shrink-0"
+          className="flex items-center gap-2 border border-[#F59E0B] text-[#92400E] bg-[#FEF7E0] hover:bg-[#FEF7E0]/80 font-semibold shadow-xs self-start sm:self-auto shrink-0"
         >
           <RefreshCw className="h-4 w-4" />
           Refresh

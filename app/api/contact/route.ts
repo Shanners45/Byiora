@@ -20,11 +20,19 @@ export async function POST(request: Request) {
     } catch {
       return NextResponse.json({ error: "Invalid or empty JSON body" }, { status: 400 })
     }
-    const { name, email, subject, message, captchaToken } = body
-
-    if (!name || !email || !message) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    const { contactFormSchema } = await import('@/lib/validations/contact')
+    const parse = contactFormSchema.safeParse({
+      name: body.name,
+      email: body.email,
+      subject: body.subject || "New Support Request",
+      message: body.message,
+      turnstileToken: body.captchaToken,
+    })
+    if (!parse.success) {
+      return NextResponse.json({ error: parse.error.issues[0]?.message || "Invalid form submission." }, { status: 400 })
     }
+
+    const { name, email, subject, message, captchaToken } = body
 
     // SECURITY: Verify Turnstile captcha to prevent spam bots
     if (!captchaToken) {
@@ -33,12 +41,6 @@ export async function POST(request: Request) {
     const captchaOk = await verifyTurnstileToken(captchaToken, ip)
     if (!captchaOk) {
       return NextResponse.json({ error: 'Captcha validation failed. Please try again.' }, { status: 403 })
-    }
-
-    const emailStr = String(email).trim()
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(emailStr)) {
-      return NextResponse.json({ error: "Invalid email address" }, { status: 400 })
     }
 
     const sanitizedName = sanitizeHtml(name)

@@ -29,8 +29,8 @@ interface Announcement {
   message: string
   type: string
   theme: string
-  link_url: string
-  link_text: string
+  link_url: string | null
+  link_text: string | null
   is_active: boolean
 }
 
@@ -57,7 +57,14 @@ export default function CustomisationPage() {
   const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true)
   const [showAddAnnouncementForm, setShowAddAnnouncementForm] = useState(false)
   const [editingAnnouncementId, setEditingAnnouncementId] = useState<string | null>(null)
-  const [newAnnouncement, setNewAnnouncement] = useState({ title: "", message: "", type: "banner", theme: "info", link_url: "", link_text: "" })
+  const [newAnnouncement, setNewAnnouncement] = useState<{
+    title: string
+    message: string
+    type: "banner" | "modal"
+    theme: string
+    link_url: string
+    link_text: string
+  }>({ title: "", message: "", type: "banner", theme: "info", link_url: "", link_text: "" })
 
   const loadAnnouncements = async () => {
     setIsLoadingAnnouncements(true)
@@ -136,7 +143,7 @@ export default function CustomisationPage() {
     setNewAnnouncement({
       title: ann.title,
       message: ann.message,
-      type: ann.type,
+      type: ann.type === "modal" ? "modal" : "banner",
       theme: ann.theme,
       link_url: ann.link_url || "",
       link_text: ann.link_text || ""
@@ -744,7 +751,7 @@ export default function CustomisationPage() {
                     <select 
                       className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 py-2 text-sm text-gray-900"
                       value={newAnnouncement.type} 
-                      onChange={e => setNewAnnouncement(n => ({ ...n, type: e.target.value }))}
+                      onChange={e => setNewAnnouncement(n => ({ ...n, type: e.target.value as "banner" | "modal" }))}
                     >
                       <option value="banner">Top Banner (Marketing/Sales)</option>
                       <option value="modal">Center Modal (Critical/Maintenance)</option>
@@ -804,7 +811,7 @@ export default function CustomisationPage() {
                         <select 
                           className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-white px-3 py-2 text-sm text-gray-900"
                           value={newAnnouncement.type} 
-                          onChange={e => setNewAnnouncement(n => ({ ...n, type: e.target.value }))}
+                          onChange={e => setNewAnnouncement(n => ({ ...n, type: e.target.value as "banner" | "modal" }))}
                         >
                           <option value="banner">Top Banner (Marketing/Sales)</option>
                           <option value="modal">Center Modal (Critical/Maintenance)</option>

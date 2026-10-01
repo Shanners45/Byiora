@@ -321,6 +321,19 @@ export default function PromoCodesPage() {
     return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
   }
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4"></div>
+            <p className="text-[#4B5563]">Loading promo codes...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Page Header */}
@@ -332,8 +345,16 @@ export default function PromoCodesPage() {
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <Button
             variant="outline"
+            onClick={() => loadData()}
+            disabled={isLoading}
+            className="flex-1 sm:flex-none border border-[#F59E0B] text-[#92400E] bg-[#FEF7E0] hover:bg-[#FEF7E0]/80 font-semibold text-xs sm:text-sm h-9 sm:h-10 shadow-xs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 ${isLoading ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => setShowBulkDialog(true)}
-            className="flex-1 sm:flex-none border border-[#F59E0B]/40 text-[#92400E] bg-white hover:bg-[#FEF7E0] font-semibold text-xs sm:text-sm h-9 sm:h-10"
+            className="flex-1 sm:flex-none border border-[#F59E0B] text-[#92400E] bg-[#FEF7E0] hover:bg-[#FEF7E0]/80 font-semibold text-xs sm:text-sm h-9 sm:h-10 shadow-xs"
           >
             <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 text-[#F59E0B]" /> Bulk Generate
           </Button>

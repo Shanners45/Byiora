@@ -53,6 +53,11 @@ export async function GET(request: Request) {
           updated_at: new Date().toISOString()
         } as any)
         .eq("transaction_id", purchase_order_id)
+
+      // Industry Standard: Release promo code hold on user cancellation
+      const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+      releasePromoCodeOnFailure(purchase_order_id).catch(() => {})
+
       return NextResponse.redirect(failRedirect)
     }
 
@@ -150,6 +155,11 @@ export async function GET(request: Request) {
         } as any)
         .eq("transaction_id", purchase_order_id)
         .in("status", ["Payment Pending", "Processing"])
+
+      // Industry Standard: Release promo code hold on verification expiry/cancel
+      const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+      releasePromoCodeOnFailure(purchase_order_id).catch(() => {})
+
       return NextResponse.redirect(failRedirect)
 
     } else if (verifyData.status === "Pending" || verifyData.status === "Initiated") {

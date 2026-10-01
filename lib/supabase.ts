@@ -212,6 +212,9 @@ export interface Database {
           encrypted_checkout_data: string | null
           bank_txn_id: string | null
           validation_trace_id: string | null
+          promo_code: string | null
+          discount_amount: number | null
+          original_price: number | null
           created_at: string
           updated_at: string
         }
@@ -234,6 +237,9 @@ export interface Database {
           encrypted_checkout_data?: string | null
           bank_txn_id?: string | null
           validation_trace_id?: string | null
+          promo_code?: string | null
+          discount_amount?: number | null
+          original_price?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -256,6 +262,9 @@ export interface Database {
           encrypted_checkout_data?: string | null
           bank_txn_id?: string | null
           validation_trace_id?: string | null
+          promo_code?: string | null
+          discount_amount?: number | null
+          original_price?: number | null
           created_at?: string
           updated_at?: string
         }
@@ -398,6 +407,273 @@ export interface Database {
           added_by?: string | null
           claimed_by_transaction_id?: string | null
           claimed_at?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+
+      promo_codes: {
+        Row: {
+          id: string
+          code: string
+          description: string | null
+          discount_type: "percentage" | "fixed"
+          discount_value: number
+          max_discount: number | null
+          min_order_amount: number
+          usage_limit: number | null
+          usage_count: number
+          per_user_limit: number
+          starts_at: string
+          expires_at: string | null
+          applicable_products: string[] | null
+          applicable_categories: string[] | null
+          excluded_products: string[] | null
+          first_order_only: boolean
+          registered_only: boolean
+          new_user_only: boolean
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          code: string
+          description?: string | null
+          discount_type: "percentage" | "fixed"
+          discount_value: number
+          max_discount?: number | null
+          min_order_amount?: number
+          usage_limit?: number | null
+          usage_count?: number
+          per_user_limit?: number
+          starts_at?: string
+          expires_at?: string | null
+          applicable_products?: string[] | null
+          applicable_categories?: string[] | null
+          excluded_products?: string[] | null
+          first_order_only?: boolean
+          registered_only?: boolean
+          new_user_only?: boolean
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          code?: string
+          description?: string | null
+          discount_type?: "percentage" | "fixed"
+          discount_value?: number
+          max_discount?: number | null
+          min_order_amount?: number
+          usage_limit?: number | null
+          usage_count?: number
+          per_user_limit?: number
+          starts_at?: string
+          expires_at?: string | null
+          applicable_products?: string[] | null
+          applicable_categories?: string[] | null
+          excluded_products?: string[] | null
+          first_order_only?: boolean
+          registered_only?: boolean
+          new_user_only?: boolean
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+
+      promo_code_usage: {
+        Row: {
+          id: string
+          promo_code_id: string
+          code: string
+          user_email: string
+          user_id: string | null
+          transaction_id: string
+          product_id: string | null
+          original_price: number
+          discount_amount: number
+          final_price: number
+          ip_address: string | null
+          device_id: string | null
+          used_at: string
+        }
+        Insert: {
+          id?: string
+          promo_code_id: string
+          code: string
+          user_email: string
+          user_id?: string | null
+          transaction_id: string
+          product_id?: string | null
+          original_price: number
+          discount_amount: number
+          final_price: number
+          ip_address?: string | null
+          device_id?: string | null
+          used_at?: string
+        }
+        Update: {
+          id?: string
+          promo_code_id?: string
+          code?: string
+          user_email?: string
+          user_id?: string | null
+          transaction_id?: string
+          product_id?: string | null
+          original_price?: number
+          discount_amount?: number
+          final_price?: number
+          ip_address?: string | null
+          device_id?: string | null
+          used_at?: string
+        }
+        Relationships: []
+      }
+
+      store_announcements: {
+        Row: {
+          id: string
+          title: string
+          message: string
+          type: "banner" | "modal" | string
+          theme: string
+          link_url: string | null
+          link_text: string | null
+          is_active: boolean
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          title: string
+          message: string
+          type?: "banner" | "modal" | string
+          theme: string
+          link_url?: string | null
+          link_text?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          title?: string
+          message?: string
+          type?: "banner" | "modal" | string
+          theme?: string
+          link_url?: string | null
+          link_text?: string | null
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+
+      banned_entities: {
+        Row: {
+          id: string
+          type: "email" | "ip" | "email_domain" | "device_id"
+          value: string
+          reason: string | null
+          banned_by: string | null
+          created_at: string
+          expires_at: string | null
+        }
+        Insert: {
+          id?: string
+          type: "email" | "ip" | "email_domain" | "device_id"
+          value: string
+          reason?: string | null
+          banned_by?: string | null
+          created_at?: string
+          expires_at?: string | null
+        }
+        Update: {
+          id?: string
+          type?: "email" | "ip" | "email_domain" | "device_id"
+          value?: string
+          reason?: string | null
+          banned_by?: string | null
+          created_at?: string
+          expires_at?: string | null
+        }
+        Relationships: []
+      }
+
+      support_tickets: {
+        Row: {
+          id: string
+          ticket_number: string
+          name: string | null
+          email: string
+          subject: string
+          message: string
+          status: "open" | "replied" | "resolved" | "closed"
+          created_at: string
+          replied_at: string | null
+          last_reply: string | null
+          last_reply_by: string | null
+        }
+        Insert: {
+          id?: string
+          ticket_number: string
+          name?: string | null
+          email: string
+          subject: string
+          message: string
+          status?: "open" | "replied" | "resolved" | "closed"
+          created_at?: string
+          replied_at?: string | null
+          last_reply?: string | null
+          last_reply_by?: string | null
+        }
+        Update: {
+          id?: string
+          ticket_number?: string
+          name?: string | null
+          email?: string
+          subject?: string
+          message?: string
+          status?: "open" | "replied" | "resolved" | "closed"
+          created_at?: string
+          replied_at?: string | null
+          last_reply?: string | null
+          last_reply_by?: string | null
+        }
+        Relationships: []
+      }
+
+      payment_credentials: {
+        Row: {
+          id: string
+          provider: string
+          encrypted_username: string
+          encrypted_password: string
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          provider: string
+          encrypted_username: string
+          encrypted_password: string
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          provider?: string
+          encrypted_username?: string
+          encrypted_password?: string
           created_at?: string
           updated_at?: string | null
         }

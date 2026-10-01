@@ -53,8 +53,12 @@ export async function addCustomerToAudience(email: string, firstName?: string, i
       return
     }
 
+    const audienceId = process.env.RESEND_AUDIENCE_ID
+    if (!audienceId) {
+      return // Audience ID not configured, gracefully skip contact addition
+    }
+
     const resend = getResend()
-    const audienceId = process.env.RESEND_AUDIENCE_ID || "96e1b97d-c7bf-4293-92a2-71bac425b6c7"
 
     const payload: any = {
       email: cleanEmail,

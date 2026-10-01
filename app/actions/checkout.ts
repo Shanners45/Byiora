@@ -233,6 +233,10 @@ export async function getOrGenerateQRAction(transactionId: string) {
         .in("status", ["Payment Pending", "Processing"])
         .is("bank_txn_id", null)
 
+      // Industry Standard: Release promo code hold on session expiry
+      const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+      releasePromoCodeOnFailure(transactionId).catch(() => {})
+
       return { 
         success: false, 
         error: "Payment session expired", 
@@ -808,6 +812,10 @@ export async function expireTransactionAction(transactionId: string) {
 
     if (updateError) return { success: false }
 
+    // Industry Standard: Release promo code hold on client-side expiry
+    const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+    releasePromoCodeOnFailure(transactionId).catch(() => {})
+
     // Send Payment Failed Email
     const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
     const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
@@ -905,6 +913,10 @@ export async function cancelTransactionAction(transactionId: string) {
       .is("bank_txn_id", null)
 
     if (cancelError) return { success: false, error: "Could not cancel transaction" }
+
+    // Industry Standard: Release promo code hold on user cancellation
+    const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+    releasePromoCodeOnFailure(transactionId).catch(() => {})
 
     // Increment failure strike for user/IP on cancellation
     incrementFailureStrike({

@@ -23,7 +23,6 @@ import {
 import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { useAuth } from "@/lib/auth-context"
-import { useNotifications } from "@/lib/notification-context"
 import { getProductBySlug } from "@/lib/product-categories"
 import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
@@ -48,7 +47,6 @@ export default function ProductDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { addTransaction, user } = useAuth()
-  const { sendNotification } = useNotifications()
   const [selectedDenomination, setSelectedDenomination] = useState("")
   const [selectedPayment, setSelectedPayment] = useState("")
   const [email, setEmail] = useState(user?.email || "")
@@ -362,16 +360,6 @@ export default function ProductDetailPage() {
         })
 
         if (user) {
-          try {
-            await sendNotification({
-              title: "Order Placed Successfully! 🎉",
-              message: `Your free order for ${giftCard.name} (${selectedDenom?.label}) has been placed and is being processed.`,
-              type: "success",
-              userId: user.id,
-            })
-          } catch (notifError) {
-            console.error("Failed to send notification:", notifError)
-          }
           router.push("/transactions?paid=success")
         } else {
           router.push("/?paid=success")
@@ -416,24 +404,10 @@ export default function ProductDetailPage() {
         setIsProcessing(false)
         setShowQRDialog(false)
 
-        if (user) {
-          // Send DB notification AFTER dialog closes so the toast popup is visible
-          try {
-            await sendNotification({
-              title: "Order Placed Successfully! 🎉",
-              message: `Your order for ${giftCard.name} (${selectedDenom?.label}) has been placed and is being processed.`,
-              type: "success",
-              userId: user.id,
-            })
-          } catch (notifError) {
-            console.error("Failed to send notification:", notifError)
-          }
-        } else {
-          // Fallback toast for guest users
-          toast.success("Order Placed Successfully! 🎉", {
-            description: `Your order for ${giftCard.name} (${selectedDenom?.label}) has been placed and is being processed.`,
-          })
-        }
+        // Show confirmation toast (DB notification already dispatched server-side)
+        toast.success("Order Placed Successfully! 🎉", {
+          description: `Your order for ${giftCard.name} (${selectedDenom?.label}) has been placed and is being processed.`,
+        })
 
         // Reset form after successful manual order
         setSelectedDenomination("")
@@ -741,7 +715,7 @@ export default function ProductDetailPage() {
                   return (
                     <div key={denom.label} className={`relative ${isSelected && hasIcon ? "z-10" : ""}`}>
                       {denom.bestseller && !isOutOfStock && (
-                        <div className="absolute -top-3 -left-2 z-20 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
+                        <div className="absolute -top-3 -left-2 z-20 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
                           <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current">
                             <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
                           </svg>
