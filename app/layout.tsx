@@ -1,4 +1,5 @@
 import type React from "react"
+import { Suspense } from "react"
 import "./globals.css"
 import type { Metadata, Viewport } from "next"
 import { Nunito } from "next/font/google"
@@ -6,6 +7,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { AuthProvider } from "@/lib/auth-context"
 import { NotificationProvider } from "@/lib/notification-context"
 import { GlobalAnnouncement } from "@/components/global-announcement"
+import { PostHogProvider } from "@/components/analytics/PostHogProvider"
 
 const nunito = Nunito({
   subsets: ["latin"],
@@ -17,7 +19,7 @@ const nunito = Nunito({
 const BASE_URL = "https://www.byiora.com.np"
 
 export const viewport: Viewport = {
-  themeColor: "#1A1A2E",
+  themeColor: "#6B3FA0",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -184,6 +186,9 @@ export default function RootLayout({
         />
       </head>
       <body className={nunito.className}>
+        <Suspense fallback={null}>
+          <PostHogProvider />
+        </Suspense>
         <AuthProvider>
           <NotificationProvider>
             <GlobalAnnouncement />

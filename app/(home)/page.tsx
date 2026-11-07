@@ -83,7 +83,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-purple">
+    <div className="min-h-screen bg-brand-purple home-layout no-scrollbar">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(homeItemListSchema).replace(/</g, "\\u003c") }}

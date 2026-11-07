@@ -24,7 +24,14 @@ export async function loginWithPassword(
 ) {
   if (!captchaToken) return { error: "Captcha verification required." }
   const h = await headers()
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim()
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+
+  // SECURITY: Rate limit login attempts (10 attempts per 15 minutes per IP)
+  const rl = await rateLimit(`login-ip:${ip}`, { windowMs: 900_000, max: 10 })
+  if (!rl.ok) {
+    return { error: "Too many login attempts. Please wait a few minutes before trying again." }
+  }
+
   const captchaOk = await verifyTurnstileToken(captchaToken, ip)
   if (!captchaOk) return { error: "Captcha validation failed. Please try again." }
 
@@ -48,6 +55,18 @@ export async function loginWithPassword(
     return { error: error.message }
   }
 
+  // Record user's last login IP and device in public.users
+  if (data?.user) {
+    try {
+      const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() }
+      if (ip) updatePayload.last_ip = ip
+      if (deviceId) updatePayload.last_device_id = deviceId
+      await (supabase.from("users") as any).update(updatePayload).eq("id", data.user.id)
+    } catch (e) {
+      console.warn("Could not update last login IP:", e)
+    }
+  }
+
   revalidatePath(redirectPath)
   return { success: true, data: { user: data.user } }
 }
@@ -68,8 +87,15 @@ export async function signupWithPassword(
   }
   if (!captchaToken) return { error: "Captcha verification required." }
   const h = await headers()
-  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim()
-  const captchaOk = await verifyTurnstileToken(captchaToken, ip)
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip")?.trim() || "unknown"
+
+  // SECURITY: Rate limit registration (3 signups per 15 minutes per IP)
+  const rl = await rateLimit(`signup-ip:${ip}`, { windowMs: 900_000, max: 3 })
+  if (!rl.ok) {
+    return { error: "Too many registration attempts from this network. Please try again later." }
+  }
+
+  const captchaOk = await verifyTurnstileToken(captchaToken, ip || undefined)
   if (!captchaOk) return { error: "Captcha validation failed. Please try again." }
 
   const cleanEmail = email.toLowerCase().trim()
@@ -80,7 +106,7 @@ export async function signupWithPassword(
   }
 
   // Security: Block banned users, IPs, or devices from creating new accounts
-  const banCheck = await checkIsBanned({ email: cleanEmail, ip, deviceId })
+  const banCheck = await checkIsBanned({ email: cleanEmail, ip: ip || undefined, deviceId })
   if (banCheck.banned) {
     return { error: banCheck.reason || "Account registration has been restricted on this device or network in accordance with our security policies." }
   }
@@ -91,7 +117,12 @@ export async function signupWithPassword(
     email: email.toLowerCase().trim(),
     password,
     options: {
-      data: { pending_name: name.trim() }
+      data: {
+        pending_name: name.trim(),
+        signup_ip: ip,
+        last_ip: ip,
+        last_device_id: deviceId || null,
+      }
     }
   })
 
@@ -104,11 +135,14 @@ export async function signupWithPassword(
 }
 
 // ─── Signup Step 2: Verify OTP ──────────────────────────────────────────────
-export async function verifySignupOtp(email: string, token: string) {
+export async function verifySignupOtp(email: string, token: string, deviceId?: string) {
   const cleanToken = token.replace(/\s/g, "")
   if (!cleanToken || cleanToken.length !== OTP_LENGTH) {
     return { error: `Please enter a valid ${OTP_LENGTH}-digit code` }
   }
+
+  const h = await headers()
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip")?.trim() || null
 
   const supabase = await createClient()
 
@@ -122,17 +156,33 @@ export async function verifySignupOtp(email: string, token: string) {
     return { error: error.message }
   }
 
-  // Now the user is verified — create profile in public.users
+  // Now the user is verified — create profile in public.users with registration IP
   if (data.user) {
     const userName = data.user.user_metadata?.pending_name || email.split("@")[0]
+    const signupIp = ip || data.user.user_metadata?.signup_ip || null
+    const finalDeviceId = deviceId || data.user.user_metadata?.last_device_id || null
 
-    const { error: insertError } = await supabase
-      .from("users")
-      .insert([{ id: data.user.id, email: email.toLowerCase().trim(), name: userName }])
+    const { error: insertError } = await (supabase.from("users") as any)
+      .insert([{
+        id: data.user.id,
+        email: email.toLowerCase().trim(),
+        name: userName,
+        signup_ip: signupIp,
+        last_ip: signupIp,
+        last_device_id: finalDeviceId,
+      }])
 
     if (insertError) {
-      // User might already exist (e.g. race condition), not a fatal error
-      console.error("User insert after OTP:", insertError.message)
+      // User might already exist (e.g. race condition), update IP & details
+      await (supabase.from("users") as any)
+        .update({
+          name: userName,
+          signup_ip: signupIp,
+          last_ip: signupIp,
+          last_device_id: finalDeviceId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", data.user.id)
     }
 
     // Send welcome email

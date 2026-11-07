@@ -1057,6 +1057,11 @@ export default function CustomersAndSecurityPage() {
                                   {cust.name}
                                 </span>
                               )}
+                              {cust.lastIp && (
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {cust.lastIp}
+                                </span>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="py-3 whitespace-nowrap">
@@ -1082,16 +1087,62 @@ export default function CustomersAndSecurityPage() {
                             <span className="font-bold text-[#111827] text-sm">Rs. {cust.totalSpent.toLocaleString()}</span>
                           </TableCell>
                           <TableCell className="py-3 whitespace-nowrap">
-                            <div className="flex flex-col">
-                              <span className="text-xs text-[#111827] font-semibold">
-                                {cust.lastOrderDate ? new Date(cust.lastOrderDate).toLocaleDateString() : (cust.createdAt ? new Date(cust.createdAt).toLocaleDateString() : "—")}
-                              </span>
-                              {cust.lastSignInAt ? (
-                                <span className="text-[11px] text-[#92400E] font-medium" title={new Date(cust.lastSignInAt).toLocaleString()}>
-                                  {new Date(cust.lastSignInAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit", hour12: true })}
-                                </span>
-                              ) : null}
-                            </div>
+                            {(() => {
+                              // Determine the best "last active" timestamp:
+                              // 1. PostHog real last-seen (actual site activity)
+                              // 2. Supabase last sign-in (auth event)
+                              // 3. Last order date
+                              // 4. Account creation date
+                              const bestTimestamp =
+                                cust.posthogLastSeen ||
+                                cust.lastSignInAt ||
+                                cust.lastOrderDate ||
+                                cust.createdAt
+
+                              if (!bestTimestamp) return <span className="text-xs text-gray-400">—</span>
+
+                              const lastDate = new Date(bestTimestamp)
+                              const now = new Date()
+                              const diffMs = now.getTime() - lastDate.getTime()
+                              const diffMins = Math.floor(diffMs / 60000)
+                              const diffHours = Math.floor(diffMs / 3600000)
+                              const diffDays = Math.floor(diffMs / 86400000)
+
+                              // Relative time label
+                              let relativeLabel: string
+                              if (diffMins < 1) relativeLabel = "Just now"
+                              else if (diffMins < 60) relativeLabel = `${diffMins}m ago`
+                              else if (diffHours < 24) relativeLabel = `${diffHours}h ago`
+                              else if (diffDays < 7) relativeLabel = `${diffDays}d ago`
+                              else if (diffDays < 30) relativeLabel = `${Math.floor(diffDays / 7)}w ago`
+                              else relativeLabel = lastDate.toLocaleDateString()
+
+                              // Online: active within 15 minutes (PostHog-sourced only)
+                              const isOnline = cust.posthogLastSeen && diffMins < 15
+
+                              return (
+                                <div className="flex flex-col gap-0.5" title={lastDate.toLocaleString()}>
+                                  <div className="flex items-center gap-1.5">
+                                    {isOnline && (
+                                      <span className="relative flex h-2 w-2 shrink-0">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                      </span>
+                                    )}
+                                    <span className={`text-xs font-semibold ${isOnline ? "text-emerald-700" : "text-[#111827]"}`}>
+                                      {relativeLabel}
+                                    </span>
+                                  </div>
+                                  {cust.posthogLastSeen ? (
+                                    <span className="text-[10px] text-emerald-600/80 font-medium">via PostHog</span>
+                                  ) : cust.lastSignInAt ? (
+                                    <span className="text-[10px] text-[#92400E]/70 font-medium">last sign-in</span>
+                                  ) : (
+                                    <span className="text-[10px] text-gray-400 font-medium">last order</span>
+                                  )}
+                                </div>
+                              )
+                            })()}
                           </TableCell>
                           <TableCell className="py-3 whitespace-nowrap">
                             {cust.isBanned ? (
@@ -1429,6 +1480,9 @@ export default function CustomersAndSecurityPage() {
                     Customer Details
                   </DialogTitle>
                 </div>
+                <DialogDescription className="text-xs text-[#4B5563]">
+                  View customer profile, orders, and manage account status.
+                </DialogDescription>
               </DialogHeader>
 
               {/* Customer Profile & Quick Actions Banner */}
@@ -1463,7 +1517,11 @@ export default function CustomersAndSecurityPage() {
                     </div>
                     <p className="text-xs text-[#4B5563] mt-1.5 flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-[#111827]">{selectedCustomer.email}</span>
-                      
+                      {selectedCustomer.lastIp && (
+                        <span className="inline-flex items-center gap-1 font-mono text-[11px] bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
+                          IP: {selectedCustomer.lastIp}
+                        </span>
+                      )}
                     </p>
                   </div>
 
@@ -1519,9 +1577,37 @@ export default function CustomersAndSecurityPage() {
                   </div>
                   <div className="bg-white/90 rounded-lg p-2.5 border border-[#F59E0B]/20 shadow-xs col-span-2 sm:col-span-1">
                     <span className="text-[11px] text-[#92400E] font-medium block">Last Active</span>
-                    <span className="text-sm font-bold text-[#111827]">
-                      {selectedCustomer.lastOrderDate ? new Date(selectedCustomer.lastOrderDate).toLocaleDateString() : (selectedCustomer.createdAt ? new Date(selectedCustomer.createdAt).toLocaleDateString() : "—")}
-                    </span>
+                    {(() => {
+                      const bestTs =
+                        selectedCustomer.posthogLastSeen ||
+                        selectedCustomer.lastSignInAt ||
+                        selectedCustomer.lastOrderDate ||
+                        selectedCustomer.createdAt
+                      if (!bestTs) return <span className="text-sm font-bold text-gray-400">—</span>
+                      const d = new Date(bestTs)
+                      const diff = Math.floor((Date.now() - d.getTime()) / 60000)
+                      let label: string
+                      if (diff < 1) label = "Just now"
+                      else if (diff < 60) label = `${diff}m ago`
+                      else if (diff < 1440) label = `${Math.floor(diff / 60)}h ago`
+                      else if (diff < 10080) label = `${Math.floor(diff / 1440)}d ago`
+                      else label = d.toLocaleDateString()
+                      const isOnline = selectedCustomer.posthogLastSeen && diff < 15
+                      return (
+                        <div className="flex items-center gap-1.5" title={d.toLocaleString()}>
+                          {isOnline && (
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                            </span>
+                          )}
+                          <span className={`text-sm font-bold ${isOnline ? "text-emerald-700" : "text-[#111827]"}`}>{label}</span>
+                          {selectedCustomer.posthogLastSeen && (
+                            <span className="text-[10px] text-emerald-600/70 font-medium ml-0.5">PostHog</span>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
               </div>

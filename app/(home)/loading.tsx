@@ -3,7 +3,7 @@ import { Header } from "@/components/header"
 
 export default function Loading() {
   return (
-    <div className="min-h-screen bg-brand-purple">
+    <div className="min-h-screen bg-brand-purple home-layout no-scrollbar">
       <Header />
 
       <main className="container mx-auto px-4 py-8">

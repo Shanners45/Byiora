@@ -6,6 +6,7 @@ import { getAdminSessionAction } from "./admin-utils"
 import { banEntity, unbanEntity, getBannedEntities, cleanupExpiredBans, BannedEntity } from "@/lib/security/blacklist"
 import { sendPasswordResetEmail } from "@/lib/email/resend"
 import { Resend } from "resend"
+import { getPostHogLastActive } from "@/lib/analytics/posthog-server"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -30,6 +31,7 @@ export interface CustomerProfile {
   banId?: string | null
   banVector?: "email" | "ip" | "device_id" | "domain"
   createdAt?: string
+  posthogLastSeen?: string | null // PostHog-sourced "last active on site" timestamp
 }
 
 /**
@@ -56,7 +58,7 @@ export async function getCustomersOverviewAction(): Promise<{
     // 1. Fetch registered users from public.users & Supabase Auth for last_sign_in_at
     const { data: registeredUsers, error: usersErr } = await supabase
       .from("users")
-      .select("id, email, name, created_at")
+      .select("id, email, name, created_at, signup_ip, last_ip, last_device_id")
 
     if (usersErr) {
       console.error("Error fetching registered users:", usersErr)
@@ -119,6 +121,9 @@ export async function getCustomersOverviewAction(): Promise<{
         (Array.isArray(authUser?.app_metadata?.providers) && authUser.app_metadata.providers.includes("google")) ||
         (Array.isArray(authUser?.identities) && authUser.identities.some((id: any) => id.provider === "google"))
 
+      const userIp = u.last_ip || u.signup_ip || authUser?.user_metadata?.last_ip || authUser?.user_metadata?.signup_ip || null
+      const userDeviceId = u.last_device_id || authUser?.user_metadata?.last_device_id || null
+
       customerMap.set(cleanEmail, {
         email: cleanEmail,
         name: u.name || authUser?.user_metadata?.full_name || cleanEmail.split("@")[0],
@@ -132,8 +137,8 @@ export async function getCustomersOverviewAction(): Promise<{
         successfulOrders: 0,
         failedOrders: 0,
         lastOrderDate: null,
-        lastIp: null,
-        lastDeviceId: null,
+        lastIp: userIp,
+        lastDeviceId: userDeviceId,
         lastSignInAt: authUser?.last_sign_in_at || null,
         isBanned: !!directBan || domainBan,
         banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
@@ -156,6 +161,8 @@ export async function getCustomersOverviewAction(): Promise<{
           const directBan = bannedEmailMap.get(cleanEmail)
           const domain = cleanEmail.split("@")[1] || ""
           const domainBan = bannedDomainSet.has(domain)
+          const userIp = au.user_metadata?.last_ip || au.user_metadata?.signup_ip || null
+          const userDeviceId = au.user_metadata?.last_device_id || null
 
           customerMap.set(cleanEmail, {
             email: cleanEmail,
@@ -170,8 +177,8 @@ export async function getCustomersOverviewAction(): Promise<{
             successfulOrders: 0,
             failedOrders: 0,
             lastOrderDate: null,
-            lastIp: null,
-            lastDeviceId: null,
+            lastIp: userIp,
+            lastDeviceId: userDeviceId,
             lastSignInAt: au.last_sign_in_at || null,
             isBanned: !!directBan || domainBan,
             banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
@@ -226,11 +233,17 @@ export async function getCustomersOverviewAction(): Promise<{
         customerMap.set(cleanEmail, profile)
       }
 
-      // Update lastIp / lastDeviceId from latest transactions
+      // Update lastIp / lastDeviceId from latest transactions (transactions ordered descending by created_at)
       const txIp = (t.guest_user_data as any)?.ip
       const txDev = (t.guest_user_data as any)?.deviceId
-      if (txIp && !profile.lastIp) profile.lastIp = txIp
-      if (txDev && !profile.lastDeviceId) profile.lastDeviceId = txDev
+      if (txIp && !(profile as any)._hasLatestTxIp) {
+        profile.lastIp = txIp
+        ;(profile as any)._hasLatestTxIp = true
+      }
+      if (txDev && !(profile as any)._hasLatestTxDev) {
+        profile.lastDeviceId = txDev
+        ;(profile as any)._hasLatestTxDev = true
+      }
 
       profile.totalOrders += 1
 
@@ -268,6 +281,20 @@ export async function getCustomersOverviewAction(): Promise<{
         profile.banId = hardBan?.id || null
         profile.banVector = directBan ? "email" : (deviceBan ? "device_id" : "domain")
       }
+    }
+
+    // ── Merge PostHog last-active timestamps ──
+    // This runs in parallel conceptually but after customer map is built.
+    try {
+      const posthogLastSeen = await getPostHogLastActive()
+      for (const profile of customerMap.values()) {
+        const phTimestamp = posthogLastSeen.get(profile.email)
+        if (phTimestamp) {
+          profile.posthogLastSeen = phTimestamp
+        }
+      }
+    } catch (phErr) {
+      console.warn("[Customers] PostHog last-active merge failed (non-critical):", phErr)
     }
 
     const customerList = Array.from(customerMap.values())

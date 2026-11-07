@@ -116,11 +116,13 @@ export async function fulfillOrderDirectly({
       txn.product_category === "topup" ||
       Boolean(txn.encrypted_checkout_data)
 
-    const categoriesWithInventory = ["digital-goods", "games"]
+    const isFreePromoOrder = source === "promo_100_free" || parseFloat(txn.price || "0") <= 0
     let deliveredCode: string | null = null
     let decryptedCode: string | null = null
 
-    if (!isManualCategory && txn.product_category && categoriesWithInventory.includes(txn.product_category.toLowerCase())) {
+    // SECURITY: Never automatically release inventory gift card codes for 100% free promo orders.
+    // They must be manually reviewed and fulfilled by the store administrator to protect inventory.
+    if (!isFreePromoOrder && !isManualCategory && txn.product_category && categoriesWithInventory.includes(txn.product_category.toLowerCase())) {
       console.log(`[FULFILLMENT] Claiming inventory code for ${transactionId}...`)
 
       const { data: claimData, error: claimError } = await supabase.rpc("claim_gift_card", {

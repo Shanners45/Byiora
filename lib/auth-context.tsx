@@ -7,6 +7,7 @@ import { loginWithPassword, signupWithPassword, logoutUser } from "@/app/actions
 import { addTransactionAction } from "@/app/actions/transactions"
 import { getOrCreateDeviceId, initDeviceFingerprint } from "@/lib/security/device"
 import * as Sentry from "@sentry/nextjs"
+import { posthog } from "@/lib/analytics/posthog"
 
 interface User {
   id: string
@@ -89,6 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
               setUser(updatedUser)
               Sentry.setUser({ id: updatedUser.id, email: updatedUser.email })
+              // Identify user in PostHog for last-active tracking
+              if (posthog.__loaded) {
+                posthog.identify(updatedUser.id, {
+                  email: updatedUser.email,
+                  name: updatedUser.name,
+                })
+              }
               await loadTransactions(existingUser.id)
             }
           } catch (error) {
@@ -184,6 +192,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       setUser(userData);
       Sentry.setUser({ id: userData.id, email: userData.email });
+      // Identify user in PostHog for last-active tracking
+      if (posthog.__loaded) {
+        posthog.identify(userData.id, {
+          email: userData.email,
+          name: userData.name,
+        })
+      }
       await loadTransactions(userData.id);
       return true;
     } catch (error) {
@@ -260,6 +275,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setUser(null)
     Sentry.setUser(null)
+    // Reset PostHog so the next anonymous session isn't linked to this user
+    if (posthog.__loaded) {
+      posthog.reset()
+    }
     setTransactions([])
     await logoutUser("/")
   }

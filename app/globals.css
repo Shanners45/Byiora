@@ -157,7 +157,7 @@ body > nextjs-portal {
   display: none;
 }
 
-/* Sleek custom scrollbars */
+/* Sleek custom scrollbars for desktop */
 ::-webkit-scrollbar {
   width: 5px;
   height: 5px;
@@ -179,6 +179,45 @@ body > nextjs-portal {
 * {
   scrollbar-width: thin;
   scrollbar-color: #CBD5E1 transparent;
+}
+
+/* Hide scrollbars completely on home page across all devices */
+.home-layout,
+.home-layout * {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+.home-layout::-webkit-scrollbar,
+.home-layout *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Hide scrollbars on mobile devices and touch screens for native app feel */
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+  html, body, * {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+}
+
+/* Utility to completely hide scrollbars */
+.no-scrollbar,
+.no-scrollbar * {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+.no-scrollbar::-webkit-scrollbar,
+.no-scrollbar *::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 /* Accessible high-contrast Radix Switch controls */

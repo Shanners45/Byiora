@@ -1,12 +1,17 @@
-/**
+ /**
  * Disposable & Burner Email Domain Filter
  * Protects Byiora from temporary, throwaway, and spam email accounts.
  */
 
 const DISPOSABLE_DOMAINS = new Set([
   // Domains used in recent spam attacks
+  "maxxspace.com",
   "meonvr.com",
   "generator.email",
+  "example.invalid",
+  "maildrop.cc",
+  "marchslurp.com",
+  "arcadehearth.com",
   "tempmail.com",
   "temp-mail.org",
   "10minutemail.com",
@@ -136,6 +141,19 @@ export function isDisposableEmail(email: string | null | undefined): boolean {
     if (DISPOSABLE_DOMAINS.has(rootDomain)) {
       return true
     }
+  }
+
+  // Block orders/signups using the business's own domains or probe domains
+  const blockedInternalDomains = [
+    "byiora.com.np",
+    "byiora.online",
+    "byiora.store",
+    "example.invalid",
+    "example.com",
+    "example.org",
+  ]
+  if (blockedInternalDomains.some(d => domain === d || domain.endsWith(`.${d}`))) {
+    return true
   }
 
   return false

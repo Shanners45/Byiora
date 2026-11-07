@@ -197,7 +197,7 @@ export default function SignUpPage() {
 
     setIsLoading(true)
     try {
-      const result = await verifySignupOtp(email, code)
+      const result = await verifySignupOtp(email, code, getOrCreateDeviceId())
       if (result.error) {
         if (isRateLimitError(result.error)) {
           toast.error("You have requested too many codes. Please wait 15 minutes and try again.")

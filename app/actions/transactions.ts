@@ -144,7 +144,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     const rl = await rateLimit(`order:${ip}`, { windowMs: 600_000, max: orderLimit })
     if (!rl.ok) {
       // Track this violation — repeated hits trigger auto-ban
-      trackRateLimitViolation({ ip, deviceId }).catch(() => {})
+      trackRateLimitViolation({ ip, deviceId }).catch(() => { })
       return { success: false, error: "Something went wrong. Please try again later." }
     }
 
@@ -194,14 +194,14 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     }
 
     const productId = transactionData.productId || transactionData.product.toLowerCase().replace(/\s+/g, "-")
-    
+
     // SECURITY: Validate price against the database to prevent tampering
     const { data: productData, error: productError } = await serviceSupabase
       .from("products")
       .select("denominations")
       .eq("id", productId)
       .single()
-      
+
     let denominations = productData?.denominations
 
     if (productError || !denominations) {
@@ -211,13 +211,13 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         .select("denominations")
         .eq("slug", productId)
         .single()
-        
+
       if (slugError || !slugProduct) {
         return { success: false, error: "Product not found or unavailable." }
       }
       denominations = slugProduct.denominations
     }
-    
+
     // SECURITY: Strictly match denomination by label or id against DB records
     const cleanAmount = transactionData.amount?.trim().toLowerCase()
     let matchedDenom = Array.isArray(denominations) ? denominations.find(
@@ -326,16 +326,47 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     let initialStatus = "Processing"
 
     if (isFreeOrder) {
+      // SECURITY GUARD 1: 100% Free orders CANNOT be placed anonymously via guest checkout
+      if (!actualUserId) {
+        return {
+          success: false,
+          error: "Free promotional orders require you to be signed in to your Byiora account.",
+        }
+      }
+
+      // SECURITY GUARD 2: Free orders must complete Turnstile bot verification
+      if (!transactionData.turnstileToken) {
+        return {
+          success: false,
+          error: "Bot protection verification required to claim promotional discounts.",
+        }
+      }
+      const isCaptchaValid = await verifyTurnstileToken(transactionData.turnstileToken, ip)
+      if (!isCaptchaValid) {
+        return {
+          success: false,
+          error: "Bot verification failed. Please try again.",
+        }
+      }
+
       paymentCategory = "free"
-      initialStatus = "Paid" // 100% discounted orders are immediately marked as Paid
+      initialStatus = "Paid" // 100% discounted orders are marked as Paid for manual review
       transactionData.paymentMethod = `Promo Code (100% Discount - ${appliedPromoCode || "FREE"})`
     } else {
       const { data: pmData } = await serviceSupabase
         .from("payment_methods")
-        .select("category")
+        .select("category, is_enabled")
         .eq("name", transactionData.paymentMethod)
         .single()
-      if (pmData && (pmData as any).category) {
+
+      // SECURITY: Reject disabled payment methods server-side (prevents API bypass attacks)
+      if (!pmData) {
+        return { success: false, error: "Selected payment method is not available." }
+      }
+      if (!(pmData as any).is_enabled) {
+        return { success: false, error: "Selected payment method is currently unavailable. Please choose a different payment method." }
+      }
+      if ((pmData as any).category) {
         paymentCategory = (pmData as any).category
       }
       const isDynamic = paymentCategory === "nepalpay" || paymentCategory === "fonepay" || paymentCategory === "khalti"
@@ -501,32 +532,32 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         const { addCustomerToAudience } = await import("@/lib/email/resend")
         const isRegistered = !!actualUserId
         const customerName = isRegistered ? actualUserName : undefined
-        addCustomerToAudience(transactionData.email, customerName, isRegistered).catch(() => {})
+        addCustomerToAudience(transactionData.email, customerName, isRegistered).catch(() => { })
       } catch (audienceErr) {
         console.error("Resend audience sync error (non-blocking):", audienceErr)
       }
     }
 
     let paymentUrl: string | undefined = undefined
-    
+
     // For Khalti, we need to initiate the payment immediately and get the redirect URL
     if (paymentCategory === "khalti") {
       try {
         const { decryptBankCredentials } = await import("./payment-credentials")
         const credsRes = await serviceSupabase.from("payment_credentials").select("encrypted_username").eq("provider", "khalti").single() as any
-        
+
         if (credsRes.data && credsRes.data.encrypted_username) {
           const secretKey = (await decryptBankCredentials(credsRes.data.encrypted_username))?.trim()
           if (secretKey) {
             const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
             const isLive = secretKey.toLowerCase().startsWith("live_")
-            const url = isLive 
-              ? "https://khalti.com/api/v2/epayment/initiate/" 
+            const url = isLive
+              ? "https://khalti.com/api/v2/epayment/initiate/"
               : "https://dev.khalti.com/api/v2/epayment/initiate/";
-            
+
             // Amount must be in paisa (1 Rs = 100 paisa)
             const amountInPaisa = Math.round(parseFloat(verifiedPrice) * 100);
-            
+
             const payload = {
               return_url: `${siteUrl}/api/webhooks/khalti`,
               website_url: siteUrl,
@@ -555,7 +586,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
               })
               const text = await resp.text()
               let parsed: any = {}
-              try { parsed = JSON.parse(text) } catch {}
+              try { parsed = JSON.parse(text) } catch { }
               return { status: resp.status, ok: resp.ok, data: parsed, text }
             }
 
@@ -574,12 +605,12 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
             if (khaltiRes.ok && khaltiRes.data.payment_url) {
               paymentUrl = khaltiRes.data.payment_url
-              
+
               // Store pidx
               await serviceSupabase.from("transactions").update({
                 validation_trace_id: khaltiRes.data.pidx
               } as any).eq("transaction_id", transactionId)
-              
+
             } else {
               console.error("Khalti initiate failed:", khaltiRes.data)
               return { success: false, error: khaltiRes.data?.detail || "Khalti payment initiation failed" }
@@ -671,8 +702,8 @@ export async function retryKhaltiPaymentAction(transactionId: string): Promise<{
 
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
     const isLive = secretKey.toLowerCase().startsWith("live_")
-    const url = isLive 
-      ? "https://khalti.com/api/v2/epayment/initiate/" 
+    const url = isLive
+      ? "https://khalti.com/api/v2/epayment/initiate/"
       : "https://dev.khalti.com/api/v2/epayment/initiate/";
 
     const amountInPaisa = Math.round(parseFloat(txn.price) * 100)
@@ -703,7 +734,7 @@ export async function retryKhaltiPaymentAction(transactionId: string): Promise<{
       })
       const text = await resp.text()
       let parsed: any = {}
-      try { parsed = JSON.parse(text) } catch {}
+      try { parsed = JSON.parse(text) } catch { }
       return { status: resp.status, ok: resp.ok, data: parsed, text }
     }
 

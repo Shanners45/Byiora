@@ -23,6 +23,15 @@ function json429(message: string) {
   })
 }
 
+// ── Helper to preserve refreshed cookies across redirects ────────────────────
+function redirectWithCookies(destUrl: URL | string, sourceResponse: NextResponse) {
+  const redirectRes = NextResponse.redirect(destUrl)
+  sourceResponse.cookies.getAll().forEach((c) => {
+    redirectRes.cookies.set(c.name, c.value, c)
+  })
+  return redirectRes
+}
+
 // ── Main Middleware ──────────────────────────────────────────────────────────
 
 export async function updateSession(request: NextRequest) {
@@ -49,7 +58,8 @@ export async function updateSession(request: NextRequest) {
   const isApiRoute = pathname.startsWith("/api")
 
   if (!isMutation && !isAdminRoute && !isApiRoute) {
-    return await refreshSupabaseSession(request)
+    const { supabaseResponse } = await refreshSupabaseSession(request)
+    return supabaseResponse
   }
 
   // ── Admin subdomain rewrite ───────────────────────────────────────────
@@ -86,7 +96,8 @@ export async function updateSession(request: NextRequest) {
         }
       }
       // GET /admin/login always passes — no Upstash cost
-      return await refreshSupabaseSession(request)
+      const { supabaseResponse } = await refreshSupabaseSession(request)
+      return supabaseResponse
     }
 
     // ── Layer B: Admin Dashboard — only rate-limit mutations ───────────────
@@ -108,32 +119,18 @@ export async function updateSession(request: NextRequest) {
     }
 
     // ── Admin Auth Guard — require Supabase user for /admin/dashboard/* ────
-    const supabaseResponse = await refreshSupabaseSession(request)
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    )
-    const { data: { user } } = await supabase.auth.getUser()
+    const { supabaseResponse, user } = await refreshSupabaseSession(request)
 
     // If on admin subdomain root and logged in -> go to dashboard
     if (isAdminHost && pathname === "/" && user) {
       url.pathname = "/admin/dashboard"
-      return NextResponse.redirect(url)
+      return redirectWithCookies(url, supabaseResponse)
     }
 
     if (pathname.startsWith("/admin/dashboard") || (isAdminHost && pathname !== "/admin/login")) {
       if (!user) {
         url.pathname = "/admin/login"
-        return NextResponse.redirect(url)
+        return redirectWithCookies(url, supabaseResponse)
       }
 
       // SECURITY: Check if user is actually an active admin
@@ -142,9 +139,8 @@ export async function updateSession(request: NextRequest) {
         process.env.SUPABASE_SERVICE_ROLE_KEY!,
         {
           cookies: {
-            get() { return "" },
-            set() {},
-            remove() {},
+            getAll() { return [] },
+            setAll() {},
           },
         }
       )
@@ -157,7 +153,7 @@ export async function updateSession(request: NextRequest) {
 
       if (!adminUser || adminUser.status !== "active") {
         url.pathname = "/admin/login"
-        return NextResponse.redirect(url)
+        return redirectWithCookies(url, supabaseResponse)
       }
     }
 
@@ -192,13 +188,14 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next()
   }
 
-  return await refreshSupabaseSession(request)
+  const { supabaseResponse } = await refreshSupabaseSession(request)
+  return supabaseResponse
 }
 
 // ── Supabase Session Refresher ──────────────────────────────────────────────
 // Extracted to avoid duplicating the cookie-handling boilerplate.
 
-async function refreshSupabaseSession(request: NextRequest) {
+async function refreshSupabaseSession(request: NextRequest): Promise<{ supabaseResponse: NextResponse; user: any }> {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -210,7 +207,7 @@ async function refreshSupabaseSession(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           supabaseResponse = NextResponse.next({
             request,
           })
@@ -222,8 +219,16 @@ async function refreshSupabaseSession(request: NextRequest) {
     }
   )
 
-  // Refresh the session token if expired
-  await supabase.auth.getUser()
+  // Refresh the session token if expired and extract user safely
+  let user = null
+  try {
+    const { data, error } = await supabase.auth.getUser()
+    if (!error && data?.user) {
+      user = data.user
+    }
+  } catch {
+    user = null
+  }
 
-  return supabaseResponse
+  return { supabaseResponse, user }
 }

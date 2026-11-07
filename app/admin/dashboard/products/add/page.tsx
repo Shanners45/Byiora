@@ -541,7 +541,7 @@ export default function AddProductPage() {
                     placeholder="auto-generated-from-product-name"
                   />
                   <p className="text-xs text-[#4B5563]">
-                    URL: byiora.com.np/{category}/{slug || generateSlug(name) || 'product-slug'}
+                    URL: byiora.com.np/en-np/{slug || generateSlug(name) || 'product-slug'}
                   </p>
                 </div>
               </div>

@@ -475,6 +475,12 @@ export async function validatePromoCodeAction({
       return { valid: false, message: "Please sign in to use this promo code." }
     }
 
+    // ── CHECK 16: 100% Free promos strictly require an authenticated registered account ──
+    const isFullDiscountPreview = promo.discount_type === "percentage" ? parseFloat(promo.discount_value) >= 100 : parseFloat(promo.discount_value) >= actualPrice
+    if (isFullDiscountPreview && !userId) {
+      return { valid: false, message: "100% discount codes require signing in to your account." }
+    }
+
     // ── Calculate discount ──
     let discountAmount = 0
     if (promo.discount_type === "percentage") {
@@ -616,6 +622,10 @@ export async function applyPromoCodeServerSide({
 
     if (promo.registered_only && !userId) {
       return { success: false, discountAmount: 0, finalPrice: verifiedPrice, originalPrice: verifiedPrice, error: "Sign in required." }
+    }
+    const isFullDiscountServer = promo.discount_type === "percentage" ? parseFloat(promo.discount_value) >= 100 : parseFloat(promo.discount_value) >= verifiedPrice
+    if (isFullDiscountServer && !userId) {
+      return { success: false, discountAmount: 0, finalPrice: verifiedPrice, originalPrice: verifiedPrice, error: "100% discount codes require signing in to a registered account." }
     }
     if (promo.first_order_only) {
       let query = supabase

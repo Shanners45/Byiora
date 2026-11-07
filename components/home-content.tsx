@@ -79,7 +79,7 @@ export function HomeContent({ categories, banners }: HomeContentProps) {
               </div>
 
               {/* Product grid */}
-              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
+              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-4 md:gap-6">
                 {category.products
                   .slice(0, isExpanded ? undefined : maxVisible)
                   .map((card) => (

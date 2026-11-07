@@ -17,6 +17,7 @@ declare global {
         },
       ) => string
       reset: (widgetId?: string) => void
+      remove: (widgetId?: string) => void
     }
   }
 }
@@ -27,26 +28,50 @@ interface TurnstileWidgetProps {
 
 export function TurnstileWidget({ onToken }: TurnstileWidgetProps) {
   const ref = useRef<HTMLDivElement | null>(null)
+  const widgetIdRef = useRef<string | null>(null)
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
   const renderWidget = () => {
     if (typeof window !== "undefined" && window.turnstile && ref.current && siteKey) {
-      // Clear container before rendering to avoid duplicate widgets on re-mount
+      // Cleanly remove any existing widget before re-rendering
+      if (widgetIdRef.current) {
+        try {
+          window.turnstile.remove(widgetIdRef.current)
+        } catch {
+          // ignore if already removed
+        }
+        widgetIdRef.current = null
+      }
       ref.current.innerHTML = ""
-      window.turnstile.render(ref.current, {
-        sitekey: siteKey,
-        callback: (token: string) => onToken(token),
-        "expired-callback": () => onToken(""),
-        "error-callback": () => onToken(""),
-        theme: "auto",
-      })
+      try {
+        const id = window.turnstile.render(ref.current, {
+          sitekey: siteKey,
+          callback: (token: string) => onToken(token),
+          "expired-callback": () => onToken(""),
+          "error-callback": () => onToken(""),
+          theme: "auto",
+        })
+        widgetIdRef.current = id
+      } catch (err) {
+        // Suppress any render race condition errors in dev StrictMode
+      }
     }
   }
 
-  // Handle re-mounts if the script is already loaded
+  // Handle re-mounts if the script is already loaded and cleanup on unmount
   useEffect(() => {
     if (typeof window !== "undefined" && window.turnstile) {
       renderWidget()
+    }
+    return () => {
+      if (widgetIdRef.current && typeof window !== "undefined" && window.turnstile) {
+        try {
+          window.turnstile.remove(widgetIdRef.current)
+        } catch {
+          // ignore
+        }
+        widgetIdRef.current = null
+      }
     }
   }, [siteKey])
 

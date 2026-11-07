@@ -16,23 +16,28 @@ export type AdminSession = {
 }
 
 export async function getAdminSessionAction(): Promise<{ success: true; data: AdminSession } | { success: false; error: string }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: "Unauthorized" }
-  
-  // Use Service Role to bypass RLS for verification
-  // This is safe because we are searching by the verified user.id from auth.getUser()
-  const serviceSupabase = createServiceRoleClient()
-  const { data: adminUser, error } = await serviceSupabase
-    .from('admin_users')
-    .select('id, name, email, role, status')
-    .eq('id', user.id)
-    .single()
-  
-  if (error || !adminUser) return { success: false, error: "Forbidden" }
-  if (adminUser.status !== "active") return { success: false, error: "Blocked" }
+  try {
+    const supabase = await createClient()
+    const { data, error: userError } = await supabase.auth.getUser()
+    if (userError || !data?.user) return { success: false, error: "Unauthorized" }
+    const user = data.user
+    
+    // Use Service Role to bypass RLS for verification
+    // This is safe because we are searching by the verified user.id from auth.getUser()
+    const serviceSupabase = createServiceRoleClient()
+    const { data: adminUser, error } = await serviceSupabase
+      .from('admin_users')
+      .select('id, name, email, role, status')
+      .eq('id', user.id)
+      .single()
+    
+    if (error || !adminUser) return { success: false, error: "Forbidden" }
+    if (adminUser.status !== "active") return { success: false, error: "Blocked" }
 
-  return { success: true, data: adminUser as AdminSession }
+    return { success: true, data: adminUser as AdminSession }
+  } catch (err) {
+    return { success: false, error: "Unauthorized" }
+  }
 }
 
 export async function verifyAdmin(): Promise<boolean> {
