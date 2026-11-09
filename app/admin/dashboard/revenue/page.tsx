@@ -15,8 +15,7 @@ import {
   ResponsiveContainer,
   PieChart,
   Pie,
-  Cell,
-  Legend
+  Cell
 } from "recharts"
 
 const COLORS = ['#7E3AF2', '#10B981', '#F59E0B', '#3B82F6', '#EF4444', '#8B5CF6']
@@ -126,6 +125,7 @@ export default function RevenuePage() {
         date: `${day} ${months[month].substring(0, 3)}`,
         dayNum: day,
         revenue: 0,
+        refunds: 0,
       }
     })
 
@@ -139,8 +139,16 @@ export default function RevenuePage() {
       }
     })
 
+    refundedTransactions.forEach(t => {
+      const date = new Date(t.created_at)
+      const day = date.getDate()
+      if (day >= 1 && day <= daysInMonth) {
+        dailyData[day - 1].refunds += getRefundAmount(t)
+      }
+    })
+
     return dailyData
-  }, [completedTransactions, selectedMonth, selectedYear])
+  }, [completedTransactions, refundedTransactions, selectedMonth, selectedYear])
 
   // 2. Payment Methods Split
   const paymentMethodData = useMemo(() => {
@@ -319,12 +327,26 @@ export default function RevenuePage() {
                   </div>
                   <div>
                     <CardTitle className="text-lg text-[#1F2937]">Revenue Trend</CardTitle>
-                    <CardDescription className="text-[#92400E]">Daily revenue for the selected month</CardDescription>
+                    <CardDescription className="text-[#92400E]">
+                      {totalRefunded > 0 ? "Daily revenue and refunds for the selected month" : "Daily revenue for the selected month"}
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="p-6">
                 <div className="bg-white p-4 rounded-lg border border-[#F59E0B]/20 shadow-inner">
+                  <div className="flex items-center justify-end gap-4 pb-2 text-[11px] font-semibold text-[#4B5563]">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-[#7E3AF2]" />
+                      Revenue
+                    </span>
+                    {totalRefunded > 0 && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-0.5 w-4 rounded bg-[#EF4444]" />
+                        Refunds
+                      </span>
+                    )}
+                  </div>
                   <div className="h-[300px] w-full">
                     {isMounted && (
                       <ResponsiveContainer width="100%" height="100%">
@@ -353,9 +375,9 @@ export default function RevenuePage() {
                           />
                           <Tooltip
                             contentStyle={{ borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: '#ffffff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                            formatter={(value) => {
+                            formatter={(value, name) => {
                               const n = typeof value === "number" ? value : Number(value ?? 0)
-                              return [`Rs. ${n.toLocaleString()}`, 'Revenue']
+                              return [`Rs. ${n.toLocaleString()}`, name === "refunds" ? "Refunds" : "Revenue"]
                             }}
                             labelStyle={{ fontWeight: 'bold', color: '#1F2937', marginBottom: '4px' }}
                           />
@@ -367,6 +389,16 @@ export default function RevenuePage() {
                             fillOpacity={1}
                             fill="url(#colorRevenue)"
                           />
+                          {totalRefunded > 0 && (
+                            <Area
+                              type="monotone"
+                              dataKey="refunds"
+                              stroke="#EF4444"
+                              strokeWidth={2}
+                              strokeDasharray="6 4"
+                              fill="transparent"
+                            />
+                          )}
                         </AreaChart>
                       </ResponsiveContainer>
                     )}
@@ -391,34 +423,46 @@ export default function RevenuePage() {
               <CardContent className="p-6">
                 <div className="bg-white p-4 rounded-lg border border-[#F59E0B]/20 shadow-inner">
                   {paymentMethodData.length > 0 ? (
-                    <div className="h-[300px] w-full flex flex-col items-center justify-center">
-                      {isMounted && (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie
-                              data={paymentMethodData}
-                              cx="50%"
-                              cy="45%"
-                              innerRadius={60}
-                              outerRadius={90}
-                              paddingAngle={5}
-                              dataKey="value"
-                            >
-                              {paymentMethodData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip
-                              formatter={(value) => {
-                                const n = typeof value === "number" ? value : Number(value ?? 0)
-                                return [`Rs. ${n.toLocaleString()}`, 'Revenue']
-                              }}
-                              contentStyle={{ borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: '#ffffff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    <div className="h-[320px] w-full flex flex-col">
+                      <div className="flex-1 min-h-0">
+                        {isMounted && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={paymentMethodData}
+                                cx="50%"
+                                cy="48%"
+                                innerRadius={55}
+                                outerRadius={85}
+                                paddingAngle={5}
+                                dataKey="value"
+                              >
+                                {paymentMethodData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                formatter={(value) => {
+                                  const n = typeof value === "number" ? value : Number(value ?? 0)
+                                  return [`Rs. ${n.toLocaleString()}`, 'Revenue']
+                                }}
+                                contentStyle={{ borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: '#ffffff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                      <div className="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1.5 px-1 max-h-[104px] overflow-y-auto">
+                        {paymentMethodData.map((entry, index) => (
+                          <div key={entry.name} className="flex items-start gap-1.5 min-w-0 max-w-full text-[11px] sm:text-xs">
+                            <span
+                              className="mt-1 h-2 w-2 shrink-0 rounded-full"
+                              style={{ backgroundColor: COLORS[index % COLORS.length] }}
                             />
-                            <Legend verticalAlign="bottom" height={36} iconType="circle" />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      )}
+                            <span className="text-[#4B5563] font-medium break-words leading-snug">{entry.name}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   ) : (
                     <div className="h-[300px] flex flex-col items-center justify-center text-gray-400">

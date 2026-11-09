@@ -38,24 +38,37 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     if (!currentUserId) return
 
     try {
-      // Load notifications for this user and broadcast notifications (userId is null)
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .or(`user_id.eq.${currentUserId},user_id.is.null`)
-        .order("created_at", { ascending: false })
+      // Load notifications for this user and broadcast notifications (userId is null).
+      // Read state is per-user via notification_reads receipts, because broadcast rows
+      // are shared across every user and cannot carry a single read flag.
+      const [{ data, error }, { data: reads, error: readsError }] = await Promise.all([
+        supabase
+          .from("notifications")
+          .select("*")
+          .or(`user_id.eq.${currentUserId},user_id.is.null`)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("notification_reads")
+          .select("notification_id"),
+      ])
 
       if (error) {
         console.error("Error loading notifications:", error)
         return
       }
 
+      if (readsError) {
+        console.error("Error loading notification read receipts:", readsError)
+      }
+
+      const readIds = new Set((reads || []).map((r: any) => r.notification_id))
+
       const formattedNotifications = data.map((notif: any) => ({
         id: notif.id,
         title: notif.title,
         message: notif.message,
         type: notif.type,
-        isRead: notif.is_read,
+        isRead: readIds.has(notif.id) || (notif.user_id === currentUserId && notif.is_read),
         createdAt: notif.created_at,
         userId: notif.user_id,
       }))
@@ -77,9 +90,16 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const markAsRead = useCallback(async (id: string) => {
+    if (!currentUserId) return
+
     try {
-      // Update in database
-      const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", id)
+      // Insert a per-user read receipt (idempotent)
+      const { error } = await supabase
+        .from("notification_reads")
+        .upsert(
+          { user_id: currentUserId, notification_id: id },
+          { onConflict: "user_id,notification_id", ignoreDuplicates: true }
+        )
 
       if (error) {
         console.error("Error marking notification as read:", error)
@@ -93,18 +113,22 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error marking notification as read:", error)
     }
-  }, [])
+  }, [currentUserId])
 
   const markAllAsRead = useCallback(async () => {
     if (!currentUserId) return
 
     try {
-      // Update all notifications for this user in database
+      const unreadIds = notifications.filter((notification) => !notification.isRead).map((notification) => notification.id)
+      if (unreadIds.length === 0) return
+
+      // One receipt per unread notification for this user
       const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .or(`user_id.eq.${currentUserId},user_id.is.null`)
-        .eq("is_read", false)
+        .from("notification_reads")
+        .upsert(
+          unreadIds.map((id) => ({ user_id: currentUserId, notification_id: id })),
+          { onConflict: "user_id,notification_id", ignoreDuplicates: true }
+        )
 
       if (error) {
         console.error("Error marking all notifications as read:", error)
@@ -116,7 +140,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Error marking all notifications as read:", error)
     }
-  }, [currentUserId])
+  }, [currentUserId, notifications])
 
   const sendNotification = useCallback(
     async (notification: Omit<Notification, "id" | "createdAt" | "isRead">) => {

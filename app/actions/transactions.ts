@@ -520,8 +520,8 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         serviceSupabase
           .from("notifications")
           .insert({
-            title: "Order Placed Successfully! 🎉",
-            message: `Your order for ${transactionData.product} (${transactionData.amount}) has been placed and is being processed.`,
+            title: "Order Confirmed! 🎉",
+            message: `Your order for ${transactionData.product} (${transactionData.amount}) has been confirmed. You can track its status in your transaction history.`,
             type: "success",
             user_id: actualUserId,
             is_read: false,

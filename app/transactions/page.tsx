@@ -444,12 +444,12 @@ export default function TransactionsPage() {
                 </div>
 
                 {transaction.giftcard_code && transaction.status.toLowerCase() === "completed" && (
-                  <div className="bg-[#FFFBEB] border border-[#FEF3C7] rounded-lg px-4 py-3 w-fit">
-                    <div className="flex items-center gap-2">
-                      <Gift className="h-4 w-4 text-[#F59E0B] flex-shrink-0" />
-                      <span className="text-sm font-semibold text-[#92400E] whitespace-nowrap">Giftcode:</span>
-                      <div className="flex items-center gap-1 bg-white border border-[#FEF3C7] rounded px-2 py-1">
-                        <code className="text-[#D97706] font-mono font-bold tracking-wider text-sm">
+                  <div className="bg-[#FFFBEB] border border-[#FEF3C7] rounded-lg px-4 py-3 w-full max-w-full">
+                    <div className="flex items-start gap-2">
+                      <Gift className="h-4 w-4 text-[#F59E0B] flex-shrink-0 mt-0.5" />
+                      <span className="text-sm font-semibold text-[#92400E] whitespace-nowrap mt-0.5">Giftcode:</span>
+                      <div className="flex items-center gap-1 bg-white border border-[#FEF3C7] rounded px-2 py-1 min-w-0 flex-1 sm:flex-none sm:max-w-full">
+                        <code className="text-[#D97706] font-mono font-bold tracking-wider text-xs sm:text-sm break-all min-w-0">
                           {revealedCodes[transaction.id] ? transaction.giftcard_code : "••••  ••••  ••••"}
                         </code>
                         <button

@@ -199,15 +199,15 @@ export async function fulfillOrderDirectly({
       try {
         const notifTitle = decryptedCode
           ? "Order Completed! 🎉"
-          : "Payment Verified ✅"
+          : "Order Confirmed! 🎉"
         const notifMessage = decryptedCode
           ? `Your order for ${txn.product_name} (${txn.amount}) is complete! Check your email or transaction history for your gift card code.`
-          : `Your payment for ${txn.product_name} (${txn.amount}) has been verified and is being processed. You'll be notified once your order is ready.`
+          : `Your order for ${txn.product_name} (${txn.amount}) has been confirmed. You can track its status in your transaction history.`
 
         await supabase.from("notifications").insert({
           title: notifTitle,
           message: notifMessage,
-          type: decryptedCode ? "success" : "info",
+          type: "success",
           user_id: txn.user_id,
           is_read: false,
         })

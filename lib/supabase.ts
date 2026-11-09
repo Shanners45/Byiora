@@ -382,6 +382,25 @@ export interface Database {
         Relationships: []
       }
 
+      notification_reads: {
+        Row: {
+          user_id: string
+          notification_id: string
+          read_at: string
+        }
+        Insert: {
+          user_id: string
+          notification_id: string
+          read_at?: string
+        }
+        Update: {
+          user_id?: string
+          notification_id?: string
+          read_at?: string
+        }
+        Relationships: []
+      }
+
       gift_card_inventory: {
         Row: {
           id: string
