@@ -1,18 +1,19 @@
-"use server"
-
 /**
- * Fetches the "last seen" timestamp for identified PostHog persons.
+ * Server-only PostHog last-active lookup.
  *
- * Uses the PostHog Persons API with the personal API key to query
- * person records by their `distinct_id` (which we set to the Supabase
- * user UUID in the client-side `posthog.identify()` call).
- *
- * Returns a Map<email, lastActiveISO> that the customers action can merge.
+ * IMPORTANT: This module must NOT have the "use server" directive. It holds
+ * POSTHOG_PERSONAL_API_KEY and returns data for every customer, so exposing
+ * these functions as Server Actions would leak the full customer activity
+ * graph to any client. Only trusted server code (admin-gated actions) may
+ * import this module.
  */
 
 const POSTHOG_HOST = "https://us.posthog.com" // API host (not the ingestion proxy host)
 const PROJECT_ID = process.env.POSTHOG_PROJECT_ID
 const API_KEY = process.env.POSTHOG_PERSONAL_API_KEY
+
+const CACHE_TTL_MS = 5 * 60 * 1000
+let cachedResult: { at: number; data: Map<string, string> } | null = null
 
 interface PostHogPerson {
   id: number
@@ -34,6 +35,10 @@ interface PostHogPersonsResponse {
  * cap at 2000 persons to avoid runaway queries.
  */
 export async function getPostHogLastActive(): Promise<Map<string, string>> {
+  if (cachedResult && Date.now() - cachedResult.at < CACHE_TTL_MS) {
+    return cachedResult.data
+  }
+
   const emailToLastSeen = new Map<string, string>()
 
   if (!PROJECT_ID || !API_KEY) {
@@ -93,5 +98,6 @@ export async function getPostHogLastActive(): Promise<Map<string, string>> {
     console.error("[PostHog] Error fetching persons for last-active:", err)
   }
 
+  cachedResult = { at: Date.now(), data: emailToLastSeen }
   return emailToLastSeen
 }

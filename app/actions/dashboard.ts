@@ -183,7 +183,7 @@ export async function getAllTransactionsAction(options?: GetAllTransactionsOptio
 
     if (paidKhaltiTxns.length > 0) {
       try {
-        const { decryptBankCredentials } = await import("./payment-credentials")
+        const { decryptBankCredentials } = await import("@/lib/crypto/bank")
         const credsRes = await serviceSupabase
           .from("payment_credentials")
           .select("encrypted_username")

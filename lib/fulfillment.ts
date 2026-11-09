@@ -105,7 +105,7 @@ export async function fulfillOrderDirectly({
 
     // Industry Standard: Reclaim promo code usage if this was a recovered order
     if (txn.promo_code) {
-      const { reclaimPromoCodeOnRecovery } = await import("@/app/actions/promo-codes")
+      const { reclaimPromoCodeOnRecovery } = await import("@/lib/promo/internal")
       reclaimPromoCodeOnRecovery(transactionId).catch(() => {})
     }
 

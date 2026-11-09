@@ -15,7 +15,7 @@ import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { Save, User, Lock, QrCode, CreditCard, Upload, Plus, Pencil, Trash2, X, Check, ArrowUp, ArrowDown } from "lucide-react"
 import Image from "next/image"
-import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
+import { getAdminSessionAction, updateOwnAdminNameAction, type AdminSession } from "@/app/actions/admin-utils"
 import { createPaymentMethodAction, deletePaymentMethodAction, getPaymentMethodsAction, updatePaymentMethodAction, toggleExclusiveAction, type PaymentMethodRow } from "@/app/actions/payment-methods"
 import { getPaymentCredentialsAction, savePaymentCredentialsAction } from "@/app/actions/payment-credentials"
 
@@ -175,10 +175,10 @@ export default function AdminSettingsPage() {
 
     setIsUpdatingProfile(true)
     try {
-      const { error } = await supabase.from("admin_users").update({ name }).eq("id", adminUser.id)
+      const res = await updateOwnAdminNameAction(name)
 
-      if (error) {
-        toast.error("Failed to update profile")
+      if (!res.success) {
+        toast.error(res.error || "Failed to update profile")
         return
       }
 

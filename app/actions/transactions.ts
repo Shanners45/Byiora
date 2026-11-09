@@ -73,6 +73,57 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
     const deviceId = transactionData.guestData?.deviceId || null
 
+    // SECURITY: Resolve the authenticated user from the server session before
+    // any authorization decision. NEVER trust a client-supplied userId — it can
+    // be forged to satisfy registered_only / per-user promo rules, skew rate
+    // limits, and impersonate another account.
+    const sessionSupabase = createServiceRoleClient()
+    let sessionUserId: string | null = null
+    let actualUserId: string | null = null
+    let actualUserName: string | undefined = undefined
+
+    const { createClient } = await import("@/lib/supabase/server")
+    const userSupabase = await createClient()
+    const { data: { user: sessionUser } } = await userSupabase.auth.getUser()
+
+    if (sessionUser) {
+      sessionUserId = sessionUser.id
+      actualUserId = sessionUser.id
+      const { data: userData } = await sessionSupabase
+        .from("users")
+        .select("name")
+        .eq("id", sessionUser.id)
+        .single()
+      if (userData?.name) {
+        actualUserName = userData.name
+      }
+    } else if (transactionData.email) {
+      // Guest checkout: attribute the order to a matching registered account
+      // (transactions.user_id has a FK to auth.users), but this does NOT grant
+      // session-level privileges.
+      const cleanGuestEmail = transactionData.email.trim().toLowerCase()
+      try {
+        const { data: matchedUser } = await sessionSupabase
+          .from("users")
+          .select("id, name")
+          .eq("email", cleanGuestEmail)
+          .maybeSingle()
+
+        if (matchedUser?.id) {
+          const { data: authCheck } = await sessionSupabase.auth.admin.getUserById(matchedUser.id)
+          if (authCheck?.user) {
+            actualUserId = matchedUser.id
+            if (matchedUser.name) {
+              actualUserName = matchedUser.name
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("[Checkout] Could not link guest checkout to auth user:", e)
+        actualUserId = null
+      }
+    }
+
     // ── LAYER 1: Disposable / Burner Email Domain Filter ──
     if (cleanEmail && isDisposableEmail(cleanEmail)) {
       return {
@@ -139,7 +190,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
     // SECURITY: Per-IP rate limiting with trust tiers
     // Trusted buyers (have completed a payment before) get 10 orders/10min, others get 5
-    const trusted = await isTrustedBuyer({ userId: transactionData.userId, ip })
+    const trusted = await isTrustedBuyer({ userId: sessionUserId, ip })
     const orderLimit = trusted ? 10 : 5
     const rl = await rateLimit(`order:${ip}`, { windowMs: 600_000, max: orderLimit })
     if (!rl.ok) {
@@ -149,8 +200,8 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     }
 
     // SECURITY: Per-user daily limit (30 orders per day for logged-in users)
-    if (transactionData.userId) {
-      const userRl = await rateLimit(`order-user:${transactionData.userId}`, { windowMs: 86_400_000, max: 30 })
+    if (sessionUserId) {
+      const userRl = await rateLimit(`order-user:${sessionUserId}`, { windowMs: 86_400_000, max: 30 })
       if (!userRl.ok) {
         return { success: false, error: "Something went wrong. Please try again later." }
       }
@@ -250,14 +301,14 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     let appliedPromoCode: string | null = null
 
     if (transactionData.promoCode && transactionData.promoCode.trim()) {
-      const { applyPromoCodeServerSide } = await import("@/app/actions/promo-codes")
+      const { applyPromoCodeServerSide } = await import("@/lib/promo/internal")
       const promoResult = await applyPromoCodeServerSide({
         code: transactionData.promoCode,
         productId: productId,
         productCategory: transactionData.productCategory || "",
         denominationLabel: transactionData.amount,
         email: transactionData.email,
-        userId: transactionData.userId,
+        userId: sessionUserId,
         deviceId: deviceId,
         ip: ip,
         transactionId: transactionId,
@@ -274,52 +325,6 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       // If promo fails, silently proceed with original price (don't block the order)
     }
 
-    // SECURITY: Authenticate userId strictly from server-side session to prevent user enumeration & impersonation
-    let actualUserId: string | null = null
-    let actualUserName: string | undefined = undefined
-
-    const { createClient } = await import("@/lib/supabase/server")
-    const userSupabase = await createClient()
-    const { data: { user: sessionUser } } = await userSupabase.auth.getUser()
-
-    if (sessionUser) {
-      actualUserId = sessionUser.id
-      const { data: userData } = await serviceSupabase
-        .from("users")
-        .select("name")
-        .eq("id", sessionUser.id)
-        .single()
-      if (userData?.name) {
-        actualUserName = userData.name
-      }
-    } else if (transactionData.email) {
-      // Guest checkout: Check if the email belongs to a registered user
-      // Note: transactions.user_id has a foreign key referencing auth.users(id).
-      // We only assign actualUserId if verified to exist in auth.users, otherwise transactions_user_id_fkey fails!
-      const cleanEmail = transactionData.email.trim().toLowerCase()
-      try {
-        const { data: matchedUser } = await serviceSupabase
-          .from("users")
-          .select("id, name")
-          .eq("email", cleanEmail)
-          .maybeSingle()
-
-        if (matchedUser?.id) {
-          // Check if this ID exists in auth.users
-          const { data: authCheck } = await serviceSupabase.auth.admin.getUserById(matchedUser.id)
-          if (authCheck?.user) {
-            actualUserId = matchedUser.id
-            if (matchedUser.name) {
-              actualUserName = matchedUser.name
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("[Checkout] Could not link guest checkout to auth user:", e)
-        actualUserId = null
-      }
-    }
-
     // Look up the payment method category from the database
     const isFreeOrder = parseFloat(verifiedPrice) <= 0
     let paymentCategory = "static"
@@ -327,7 +332,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
     if (isFreeOrder) {
       // SECURITY GUARD 1: 100% Free orders CANNOT be placed anonymously via guest checkout
-      if (!actualUserId) {
+      if (!sessionUserId) {
         return {
           success: false,
           error: "Free promotional orders require you to be signed in to your Byiora account.",
@@ -543,7 +548,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     // For Khalti, we need to initiate the payment immediately and get the redirect URL
     if (paymentCategory === "khalti") {
       try {
-        const { decryptBankCredentials } = await import("./payment-credentials")
+        const { decryptBankCredentials } = await import("@/lib/crypto/bank")
         const credsRes = await serviceSupabase.from("payment_credentials").select("encrypted_username").eq("provider", "khalti").single() as any
 
         if (credsRes.data && credsRes.data.encrypted_username) {
@@ -688,7 +693,7 @@ export async function retryKhaltiPaymentAction(transactionId: string): Promise<{
     }
 
     // 3. Initiate Khalti payment session
-    const { decryptBankCredentials } = await import("./payment-credentials")
+    const { decryptBankCredentials } = await import("@/lib/crypto/bank")
     const credsRes = await serviceSupabase.from("payment_credentials").select("encrypted_username").eq("provider", "khalti").single() as any
 
     if (!credsRes.data || !credsRes.data.encrypted_username) {

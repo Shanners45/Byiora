@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation"
-import { verifyGuestVerificationToken } from "@/app/actions/checkout-encryption"
+import { verifyGuestVerificationToken } from "@/lib/crypto/guest-token"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"

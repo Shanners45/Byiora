@@ -54,3 +54,26 @@ export async function verifySuperAdmin(): Promise<boolean> {
   return result.success && result.data.role === "admin"
 }
 
+/**
+ * Allows the signed-in admin to update ONLY their own display name.
+ * Role/status changes remain super-admin-only via admin-users.ts.
+ */
+export async function updateOwnAdminNameAction(name: string): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSessionAction()
+  if (!session.success) return { success: false, error: "Unauthorized" }
+
+  const cleanName = name?.trim()
+  if (!cleanName || cleanName.length < 2 || cleanName.length > 80) {
+    return { success: false, error: "Name must be between 2 and 80 characters." }
+  }
+
+  const supabase = createServiceRoleClient()
+  const { error } = await supabase
+    .from("admin_users")
+    .update({ name: cleanName, updated_at: new Date().toISOString() })
+    .eq("id", session.data.id)
+
+  if (error) return { success: false, error: error.message }
+  return { success: true }
+}
+

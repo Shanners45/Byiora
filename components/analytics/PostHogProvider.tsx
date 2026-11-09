@@ -3,6 +3,10 @@
 import { useEffect } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
 import { initPostHog, posthog } from "@/lib/analytics/posthog"
+import { touchLastActiveAction } from "@/app/actions/activity"
+
+let lastHeartbeatAt = 0
+const HEARTBEAT_INTERVAL_MS = 60_000
 
 /**
  * PostHogProvider
@@ -18,6 +22,28 @@ export function PostHogProvider() {
   // Initialise once
   useEffect(() => {
     initPostHog()
+  }, [])
+
+  // Server-side activity heartbeat (works even when PostHog is not configured).
+  // Beats on mount, then every minute while the tab is visible so an idle
+  // reader still shows as active in the admin dashboard.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    const beat = () => {
+      if (document.visibilityState !== "visible") return
+      if (Date.now() - lastHeartbeatAt < HEARTBEAT_INTERVAL_MS) return
+      lastHeartbeatAt = Date.now()
+      touchLastActiveAction().catch(() => {})
+    }
+
+    beat()
+    const interval = window.setInterval(beat, HEARTBEAT_INTERVAL_MS)
+    document.addEventListener("visibilitychange", beat)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener("visibilitychange", beat)
+    }
   }, [])
 
   // Fire $pageview on route change

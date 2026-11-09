@@ -26,6 +26,7 @@ export interface CustomerProfile {
   lastIp?: string | null
   lastDeviceId?: string | null
   lastSignInAt?: string | null
+  lastActiveAt?: string | null // Server-recorded activity heartbeat
   isBanned: boolean
   banReason?: string | null
   banId?: string | null
@@ -58,7 +59,7 @@ export async function getCustomersOverviewAction(): Promise<{
     // 1. Fetch registered users from public.users & Supabase Auth for last_sign_in_at
     const { data: registeredUsers, error: usersErr } = await supabase
       .from("users")
-      .select("id, email, name, created_at, signup_ip, last_ip, last_device_id")
+      .select("id, email, name, created_at, signup_ip, last_ip, last_device_id, last_active_at")
 
     if (usersErr) {
       console.error("Error fetching registered users:", usersErr)
@@ -140,6 +141,7 @@ export async function getCustomersOverviewAction(): Promise<{
         lastIp: userIp,
         lastDeviceId: userDeviceId,
         lastSignInAt: authUser?.last_sign_in_at || null,
+        lastActiveAt: (u as any).last_active_at || null,
         isBanned: !!directBan || domainBan,
         banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
         banId: directBan?.id || null,
@@ -180,6 +182,7 @@ export async function getCustomersOverviewAction(): Promise<{
             lastIp: userIp,
             lastDeviceId: userDeviceId,
             lastSignInAt: au.last_sign_in_at || null,
+            lastActiveAt: null,
             isBanned: !!directBan || domainBan,
             banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
             banId: directBan?.id || null,
@@ -225,6 +228,7 @@ export async function getCustomersOverviewAction(): Promise<{
           lastIp: (t.guest_user_data as any)?.ip || null,
           lastDeviceId: (t.guest_user_data as any)?.deviceId || null,
           lastSignInAt: authUser?.last_sign_in_at || null,
+          lastActiveAt: null,
           isBanned: !!directBan || domainBan,
           banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
           banId: directBan?.id || null,
@@ -289,7 +293,9 @@ export async function getCustomersOverviewAction(): Promise<{
       const posthogLastSeen = await getPostHogLastActive()
       for (const profile of customerMap.values()) {
         const phTimestamp = posthogLastSeen.get(profile.email)
-        if (phTimestamp) {
+        if (!phTimestamp) continue
+        // Keep whichever signal is more recent between the DB heartbeat and PostHog
+        if (!profile.lastActiveAt || new Date(phTimestamp) > new Date(profile.lastActiveAt)) {
           profile.posthogLastSeen = phTimestamp
         }
       }

@@ -55,10 +55,10 @@ export async function updateTransactionStatusAction(
 
     // Industry Standard: Release promo on failure/cancellation/refund, or reclaim on completion
     if (["Cancelled", "Payment Failed", "Refunded"].includes(newStatus)) {
-      const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+      const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
       releasePromoCodeOnFailure(transactionId).catch(() => {})
     } else if (newStatus === "Completed" || newStatus === "Paid") {
-      const { reclaimPromoCodeOnRecovery } = await import("@/app/actions/promo-codes")
+      const { reclaimPromoCodeOnRecovery } = await import("@/lib/promo/internal")
       reclaimPromoCodeOnRecovery(transactionId).catch(() => {})
     }
 
@@ -370,7 +370,7 @@ export async function sendRecoveryEmailAction(transactionId: string) {
     }
 
     const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
-    const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
+    const { generateGuestVerificationToken } = await import("@/lib/crypto/guest-token")
 
     let customMsg = `Your order for <strong>${txn.product_name} (${txn.amount})</strong> was cancelled or marked as failed.`
     let actionBtn: { label: string; url: string; subtext?: string } | undefined = undefined
@@ -446,7 +446,7 @@ export async function refundKhaltiTransactionAction(
     let bankTxnId = txn.bank_txn_id
 
     // 2. Fetch Khalti credentials
-    const { decryptBankCredentials } = await import("./payment-credentials")
+    const { decryptBankCredentials } = await import("@/lib/crypto/bank")
     const credsRes = await serviceSupabase
       .from("payment_credentials")
       .select("encrypted_username")

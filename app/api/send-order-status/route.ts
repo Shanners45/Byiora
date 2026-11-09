@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
     if (isGuest && isDynamic && transactionId && !magicLinkToken) {
       try {
-        const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
+        const { generateGuestVerificationToken } = await import("@/lib/crypto/guest-token")
         const rawToken = await generateGuestVerificationToken(transactionId)
         magicLinkToken = encodeURIComponent(rawToken)
       } catch (err) {

@@ -144,6 +144,12 @@ export async function verifySignupOtp(email: string, token: string, deviceId?: s
   const h = await headers()
   const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() || h.get("x-real-ip")?.trim() || null
 
+  // SECURITY: rate limit OTP verification attempts (10 per 15 min per email)
+  const otpRl = await rateLimit(`verify-signup-otp:${email.toLowerCase().trim()}`, { windowMs: 900_000, max: 10 })
+  if (!otpRl.ok) {
+    return { error: "Too many verification attempts. Please wait a few minutes and try again." }
+  }
+
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.verifyOtp({
@@ -280,6 +286,12 @@ export async function verifyRecoveryAndResetPassword(
   }
   if (!newPassword || newPassword.length < 8) {
     return { error: "Password must be at least 8 characters long" }
+  }
+
+  // SECURITY: rate limit recovery OTP attempts (10 per 15 min per email)
+  const recoveryRl = await rateLimit(`verify-recovery-otp:${email.toLowerCase().trim()}`, { windowMs: 900_000, max: 10 })
+  if (!recoveryRl.ok) {
+    return { error: "Too many verification attempts. Please wait a few minutes and try again." }
   }
 
   const supabase = await createClient()

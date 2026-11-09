@@ -599,6 +599,21 @@ export default function CustomersAndSecurityPage() {
   const totalBlacklistPages = Math.ceil(filteredBans.length / pageSize) || 1
   const paginatedBans = filteredBans.slice((blacklistPage - 1) * pageSize, blacklistPage * pageSize)
 
+  // Resolve the customer profile behind a blacklist rule so the Security tab
+  // can show the same last-active signal as the Customers tab.
+  const findBanCustomer = (ban: { type: string; target: string; associatedEmail?: string }) => {
+    const target = ban.target.toLowerCase().trim()
+    if (ban.type === "email") return customers.find((c) => c.email.toLowerCase().trim() === target)
+    if (ban.type === "ip") return customers.find((c) => c.lastIp === ban.target)
+    if (ban.type === "device_id") return customers.find((c) => c.lastDeviceId === ban.target)
+    if (ban.type === "email_domain") {
+      const domain = target.replace(/^@/, "")
+      return customers.find((c) => c.email.toLowerCase().endsWith(`@${domain}`))
+    }
+    if (ban.associatedEmail) return customers.find((c) => c.email.toLowerCase().trim() === ban.associatedEmail!.toLowerCase().trim())
+    return undefined
+  }
+
   const filteredTickets = tickets.filter((t) => {
     if (ticketStatusFilter === "all") return true
     return t.status === ticketStatusFilter
@@ -1095,6 +1110,7 @@ export default function CustomersAndSecurityPage() {
                               // 4. Account creation date
                               const bestTimestamp =
                                 cust.posthogLastSeen ||
+                                cust.lastActiveAt ||
                                 cust.lastSignInAt ||
                                 cust.lastOrderDate ||
                                 cust.createdAt
@@ -1117,8 +1133,8 @@ export default function CustomersAndSecurityPage() {
                               else if (diffDays < 30) relativeLabel = `${Math.floor(diffDays / 7)}w ago`
                               else relativeLabel = lastDate.toLocaleDateString()
 
-                              // Online: active within 15 minutes (PostHog-sourced only)
-                              const isOnline = cust.posthogLastSeen && diffMins < 15
+                              // Online: active within 15 minutes (PostHog or DB heartbeat)
+                              const isOnline = Boolean((cust.posthogLastSeen || cust.lastActiveAt) && diffMins < 15)
 
                               return (
                                 <div className="flex flex-col gap-0.5" title={lastDate.toLocaleString()}>
@@ -1135,6 +1151,8 @@ export default function CustomersAndSecurityPage() {
                                   </div>
                                   {cust.posthogLastSeen ? (
                                     <span className="text-[10px] text-emerald-600/80 font-medium">via PostHog</span>
+                                  ) : cust.lastActiveAt ? (
+                                    <span className="text-[10px] text-emerald-600/80 font-medium">live activity</span>
                                   ) : cust.lastSignInAt ? (
                                     <span className="text-[10px] text-[#92400E]/70 font-medium">last sign-in</span>
                                   ) : (
@@ -1285,13 +1303,14 @@ export default function CustomersAndSecurityPage() {
                       <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5">Reason</TableHead>
                       <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap">Duration / Expiry</TableHead>
                       <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap">Date Added</TableHead>
+                      <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap">Last Active</TableHead>
                       <TableHead className="text-[#1F2937] font-bold text-xs uppercase tracking-wider py-3.5 whitespace-nowrap text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedBans.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-10 text-[#4B5563] font-medium">
+                        <TableCell colSpan={6} className="text-center py-10 text-[#4B5563] font-medium">
                           No active blacklist rules. Add a rule above to block malicious actors.
                         </TableCell>
                       </TableRow>
@@ -1364,6 +1383,37 @@ export default function CustomersAndSecurityPage() {
                             <span className="text-xs text-[#4B5563] font-medium">
                               {new Date(ban.created_at).toLocaleDateString()}
                             </span>
+                          </TableCell>
+                          <TableCell className="py-3.5 whitespace-nowrap">
+                            {(() => {
+                              const c = findBanCustomer(ban)
+                              const ts = c
+                                ? c.posthogLastSeen || c.lastActiveAt || c.lastSignInAt || c.lastOrderDate || c.createdAt
+                                : null
+                              if (!ts) return <span className="text-xs text-gray-400">—</span>
+                              const d = new Date(ts)
+                              const diff = Math.floor((Date.now() - d.getTime()) / 60000)
+                              const online = Boolean((c?.posthogLastSeen || c?.lastActiveAt) && diff < 15)
+                              let label: string
+                              if (diff < 1) label = "Just now"
+                              else if (diff < 60) label = `${diff}m ago`
+                              else if (diff < 1440) label = `${Math.floor(diff / 60)}h ago`
+                              else if (diff < 10080) label = `${Math.floor(diff / 1440)}d ago`
+                              else label = d.toLocaleDateString()
+                              return (
+                                <div className="flex items-center gap-1.5" title={d.toLocaleString()}>
+                                  {online && (
+                                    <span className="relative flex h-2 w-2 shrink-0">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                    </span>
+                                  )}
+                                  <span className={`text-xs font-semibold ${online ? "text-emerald-700" : "text-[#111827]"}`}>
+                                    {label}
+                                  </span>
+                                </div>
+                              )
+                            })()}
                           </TableCell>
                           <TableCell className="text-right py-3.5 whitespace-nowrap">
                             <Button
@@ -1580,6 +1630,7 @@ export default function CustomersAndSecurityPage() {
                     {(() => {
                       const bestTs =
                         selectedCustomer.posthogLastSeen ||
+                        selectedCustomer.lastActiveAt ||
                         selectedCustomer.lastSignInAt ||
                         selectedCustomer.lastOrderDate ||
                         selectedCustomer.createdAt
@@ -1592,7 +1643,7 @@ export default function CustomersAndSecurityPage() {
                       else if (diff < 1440) label = `${Math.floor(diff / 60)}h ago`
                       else if (diff < 10080) label = `${Math.floor(diff / 1440)}d ago`
                       else label = d.toLocaleDateString()
-                      const isOnline = selectedCustomer.posthogLastSeen && diff < 15
+                      const isOnline = Boolean((selectedCustomer.posthogLastSeen || selectedCustomer.lastActiveAt) && diff < 15)
                       return (
                         <div className="flex items-center gap-1.5" title={d.toLocaleString()}>
                           {isOnline && (

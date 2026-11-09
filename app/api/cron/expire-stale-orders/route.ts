@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { decryptBankCredentials } from "@/app/actions/payment-credentials"
+import { decryptBankCredentials } from "@/lib/crypto/bank"
 import { fulfillOrderDirectly } from "@/lib/fulfillment"
 import { incrementFailureStrike } from "@/lib/security/strike-counter"
 import { cleanupExpiredBans } from "@/lib/security/blacklist"
@@ -190,7 +190,7 @@ export async function GET(req: Request) {
       }
 
       // Industry Standard: Release promo code hold on cron expiration
-      const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+      const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
       releasePromoCodeOnFailure(txn.transaction_id).catch(() => {})
 
       // Increment failure strike for user/IP on expiration
@@ -204,7 +204,7 @@ export async function GET(req: Request) {
       if (typedTxn.payment_category === "nepalpay" || typedTxn.payment_category === "fonepay") {
         try {
           const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
-          const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
+          const { generateGuestVerificationToken } = await import("@/lib/crypto/guest-token")
 
           const userName = typedTxn.guest_user_data?.name || typedTxn.user_email?.split('@')[0] || "Customer"
           let customMsg = "We noticed your payment session expired and your order has been marked as <strong>Payment Failed</strong>."

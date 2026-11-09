@@ -17,10 +17,10 @@ export function initPostHog() {
   if (posthogInitialised) return
 
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY
-  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST
-
-  if (!key || !host) {
-    console.warn("[PostHog] Missing NEXT_PUBLIC_POSTHOG_KEY or NEXT_PUBLIC_POSTHOG_HOST — skipping init")
+  // NEXT_PUBLIC_POSTHOG_HOST is optional: ingestion always goes through the
+  // /ingest reverse proxy in next.config.js, so only the project key is required.
+  if (!key) {
+    console.warn("[PostHog] Missing NEXT_PUBLIC_POSTHOG_KEY — skipping init")
     return
   }
 
@@ -29,6 +29,8 @@ export function initPostHog() {
       // Use Next.js reverse-proxy rewrite to bypass ad-blockers and adhere to CSP
       api_host: "/ingest",
       ui_host: "https://us.posthog.com",
+      // Only create person profiles for signed-in users (fits free tier, less PII)
+      person_profiles: "identified_only",
       // Only capture manual events + $pageview; no autocapture or session replay
       autocapture: false,
       capture_pageview: false, // We fire $pageview manually in the provider so we control it per-route

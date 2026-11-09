@@ -2,13 +2,14 @@
 
 import { verifyTurnstileToken } from "@/lib/captcha"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { decryptBankCredentials } from "./payment-credentials"
+import { decryptBankCredentials } from "@/lib/crypto/bank"
 import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
 import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 import { headers } from "next/headers"
 import * as Sentry from "@sentry/nextjs"
 import { incrementFailureStrike } from "@/lib/security/strike-counter"
+import { rateLimit } from "@/lib/rate-limit"
 
 // Rate limit for polling (30 req/min)
 let ratelimit: Ratelimit | null = null
@@ -142,9 +143,36 @@ export async function getOrGenerateQRAction(transactionId: string) {
     // 2. Get payment method category from DB
     const { data: methodData } = await supabase
       .from("payment_methods")
-      .select("category, name")
+      .select("category, name, is_enabled")
       .eq("name", txn.payment_method)
       .single()
+
+    // 2a. SECURITY: fail closed if the method no longer exists
+    if (!methodData) {
+      return { success: false, error: "Selected payment method is not available." }
+    }
+
+    // 2b. SECURITY: enforce admin enable/disable state server-side.
+    // Previously only the product page filtered by is_enabled, so a crafted
+    // order (or a still-open checkout tab) could pay with a disabled method.
+    if ((methodData as any).is_enabled === false) {
+      await supabase
+        .from("transactions")
+        .update({
+          status: "Payment Failed",
+          failure_remarks: "Payment method disabled by administrator",
+        } as any)
+        .eq("transaction_id", transactionId)
+        .in("status", ["Payment Pending", "Processing"])
+        .is("bank_txn_id", null)
+
+      return {
+        success: false,
+        error: "This payment method is currently unavailable. Please start a new order with a different method.",
+        status: "Payment Failed",
+        isGuest: !txn.user_id,
+      }
+    }
 
     const paymentCategory = (methodData as any)?.category || typedTxn.payment_category || "static"
     const paymentMethodName = (methodData as any)?.name || txn.payment_method
@@ -234,7 +262,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
         .is("bank_txn_id", null)
 
       // Industry Standard: Release promo code hold on session expiry
-      const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+      const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
       releasePromoCodeOnFailure(transactionId).catch(() => {})
 
       return { 
@@ -782,6 +810,12 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
  */
 export async function expireTransactionAction(transactionId: string) {
   try {
+    // SECURITY: throttle guest-accessible expiry calls (20/min per IP)
+    const expH = await headers()
+    const expIp = expH.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+    const expRl = await rateLimit(`checkout-expire:${expIp}`, { windowMs: 60_000, max: 20 })
+    if (!expRl.ok) return { success: false, error: "Too many requests." }
+
     const supabase = createServiceRoleClient()
 
     // SECURITY: Verify ownership — only the transaction's owner can trigger expiry
@@ -813,12 +847,12 @@ export async function expireTransactionAction(transactionId: string) {
     if (updateError) return { success: false }
 
     // Industry Standard: Release promo code hold on client-side expiry
-    const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+    const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
     releasePromoCodeOnFailure(transactionId).catch(() => {})
 
     // Send Payment Failed Email
     const { sendOrderPlacedEmail } = await import("@/lib/email/resend")
-    const { generateGuestVerificationToken } = await import("@/app/actions/checkout-encryption")
+    const { generateGuestVerificationToken } = await import("@/lib/crypto/guest-token")
 
     let userName = undefined
     if (txn.user_id) {
@@ -885,6 +919,12 @@ export async function expireTransactionAction(transactionId: string) {
  */
 export async function cancelTransactionAction(transactionId: string) {
   try {
+    // SECURITY: throttle guest-accessible cancel calls (20/min per IP)
+    const cancelH = await headers()
+    const cancelIp = cancelH.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
+    const cancelRl = await rateLimit(`checkout-cancel:${cancelIp}`, { windowMs: 60_000, max: 20 })
+    if (!cancelRl.ok) return { success: false, error: "Too many requests." }
+
     const supabase = createServiceRoleClient()
 
     const { data: txn } = await supabase.from("transactions").select("*").eq("transaction_id", transactionId).single()
@@ -915,7 +955,7 @@ export async function cancelTransactionAction(transactionId: string) {
     if (cancelError) return { success: false, error: "Could not cancel transaction" }
 
     // Industry Standard: Release promo code hold on user cancellation
-    const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+    const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
     releasePromoCodeOnFailure(transactionId).catch(() => {})
 
     // Increment failure strike for user/IP on cancellation

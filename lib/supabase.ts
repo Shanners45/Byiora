@@ -12,6 +12,7 @@ export interface Database {
           signup_ip: string | null
           last_ip: string | null
           last_device_id: string | null
+          last_active_at: string | null
         }
         Insert: {
           id?: string
@@ -22,6 +23,7 @@ export interface Database {
           signup_ip?: string | null
           last_ip?: string | null
           last_device_id?: string | null
+          last_active_at?: string | null
         }
         Update: {
           id?: string
@@ -32,6 +34,7 @@ export interface Database {
           signup_ip?: string | null
           last_ip?: string | null
           last_device_id?: string | null
+          last_active_at?: string | null
         }
         Relationships: []
       }

@@ -1,43 +1,11 @@
 "use server"
 
-import crypto from "crypto"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { verifySuperAdmin } from "./admin-utils"
+import { encryptBankCredentials, decryptBankCredentials } from "@/lib/crypto/bank"
 
-function getBankEncryptionKey(): Buffer {
-  const key = process.env.BANK_CREDENTIALS_ENCRYPTION_KEY
-  if (!key) {
-    throw new Error("BANK_CREDENTIALS_ENCRYPTION_KEY environment variable is not set")
-  }
-  return Buffer.from(key, "hex")
-}
-
-export async function encryptBankCredentials(text: string) {
-  const key = getBankEncryptionKey()
-  const iv = crypto.randomBytes(12)
-  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv)
-  let encrypted = cipher.update(text, "utf8", "hex")
-  encrypted += cipher.final("hex")
-  const authTag = cipher.getAuthTag().toString("hex")
-  return `${iv.toString("hex")}:${authTag}:${encrypted}`
-}
-
-export async function decryptBankCredentials(encryptedBlob: string) {
-  const key = getBankEncryptionKey()
-  const parts = encryptedBlob.split(":")
-  if (parts.length !== 3) return null
-  
-  const [ivHex, authTagHex, ciphertext] = parts
-  const iv = Buffer.from(ivHex, "hex")
-  const authTag = Buffer.from(authTagHex, "hex")
-
-  const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv)
-  decipher.setAuthTag(authTag)
-
-  let decrypted = decipher.update(ciphertext, "hex", "utf8")
-  decrypted += decipher.final("utf8")
-  return decrypted
-}
+// SECURITY: encrypt/decrypt helpers live in a plain server module (not a
+// Server Action) so they cannot be invoked directly by clients.
 
 export async function getPaymentCredentialsAction() {
   if (!(await verifySuperAdmin())) return { error: "Unauthorized: Super Admin access required" }

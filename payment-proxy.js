@@ -1102,11 +1102,17 @@ const server = http.createServer(async (req, res) => {
         return;
     }
 
-    // --- INTERNAL SECRET AUTHENTICATION ---
-    if (url.startsWith('/api/') && req.headers['x-internal-secret'] !== INTERNAL_SECRET) {
-        res.writeHead(403, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, message: "Forbidden" }));
-        return;
+    // --- INTERNAL SECRET AUTHENTICATION (timing-safe) ---
+    if (url.startsWith('/api/')) {
+        const provided = req.headers['x-internal-secret'];
+        const providedBuf = Buffer.from(typeof provided === 'string' ? provided : '');
+        const expectedBuf = Buffer.from(INTERNAL_SECRET);
+        const valid = providedBuf.length === expectedBuf.length && crypto.timingSafeEqual(providedBuf, expectedBuf);
+        if (!valid) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, message: "Forbidden" }));
+            return;
+        }
     }
 
     // Reject CORS preflight (no browser should be calling this)

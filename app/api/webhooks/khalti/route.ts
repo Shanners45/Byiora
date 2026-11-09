@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { decryptBankCredentials } from "@/app/actions/payment-credentials"
+import { decryptBankCredentials } from "@/lib/crypto/bank"
 import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
 
 export async function GET(request: Request) {
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
         .eq("transaction_id", purchase_order_id)
 
       // Industry Standard: Release promo code hold on user cancellation
-      const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+      const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
       releasePromoCodeOnFailure(purchase_order_id).catch(() => {})
 
       return NextResponse.redirect(failRedirect)
@@ -157,7 +157,7 @@ export async function GET(request: Request) {
         .in("status", ["Payment Pending", "Processing"])
 
       // Industry Standard: Release promo code hold on verification expiry/cancel
-      const { releasePromoCodeOnFailure } = await import("@/app/actions/promo-codes")
+      const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
       releasePromoCodeOnFailure(purchase_order_id).catch(() => {})
 
       return NextResponse.redirect(failRedirect)
