@@ -117,6 +117,7 @@ export async function fulfillOrderDirectly({
       Boolean(txn.encrypted_checkout_data)
 
     const isFreePromoOrder = source === "promo_100_free" || parseFloat(txn.price || "0") <= 0
+    const categoriesWithInventory = ["digital-goods", "games"]
     let deliveredCode: string | null = null
     let decryptedCode: string | null = null
 
