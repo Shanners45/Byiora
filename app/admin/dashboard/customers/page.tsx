@@ -76,7 +76,6 @@ import {
 } from "@/app/actions/support-tickets"
 import { resendExistingGiftcardCodeAction } from "@/app/actions/orders"
 import { useAdminSession } from "@/lib/admin-session-context"
-import AdminDashboardLoading from "../loading"
 import { BannedEntity } from "@/lib/security/blacklist"
 
 const GoogleIcon = ({ className = "h-3.5 w-3.5" }: { className?: string }) => (
@@ -268,7 +267,7 @@ export default function CustomersAndSecurityPage() {
     }
   }, [activeTab])
 
-  const tabLoadingCard = <AdminDashboardLoading />
+  const tabLoadingCard = <div className="min-h-[60vh] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200" /></div>
 
   // ── Customer Handlers ──
   const handleViewCustomerOrders = async (cust: CustomerProfile) => {
@@ -704,7 +703,7 @@ export default function CustomersAndSecurityPage() {
   const openTicketsCount = tickets.filter((t) => t.status === "open").length
 
   if (loading) {
-    return <AdminDashboardLoading />
+    return <div className="min-h-[60vh] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200" /></div>
   }
 
   const supportInboxCard = (

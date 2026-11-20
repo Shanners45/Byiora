@@ -12,7 +12,6 @@ import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
 import { AdminSessionProvider } from "@/lib/admin-session-context"
-import AdminDashboardLoading from "./loading"
 
 export default function AdminDashboardLayout({
   children,
@@ -75,7 +74,7 @@ export default function AdminDashboardLayout({
     setPendingHref(null)
   }, [pathname])
 
-  // Never leave the spinner up if a navigation fails or is cancelled.
+  // Never leave a stale highlight if a navigation fails or is cancelled.
   useEffect(() => {
     if (!pendingHref) return
     const t = setTimeout(() => setPendingHref(null), 10_000)
@@ -265,8 +264,7 @@ export default function AdminDashboardLayout({
 
         {/* Page content */}
         <main className="flex-1 overflow-auto bg-[#F9FAFB] p-4 md:p-6"><AdminSessionProvider value={adminUser}>
-          {/* Show the spinner on click so the highlight and the page move together. */}
-          {pendingHref && pendingHref !== pathname ? <AdminDashboardLoading /> : children}
+          {children}
         </AdminSessionProvider></main>
       </div>
 
