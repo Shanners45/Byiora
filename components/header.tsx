@@ -57,7 +57,7 @@ export function Header() {
 
   const handleUserIconClick = () => {
     if (!isLoggedIn) {
-      router.push("/en-np/sign-up")
+      router.push("/en-np/sign-in")
     } else {
       setIsAccountMenuOpen(!isAccountMenuOpen)
     }
@@ -275,7 +275,7 @@ export function Header() {
                           className="w-full bg-brand-sky-blue hover:bg-brand-sky-blue/90"
                           onClick={() => {
                             setIsMobileSidebarOpen(false)
-                            router.push("/en-np/sign-up")
+                            router.push("/en-np/sign-in")
                           }}
                         >
                           Sign In

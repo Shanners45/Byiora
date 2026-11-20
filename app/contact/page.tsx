@@ -7,7 +7,7 @@ import type { Metadata } from "next"
 const BASE_URL = "https://www.byiora.com.np"
 
 export const metadata: Metadata = {
-  title: "Contact Us | Byiora - 24/7 Game Support Nepal",
+  title: { absolute: "Contact Us | Byiora - 24/7 Game Support Nepal" },
   description: "Need help with a game top-up or gift card? Contact Byiora support via WhatsApp, email, or our contact form. We're here to help you 24/7.",
   alternates: {
     canonical: `${BASE_URL}/contact`,

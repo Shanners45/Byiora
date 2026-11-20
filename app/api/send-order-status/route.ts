@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { timingSafeEqual } from 'crypto'
 import { Resend } from 'resend'
 import { sanitizeHtml } from '@/lib/sanitize'
 import { getAdminSessionAction } from "@/app/actions/admin-utils"
@@ -11,7 +12,8 @@ export async function POST(request: Request) {
     // Allow admin sessions OR internal server-to-server calls (cron/webhook)
     const internalSecret = request.headers.get("x-internal-secret")
     const expectedSecret = process.env.INTERNAL_API_SECRET
-    const isInternalCall = internalSecret && expectedSecret && internalSecret === expectedSecret
+    const isInternalCall = Boolean(internalSecret && expectedSecret && internalSecret.length === expectedSecret.length &&
+      timingSafeEqual(Buffer.from(internalSecret), Buffer.from(expectedSecret)))
 
     if (!isInternalCall) {
       const session = await getAdminSessionAction()
@@ -149,7 +151,7 @@ export async function POST(request: Request) {
       </div>
 
       <p style="color: #4b5563; font-size: 14px; line-height: 1.6; margin: 0 0 25px 0; text-align: center;">
-        The refund amount has been returned to your original payment method. Depending on your bank or payment provider, it may take a few moments to reflect in your account.
+        Your refund has been processed from byiora&apos;s side. Most refunds appear in 3-5 days, though some payment methods may vary. Contact your bank or payment provider if you need assistance.
       </p>
 
       <div style="text-align: center;">

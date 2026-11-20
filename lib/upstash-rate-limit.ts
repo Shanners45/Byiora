@@ -33,7 +33,7 @@ function getMutationLimiter(): Ratelimit | null {
   return mutationLimiter
 }
 
-/** Admin dashboard mutation protection — 30 req/min per IP */
+/** Admin dashboard mutation protection — 300 req/min per IP (each page load makes several calls) */
 let adminDashLimiter: Ratelimit | null = null
 function getAdminDashLimiter(): Ratelimit | null {
   if (adminDashLimiter) return adminDashLimiter
@@ -41,7 +41,7 @@ function getAdminDashLimiter(): Ratelimit | null {
   if (!r) return null
   adminDashLimiter = new Ratelimit({
     redis: r,
-    limiter: Ratelimit.slidingWindow(30, "1 m"),
+    limiter: Ratelimit.slidingWindow(300, "1 m"),
     analytics: false,
     prefix: "byiora:admin-dash",
   })

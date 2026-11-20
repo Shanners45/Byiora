@@ -1,7 +1,7 @@
 "use server"
 
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { verifyAdmin } from "@/app/actions/admin-utils"
+import { verifyAdmin, verifySuperAdmin } from "@/app/actions/admin-utils"
 
 export type PaymentMethodRow = {
   id: string
@@ -43,22 +43,49 @@ export async function getPublicPaymentMethodsAction() {
   return { success: true, data: (data || []) as unknown as PaymentMethodRow[] }
 }
 
+const EDITABLE_FIELDS = ["name", "logo_url", "qr_url", "instructions", "is_enabled", "sort_order", "category"] as const
+const CATEGORIES = ["static", "nepalpay", "fonepay", "khalti"]
+
+/** Drops unknown columns and rejects non-https / script URLs before they reach the store. */
+function sanitizePaymentMethodPatch(patch: Record<string, unknown>): { data?: Record<string, unknown>; error?: string } {
+  const data: Record<string, unknown> = {}
+  for (const key of EDITABLE_FIELDS) if (key in patch) data[key] = patch[key]
+  for (const key of ["logo_url", "qr_url"]) {
+    const v = data[key]
+    if (v === null || v === undefined || v === "") continue
+    if (typeof v !== "string") return { error: `Invalid ${key}` }
+    if (v.startsWith("/") && !v.startsWith("//")) continue
+    try {
+      if (new URL(v).protocol !== "https:") return { error: `${key} must be an https URL` }
+    } catch {
+      return { error: `Invalid ${key}` }
+    }
+  }
+  if ("category" in data && !CATEGORIES.includes(String(data.category))) return { error: "Invalid category" }
+  if ("is_enabled" in data && typeof data.is_enabled !== "boolean") return { error: "Invalid is_enabled" }
+  return { data }
+}
+
 export async function updatePaymentMethodAction(id: string, patch: Partial<Omit<PaymentMethodRow, "id">>) {
-  if (!(await verifyAdmin())) return { error: "Unauthorized: Admin access required" }
+  if (!(await verifySuperAdmin())) return { error: "Unauthorized: Super admin access required" }
 
   const serviceSupabase = createServiceRoleClient()
-  const { error } = await serviceSupabase.from("payment_methods").update(patch as any).eq("id", id)
+  const clean = sanitizePaymentMethodPatch(patch as Record<string, unknown>)
+  if (clean.error) return { error: clean.error }
+  const { error } = await serviceSupabase.from("payment_methods").update(clean.data as any).eq("id", id)
   if (error) return { error: error.message }
   return { success: true }
 }
 
 export async function createPaymentMethodAction(method: Omit<PaymentMethodRow, "id">) {
-  if (!(await verifyAdmin())) return { error: "Unauthorized: Admin access required" }
+  if (!(await verifySuperAdmin())) return { error: "Unauthorized: Super admin access required" }
+  const clean = sanitizePaymentMethodPatch(method as Record<string, unknown>)
+  if (clean.error) return { error: clean.error }
 
   const serviceSupabase = createServiceRoleClient()
   const { data, error } = await serviceSupabase
     .from("payment_methods")
-    .insert([method as any])
+    .insert([clean.data as any])
     .select("id, name, logo_url, qr_url, instructions, is_enabled, sort_order, category")
     .single()
 
@@ -67,7 +94,7 @@ export async function createPaymentMethodAction(method: Omit<PaymentMethodRow, "
 }
 
 export async function deletePaymentMethodAction(id: string) {
-  if (!(await verifyAdmin())) return { error: "Unauthorized: Admin access required" }
+  if (!(await verifySuperAdmin())) return { error: "Unauthorized: Super admin access required" }
 
   const serviceSupabase = createServiceRoleClient()
   const { error } = await serviceSupabase.from("payment_methods").delete().eq("id", id)
@@ -80,7 +107,7 @@ export async function deletePaymentMethodAction(id: string) {
  * disable all other methods of the same category first.
  */
 export async function toggleExclusiveAction(id: string, category: string, enable: boolean) {
-  if (!(await verifyAdmin())) return { error: "Unauthorized: Admin access required" }
+  if (!(await verifySuperAdmin())) return { error: "Unauthorized: Super admin access required" }
 
   const serviceSupabase = createServiceRoleClient()
 

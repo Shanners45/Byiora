@@ -21,14 +21,14 @@ import {
   ChevronRight,
   ChevronLeft,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Star
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -55,6 +55,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
+import { useOnlineUserIds } from "@/lib/presence"
 import {
   getCustomersOverviewAction,
   sendCustomerPasswordResetAction,
@@ -64,6 +65,7 @@ import {
   unbanCustomerAction,
   getBannedListAction,
   getCustomerOrdersAction,
+  sendReviewRequestAction,
   CustomerProfile,
 } from "@/app/actions/customers"
 import {
@@ -73,7 +75,8 @@ import {
   SupportTicket,
 } from "@/app/actions/support-tickets"
 import { resendExistingGiftcardCodeAction } from "@/app/actions/orders"
-import { getAdminSessionAction } from "@/app/actions/admin-utils"
+import { useAdminSession } from "@/lib/admin-session-context"
+import AdminDashboardLoading from "../loading"
 import { BannedEntity } from "@/lib/security/blacklist"
 
 const GoogleIcon = ({ className = "h-3.5 w-3.5" }: { className?: string }) => (
@@ -115,18 +118,29 @@ function LastActiveDisplay({
   )
 }
 
+type TabKey = "customers" | "blacklist" | "support"
+
+// Survives client-side navigation: coming back shows the last data instantly and
+// refreshes it in the background (stale-while-revalidate). Cleared on full reload.
+const pageCache: { customers?: CustomerProfile[]; bans?: BannedEntity[]; tickets?: SupportTicket[] } = {}
+
 export default function CustomersAndSecurityPage() {
+  const adminSession = useAdminSession()
   const [currentUserRole, setCurrentUserRole] = useState<string>("admin")
-  const [activeTab, setActiveTab] = useState("customers")
-  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState(adminSession?.role === "sub_admin" ? "support" : "customers")
+  const initialTab: TabKey = adminSession?.role === "sub_admin" ? "support" : "customers"
+  const [loading, setLoading] = useState(() => !(initialTab === "support" ? pageCache.tickets : pageCache.customers))
   const [refreshing, setRefreshing] = useState(false)
+  const [tabLoading, setTabLoading] = useState(false)
 
   const isSubAdmin = currentUserRole === "sub_admin"
+  const isFullAdmin = currentUserRole === "admin"
 
   // Data states
-  const [customers, setCustomers] = useState<CustomerProfile[]>([])
-  const [bans, setBans] = useState<BannedEntity[]>([])
-  const [tickets, setTickets] = useState<SupportTicket[]>([])
+  const [customers, setCustomers] = useState<CustomerProfile[]>(() => pageCache.customers ?? [])
+  const [bans, setBans] = useState<BannedEntity[]>(() => pageCache.bans ?? [])
+  const [tickets, setTickets] = useState<SupportTicket[]>(() => pageCache.tickets ?? [])
+  const onlineUserIds = useOnlineUserIds()
 
   // Search & filter states
   const [customerSearch, setCustomerSearch] = useState("")
@@ -197,39 +211,44 @@ export default function CustomersAndSecurityPage() {
   } | null>(null)
   const [submittingUnban, setSubmittingUnban] = useState(false)
 
-  // Load all initial data (showSkeleton only on first mount; subsequent loads are silent)
-  const loadData = async (showSkeleton = false) => {
-    if (showSkeleton) {
-      setLoading(true)
+  // Fetch one tab's data and keep it in the page cache.
+  const loadTab = async (tab: TabKey) => {
+    if (tab === "customers") {
+      const res = await getCustomersOverviewAction()
+      if (res.success && res.data) setCustomers((pageCache.customers = res.data))
+    } else if (tab === "blacklist") {
+      const res = await getBannedListAction()
+      if (res.success && res.data) setBans((pageCache.bans = res.data))
     } else {
-      setRefreshing(true)
+      const res = await getSupportTicketsAction()
+      if (res.success && res.data) setTickets((pageCache.tickets = res.data))
     }
+  }
+
+  const isTabLoaded = (tab: TabKey) =>
+    Boolean(tab === "customers" ? pageCache.customers : tab === "blacklist" ? pageCache.bans : pageCache.tickets)
+
+  // Only the open tab loads on entry; other tabs load the first time they're opened.
+  // A refresh (initial=false) reloads every tab already loaded, since bans and
+  // customer status affect each other.
+  const loadData = async (initial = false) => {
+    const role = adminSession?.role || "admin"
+    setCurrentUserRole(role)
+    const tab = (role === "sub_admin" ? "support" : activeTab) as TabKey
+    if (role === "sub_admin") setActiveTab("support")
+
+    const tabs: TabKey[] = initial
+      ? [tab]
+      : (["customers", "blacklist", "support"] as TabKey[]).filter((t) => t === tab || isTabLoaded(t))
+    if (initial && !isTabLoaded(tab)) setLoading(true)
+    else setRefreshing(true)
     try {
-      const session = await getAdminSessionAction()
-      const role = session.success ? session.data.role : "admin"
-      setCurrentUserRole(role)
-
-      if (role === "sub_admin") {
-        setActiveTab("support")
-        const tickRes = await getSupportTicketsAction()
-        if (tickRes.success && tickRes.data) setTickets(tickRes.data)
-        return
-      }
-
-      const [custRes, banRes, tickRes] = await Promise.all([
-        getCustomersOverviewAction(),
-        getBannedListAction(),
-        getSupportTicketsAction(),
-      ])
-
-      if (custRes.success && custRes.data) setCustomers(custRes.data)
-      if (banRes.success && banRes.data) setBans(banRes.data)
-      if (tickRes.success && tickRes.data) setTickets(tickRes.data)
+      await Promise.all(tabs.filter((t) => role !== "sub_admin" || t === "support").map(loadTab))
     } catch (err) {
       console.error("Failed to load customer & security data:", err)
       toast.error("Failed to load data")
     } finally {
-      if (showSkeleton) setLoading(false)
+      setLoading(false)
       setRefreshing(false)
     }
   }
@@ -237,6 +256,19 @@ export default function CustomersAndSecurityPage() {
   useEffect(() => {
     loadData(true)
   }, [])
+
+  // First visit to another tab: fetch it then, not up front.
+  useEffect(() => {
+    const tab = activeTab as TabKey
+    if (!loading && !isTabLoaded(tab)) {
+      setTabLoading(true)
+      loadTab(tab)
+        .catch(() => toast.error("Failed to load data"))
+        .finally(() => setTabLoading(false))
+    }
+  }, [activeTab])
+
+  const tabLoadingCard = <AdminDashboardLoading />
 
   // ── Customer Handlers ──
   const handleViewCustomerOrders = async (cust: CustomerProfile) => {
@@ -289,6 +321,19 @@ export default function CustomersAndSecurityPage() {
       toast.error(err.message || "An error occurred")
     } finally {
       setSendingReset(false)
+    }
+  }
+
+  const [reviewSendingFor, setReviewSendingFor] = useState<string | null>(null)
+  const handleRequestReview = async (cust: CustomerProfile) => {
+    if (!window.confirm(`Email ${cust.email} asking for a Trustpilot review?`)) return
+    setReviewSendingFor(cust.email)
+    try {
+      const res = await sendReviewRequestAction(cust.email, cust.name || undefined)
+      if (res.success) toast.success(`Review request sent to ${cust.email}`)
+      else toast.error(res.error || "Could not send the review request.")
+    } finally {
+      setReviewSendingFor(null)
     }
   }
 
@@ -659,85 +704,7 @@ export default function CustomersAndSecurityPage() {
   const openTicketsCount = tickets.filter((t) => t.status === "open").length
 
   if (loading) {
-    if (isSubAdmin) {
-      return (
-        <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
-          {/* Skeleton Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-            <div className="space-y-2">
-              <Skeleton className="h-7 sm:h-8 w-44 sm:w-48 bg-[#FEF7E0]" />
-              <Skeleton className="h-3.5 sm:h-4 w-60 sm:w-72 bg-[#FEF7E0]/70" />
-            </div>
-            <Skeleton className="h-9 w-24 self-start sm:self-auto bg-[#FEF7E0] border border-[#F59E0B]/30" />
-          </div>
-
-          {/* Skeleton Support Inbox Table Card */}
-          <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md p-4 sm:p-6 space-y-4 sm:space-y-6 overflow-hidden">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
-              <div className="space-y-1.5 sm:space-y-2">
-                <Skeleton className="h-5 sm:h-6 w-36 bg-[#F59E0B]/25" />
-                <Skeleton className="h-3 w-48 sm:w-64 bg-[#F59E0B]/15" />
-              </div>
-              <Skeleton className="h-9 sm:h-10 w-full sm:w-48 bg-white rounded-lg border border-[#F59E0B]/20" />
-            </div>
-            <div className="space-y-2.5 bg-white p-3 sm:p-4 rounded-xl border border-[#F59E0B]/20">
-              <Skeleton className="h-9 w-full bg-amber-50" />
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Skeleton key={i} className="h-12 w-full bg-slate-50" />
-              ))}
-            </div>
-          </Card>
-        </div>
-      )
-    }
-
-    return (
-      <div className="space-y-5 sm:space-y-6 max-w-7xl mx-auto w-full min-w-0">
-        {/* Skeleton Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-          <div className="space-y-2">
-            <Skeleton className="h-7 sm:h-8 w-52 sm:w-64 bg-[#FEF7E0]" />
-            <Skeleton className="h-3.5 sm:h-4 w-full max-w-sm bg-[#FEF7E0]/70" />
-          </div>
-          <Skeleton className="h-9 w-24 self-start sm:self-auto bg-[#FEF7E0] border border-[#F59E0B]/30" />
-        </div>
-
-        {/* Skeleton Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          <Skeleton className="h-9 sm:h-11 w-36 sm:w-44 rounded-xl bg-[#FEF7E0] shrink-0" />
-          <Skeleton className="h-9 sm:h-11 w-44 sm:w-48 rounded-xl bg-[#FEF7E0]/80 shrink-0" />
-          <Skeleton className="h-9 sm:h-11 w-36 sm:w-44 rounded-xl bg-[#FEF7E0]/80 shrink-0" />
-        </div>
-
-        {/* Skeleton Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md p-3.5 sm:p-5 space-y-2 sm:space-y-3">
-              <Skeleton className="h-3.5 sm:h-4 w-20 sm:w-28 bg-[#F59E0B]/20" />
-              <Skeleton className="h-6 sm:h-8 w-16 sm:w-24 bg-[#F59E0B]/30" />
-            </Card>
-          ))}
-        </div>
-
-        {/* Skeleton Main Directory Table Card */}
-        <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md p-6 space-y-6">
-          <div className="space-y-2">
-            <Skeleton className="h-6 w-48 bg-[#F59E0B]/25" />
-            <Skeleton className="h-4 w-80 bg-[#F59E0B]/15" />
-          </div>
-          <div className="flex flex-col md:flex-row gap-4 mb-6">
-            <Skeleton className="h-10 flex-1 bg-white rounded-lg border border-[#F59E0B]/20" />
-            <Skeleton className="h-10 w-full md:w-52 bg-white rounded-lg border border-[#F59E0B]/20" />
-          </div>
-          <div className="space-y-3 bg-white p-4 rounded-xl border border-[#F59E0B]/20">
-            <Skeleton className="h-10 w-full bg-amber-50" />
-            {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Skeleton key={i} className="h-12 w-full bg-slate-50" />
-            ))}
-          </div>
-        </Card>
-      </div>
-    )
+    return <AdminDashboardLoading />
   }
 
   const supportInboxCard = (
@@ -957,14 +924,14 @@ export default function CustomersAndSecurityPage() {
                 className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap shrink-0"
               >
                 <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                <span>Customers ({customers.length})</span>
+                <span>Customers{pageCache.customers ? ` (${customers.length})` : ""}</span>
               </TabsTrigger>
               <TabsTrigger
                 value="blacklist"
                 className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap shrink-0"
               >
                 <ShieldAlert className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                <span>Security & Blacklist ({consolidatedBans.length})</span>
+                <span>Security & Blacklist{pageCache.bans ? ` (${consolidatedBans.length})` : ""}</span>
               </TabsTrigger>
               <TabsTrigger
                 value="support"
@@ -1138,8 +1105,7 @@ export default function CustomersAndSecurityPage() {
 
                               if (!bestTimestamp) return <span className="text-xs text-gray-400">—</span>
 
-                              const diffMins = Math.floor((Date.now() - new Date(bestTimestamp).getTime()) / 60000)
-                              const isOnline = Boolean((cust.posthogLastSeen || cust.lastActiveAt) && diffMins < 15)
+                              const isOnline = cust.userId ? onlineUserIds.has(cust.userId) : false
 
                               return <LastActiveDisplay timestamp={bestTimestamp} online={isOnline} />
                             })()}
@@ -1242,6 +1208,7 @@ export default function CustomersAndSecurityPage() {
         {/* TAB 2: SECURITY & BLACKLIST (Consolidated by User / Rule)                */}
         {/* ──────────────────────────────────────────────────────────────────────── */}
         <TabsContent value="blacklist" className="space-y-4 sm:space-y-6">
+          {tabLoading && !pageCache.bans ? tabLoadingCard : (
           <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md overflow-hidden">
             <CardHeader className="p-4 sm:px-6 sm:py-4 border-b border-[#F59E0B]/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
@@ -1373,8 +1340,7 @@ export default function CustomersAndSecurityPage() {
                                 ? c.posthogLastSeen || c.lastActiveAt || c.lastOrderDate || c.createdAt
                                 : null
                               if (!ts) return <span className="text-xs text-gray-400">—</span>
-                              const diff = Math.floor((Date.now() - new Date(ts).getTime()) / 60000)
-                              const online = Boolean((c?.posthogLastSeen || c?.lastActiveAt) && diff < 15)
+                              const online = c?.userId ? onlineUserIds.has(c.userId) : false
                               return <LastActiveDisplay timestamp={ts} online={online} />
                             })()}
                           </TableCell>
@@ -1457,13 +1423,14 @@ export default function CustomersAndSecurityPage() {
               )}
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         {/* ──────────────────────────────────────────────────────────────────────── */}
         {/* TAB 3: SUPPORT INBOX                                                    */}
         {/* ──────────────────────────────────────────────────────────────────────── */}
         <TabsContent value="support" className="space-y-6">
-          {supportInboxCard}
+          {tabLoading && !pageCache.tickets ? tabLoadingCard : supportInboxCard}
         </TabsContent>
       </Tabs>
       )}
@@ -1539,8 +1506,9 @@ export default function CustomersAndSecurityPage() {
                   </div>
 
                   {/* Quick Actions Buttons */}
-                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    {selectedCustomer.isRegistered && Boolean(selectedCustomer.userId) && (
+                  <div className="flex flex-col items-start sm:items-end gap-2 shrink-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {isFullAdmin && selectedCustomer.isRegistered && Boolean(selectedCustomer.userId) && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -1574,7 +1542,21 @@ export default function CustomersAndSecurityPage() {
                       </Button>
                     )}
                   </div>
+                  {isFullAdmin && !selectedCustomer.isBanned && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={reviewSendingFor === selectedCustomer.email}
+                      onClick={() => handleRequestReview(selectedCustomer)}
+                      className="h-8 px-3 text-xs border-emerald-300 text-emerald-800 hover:bg-emerald-50 bg-white font-semibold flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Star className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>{reviewSendingFor === selectedCustomer.email ? "Sending…" : "Ask for review"}</span>
+                    </Button>
+                  )}
+                  </div>
                 </div>
+
 
                 {/* Key Summary Stats */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4 pt-4 border-t border-[#F59E0B]/20">
@@ -1597,8 +1579,7 @@ export default function CustomersAndSecurityPage() {
                         selectedCustomer.lastOrderDate ||
                         selectedCustomer.createdAt
                       if (!bestTs) return <span className="text-sm font-bold text-gray-400">—</span>
-                      const diff = Math.floor((Date.now() - new Date(bestTs).getTime()) / 60000)
-                      const isOnline = Boolean((selectedCustomer.posthogLastSeen || selectedCustomer.lastActiveAt) && diff < 15)
+                      const isOnline = selectedCustomer.userId ? onlineUserIds.has(selectedCustomer.userId) : false
                       return <LastActiveDisplay timestamp={bestTs} online={isOnline} textSize="text-sm" />
                     })()}
                   </div>
@@ -2119,7 +2100,7 @@ export default function CustomersAndSecurityPage() {
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {/* MODAL: PASSWORD RESET CONFIRMATION                                       */}
       {/* ──────────────────────────────────────────────────────────────────────── */}
-      {!isSubAdmin && (
+      {isFullAdmin && (
         <Dialog open={!!resetModalEmail} onOpenChange={(open) => !open && setResetModalEmail(null)}>
           <DialogContent className="w-[94vw] sm:w-full sm:max-w-md bg-white border border-slate-200 shadow-xl rounded-2xl p-4 sm:p-6">
             <DialogHeader>

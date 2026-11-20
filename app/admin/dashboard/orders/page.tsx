@@ -16,7 +16,8 @@ import { toast } from "sonner"
 import { updateTransactionStatusAction, sendGiftcardCodeAction, insertNotificationAction, refundKhaltiTransactionAction, sendRecoveryEmailAction } from "@/app/actions/orders"
 import { getAllTransactionsAction } from "@/app/actions/dashboard"
 import { decryptCheckoutData, clearCheckoutData } from "@/app/actions/checkout-encryption"
-import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
+import { type AdminSession } from "@/app/actions/admin-utils"
+import { useAdminSession } from "@/lib/admin-session-context"
 
 interface Transaction {
   id: string
@@ -121,7 +122,7 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [adminUser, setAdminUser] = useState<Pick<AdminSession, "role"> | null>(null)
+  const adminUser: Pick<AdminSession, "role"> | null = useAdminSession()
   const [giftcardCodes, setGiftcardCodes] = useState<Record<string, string>>({})
   const [sendingCodeIds, setSendingCodeIds] = useState<Record<string, boolean>>({})
   const [sendingRecoveryIds, setSendingRecoveryIds] = useState<Record<string, boolean>>({})
@@ -190,16 +191,6 @@ export default function OrdersPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
-  useEffect(() => {
-    ; (async () => {
-      try {
-        const session = await getAdminSessionAction()
-        if (session.success) setAdminUser({ role: session.data.role })
-      } catch (error) {
-        console.error("Error loading admin session:", error)
-      }
-    })()
-  }, [])
 
   const loadTransactions = async (silent = false) => {
     try {
@@ -516,34 +507,66 @@ export default function OrdersPage() {
 
   // Proper CSV formatting helper
   const formatCSVField = (field: any) => {
-    const stringField = String(field || "").replace(/"/g, '""')
-    return `"${stringField}"`
+    let stringField = String(field ?? "")
+    // Customer-typed values starting with = + - @ would run as Excel formulas.
+    if (/^[=+\-@\t\r]/.test(stringField)) stringField = `'${stringField}`
+    return `"${stringField.replace(/"/g, '""')}"`
+  }
+
+  // Formats readable purchase date (in Asia/Kathmandu time zone) that displays cleanly without Excel numeric overflow (####)
+  const formatCSVDate = (value: string) => {
+    if (!value) return "N/A"
+    const d = new Date(value)
+    if (isNaN(d.getTime())) return "N/A"
+    return d.toLocaleString("en-US", {
+      timeZone: "Asia/Kathmandu",
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
   }
 
   const exportTransactions = () => {
-    const headers = ["Order ID", "Bank Txn ID", "Product", "Amount", "Price", "Original Price", "Promo Code", "Discount", "Status", "Payment Method", "Customer", "Type", "UID", "Date"]
+    const headers = [
+      "Order ID",
+      "Bank Txn ID",
+      "Product",
+      "Amount",
+      "Price",
+      "Promo Code",
+      "Discount",
+      "Status",
+      "Payment Method",
+      "Customer",
+      "Type",
+      "UID",
+      "Date of Purchase",
+    ]
 
     const rows = filteredTransactions.map((t) => [
       t.transaction_id,
-      t.bank_txn_id || "—",
-      t.product_name,
-      t.amount,
+      t.bank_txn_id || "N/A",
+      t.product_name || "N/A",
+      t.amount || "N/A",
       `Rs. ${t.price}`,
-      t.original_price ? `Rs. ${t.original_price}` : "—",
-      t.promo_code || "—",
-      t.discount_amount ? `Rs. ${t.discount_amount}` : "—",
+      t.promo_code || "N/A",
+      t.discount_amount ? `Rs. ${t.discount_amount}` : "N/A",
       t.status,
-      t.payment_method,
-      t.user_email,
+      t.payment_method || "N/A",
+      t.user_email || "N/A",
       t.is_guest ? "Guest" : "Registered",
-      getUIDForDisplay(t),
-      new Date(t.created_at).toLocaleDateString(),
+      getUIDForDisplay(t) || "N/A",
+      formatCSVDate(t.created_at),
     ])
 
-    const csvContent = [
+    // BOM so Excel reads UTF-8 (otherwise symbols turn into "â€”"); CRLF per RFC 4180.
+    const csvContent = String.fromCharCode(0xfeff) + [
       headers.map(formatCSVField).join(","),
       ...rows.map(row => row.map(formatCSVField).join(",")),
-    ].join("\n")
+    ].join("\r\n")
 
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
     const url = window.URL.createObjectURL(blob)

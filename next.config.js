@@ -26,6 +26,14 @@ try {
 
 const nextConfig = {
   allowedDevOrigins: ["192.168.1.70", "localhost"],
+  // Dev logs print Server Action arguments verbatim, which leaks passwords,
+  // OTPs and captcha tokens into terminal history.
+  logging: { serverFunctions: false },
+  experimental: {
+    // Pages opened on the apex domain (installed PWA, old tabs) post Server
+    // Actions to www after the redirect; both are our own origins.
+    serverActions: { allowedOrigins: ["www.byiora.com.np", "byiora.com.np"] },
+  },
   images: {
     remotePatterns,
     // Serve AVIF (30% smaller than WebP) where supported, with WebP fallback
@@ -75,7 +83,7 @@ const nextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://browser.sentry-cdn.com https://us-assets.i.posthog.com https://*.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' blob: data: https://*.supabase.co https://www.byiora.com.np https://byiora.com.np https://admin.byiora.com.np https://hebbkx1anhila5yf.public.blob.vercel-storage.com https://cdn.worldvectorlogo.com https://upload.wikimedia.org https://logos-world.net https://*.posthog.com; font-src 'self' https://fonts.gstatic.com; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' wss://*.supabase.co https://*.supabase.co https://*.resend.com https://api.upstash.com https://cloudflareinsights.com https://raw.githubusercontent.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://byiora.sentry.io https://*.sentry.io https://us.i.posthog.com https://*.posthog.com https://*.i.posthog.com; worker-src 'self' blob:; upgrade-insecure-requests;"
+            value: `default-src 'self'; script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'production' ? '' : " 'unsafe-eval'"} https://challenges.cloudflare.com https://static.cloudflareinsights.com https://browser.sentry-cdn.com https://us-assets.i.posthog.com https://*.posthog.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' blob: data: https://*.supabase.co https://www.byiora.com.np https://byiora.com.np https://admin.byiora.com.np https://hebbkx1anhila5yf.public.blob.vercel-storage.com https://cdn.worldvectorlogo.com https://upload.wikimedia.org https://logos-world.net https://*.posthog.com; font-src 'self' https://fonts.gstatic.com; frame-src 'self' https://challenges.cloudflare.com; connect-src 'self' wss://*.supabase.co https://*.supabase.co https://*.resend.com https://api.upstash.com https://cloudflareinsights.com https://raw.githubusercontent.com https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://byiora.sentry.io https://*.sentry.io https://us.i.posthog.com https://*.posthog.com https://*.i.posthog.com; worker-src 'self' blob:; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests;`
           }
         ],
       },

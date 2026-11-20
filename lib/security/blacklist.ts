@@ -22,6 +22,17 @@ export interface BannedEntity {
   expires_at?: string | null
 }
 
+export const PROTECTED_EMAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.com",
+  "outlook.com",
+  "hotmail.com",
+  "icloud.com",
+  "proton.me",
+  "protonmail.com",
+])
+
 function isSchemaMissing(error: any): boolean {
   if (!error) return false
   return (
@@ -114,70 +125,6 @@ export async function cleanupExpiredBans(): Promise<number> {
 }
 
 /**
- * Checks if an IP is currently blacklisted.
- */
-export async function isIpBanned(ip: string): Promise<boolean> {
-  const cleanIp = ip?.trim() || ""
-  if (!cleanIp || cleanIp === "unknown") return false
-
-  const redis = getRedis()
-  if (redis) {
-    try {
-      const isBannedKey = await redis.get(`byiora:ban:ip:${cleanIp}`)
-      if (isBannedKey) return true
-    } catch (_) {}
-  }
-
-  try {
-    const supabase = createServiceRoleClient() as any
-    const { data } = await supabase
-      .from("banned_entities")
-      .select("id, expires_at")
-      .eq("type", "ip")
-      .eq("value", cleanIp)
-      .limit(1)
-
-    if (data && data.length > 0) {
-      const match = data[0]
-      if (!match.expires_at || new Date(match.expires_at) > new Date()) {
-        // Sync to Redis with remaining TTL
-        if (redis) {
-          try {
-            if (match.expires_at) {
-              const remainingSecs = Math.max(1, Math.floor((new Date(match.expires_at).getTime() - Date.now()) / 1000))
-              await redis.set(`byiora:ban:ip:${cleanIp}`, "1", { ex: remainingSecs })
-            } else {
-              await redis.set(`byiora:ban:ip:${cleanIp}`, "1")
-            }
-          } catch (_) {}
-        }
-        return true
-      } else {
-        // Expired! Clean it up immediately
-        cleanupExpiredBans().catch(() => {})
-        if (redis) {
-          try {
-            await redis.del(`byiora:ban:ip:${cleanIp}`)
-            await redis.srem("byiora:banned:ips", cleanIp)
-          } catch (_) {}
-        }
-        return false
-      }
-    } else {
-      // Not in DB: if it was erroneously lingering in Redis set, clear it
-      if (redis) {
-        try {
-          await redis.srem("byiora:banned:ips", cleanIp)
-          await redis.del(`byiora:ban:ip:${cleanIp}`)
-        } catch (_) {}
-      }
-    }
-  } catch (_) {}
-
-  return false
-}
-
-/**
  * Checks if a given email, IP address, email domain, or device fingerprint is currently banned.
  * If Email, Device ID, or Domain is banned -> HARD BAN (banned: true, checkout blocked).
  * If ONLY IP is banned and Device/Email are different -> SOFT CHALLENGE (banned: false, requiresTurnstile: true).
@@ -207,8 +154,14 @@ export async function checkIsBanned({
       if (cleanEmail && (await redis.get(`byiora:ban:email:${cleanEmail}`))) {
         return { banned: true, reason: "This account has been restricted in accordance with our security policies. Please contact support for assistance.", banType: "email" }
       }
-      if (domain && (await redis.get(`byiora:ban:email_domain:${domain}`))) {
-        return { banned: true, reason: "Email domain has been restricted in accordance with our security policies. Please contact support for assistance.", banType: "email_domain" }
+      if (domain) {
+        if (PROTECTED_EMAIL_DOMAINS.has(domain)) {
+          // Self-healing: Major public domains must never be banned. Purge if lingering in Redis cache.
+          redis.del(`byiora:ban:email_domain:${domain}`).catch(() => {})
+          redis.srem("byiora:banned:domains", domain).catch(() => {})
+        } else if (await redis.get(`byiora:ban:email_domain:${domain}`)) {
+          return { banned: true, reason: "Email domain has been restricted in accordance with our security policies. Please contact support for assistance.", banType: "email_domain" }
+        }
       }
       if (cleanIp && cleanIp !== "unknown" && (await redis.get(`byiora:ban:ip:${cleanIp}`))) {
         return { banned: false, requiresTurnstile: true, reason: "Security verification required for this network connection.", banType: "ip" }
@@ -230,7 +183,9 @@ export async function checkIsBanned({
     const hardConditions: string[] = []
     if (safeDevice) hardConditions.push(`and(type.eq.device_id,value.eq.${safeDevice})`)
     if (safeEmail) hardConditions.push(`and(type.eq.email,value.ilike.${safeEmail})`)
-    if (safeDomain) hardConditions.push(`and(type.eq.email_domain,value.ilike.${safeDomain})`)
+    if (safeDomain && !PROTECTED_EMAIL_DOMAINS.has(safeDomain.toLowerCase())) {
+      hardConditions.push(`and(type.eq.email_domain,value.ilike.${safeDomain})`)
+    }
 
     if (hardConditions.length > 0) {
       const { data, error } = await supabase
@@ -330,6 +285,10 @@ export async function banEntity({
 }): Promise<{ success: boolean; error?: string }> {
   const cleanValue = type === "ip" || type === "device_id" ? value.trim() : value.trim().toLowerCase()
   if (!cleanValue) return { success: false, error: "Value cannot be empty" }
+
+  if (type === "email_domain" && PROTECTED_EMAIL_DOMAINS.has(cleanValue)) {
+    return { success: false, error: "Major email providers (e.g. gmail.com) cannot be domain-blacklisted." }
+  }
 
   const expiresAt =
     durationHours && durationHours > 0

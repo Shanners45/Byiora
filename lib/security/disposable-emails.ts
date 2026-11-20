@@ -114,6 +114,11 @@ const DISPOSABLE_DOMAINS = new Set([
   "inboxbear.com",
   "nada.ltd",
   "nada.email",
+
+  // Domains used in Nov 2026 penetration attempts
+  "euploading.com",
+  "inboxes.com",
+  "mail.tm",
 ])
 
 /**
@@ -155,6 +160,42 @@ export function isDisposableEmail(email: string | null | undefined): boolean {
   if (blockedInternalDomains.some(d => domain === d || domain.endsWith(`.${d}`))) {
     return true
   }
+
+  return false
+}
+
+/**
+ * Detects attacker-style probe emails that mimic the brand name,
+ * include recon keywords, or use machine-generated timestamp usernames.
+ *
+ * Examples caught:
+ *   byiora1795174550@euploading.com  → brand name + timestamp
+ *   probe1795169291@euploading.com   → "probe" keyword
+ *   qabyioraloeervtz@gmail.com       → brand name embedded
+ *   byioratest74280@gmail.com        → brand name + "test"
+ *   pt3145bb793@euploading.com       → short prefix + long digits
+ */
+export function isSuspiciousProbeEmail(email: string | null | undefined): boolean {
+  if (!email || typeof email !== "string") return false
+
+  const clean = email.trim().toLowerCase()
+  const parts = clean.split("@")
+  if (parts.length !== 2) return false
+
+  const userPart = parts[0]
+
+  // 1. Contains the brand name "byiora" anywhere in the local part
+  if (userPart.includes("byiora")) return true
+
+  // 2. Contains recon keywords
+  if (/(?:^|[.\-_])probe(?:[.\-_]|$|\d)/i.test(userPart)) return true
+
+  // 3. Short alphabetic prefix (1-5 chars) followed by 10+ digits (timestamp-style)
+  if (/^[a-z]{1,5}\d{10,}$/i.test(userPart)) return true
+
+  // 4. Any mix ending with 7+ consecutive digits (machine-generated feel)
+  //    but only when total length is short (avoids catching real emails)
+  if (userPart.length <= 25 && /\d{7,}$/.test(userPart)) return true
 
   return false
 }

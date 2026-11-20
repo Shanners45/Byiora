@@ -1,7 +1,7 @@
 import { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | Byiora",
+  title: { absolute: "Privacy Policy | Byiora" },
   description: "Read the Byiora Privacy Policy to understand how we collect, use, and protect your personal information.",
 }
 

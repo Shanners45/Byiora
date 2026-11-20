@@ -5,22 +5,22 @@ const BASE_URL = "https://www.byiora.com.np"
 const CATEGORY_META: Record<string, { title: string; description: string; name: string }> = {
   "digital-goods": {
     name: "Digital Gift Cards",
-    title: "Buy Digital Gift Cards in Nepal | Steam, Netflix & More | Byiora",
-    description: "Buy international and gaming gift cards in Nepal instantly. Steam, Google Play, Apple, Netflix, Spotify and more with local payment via eSewa, Khalti, Fonepay.",
+    title: "Buy Digital Gift Cards in Nepal | Steam, Netflix & More",
+    description: "Buy international and gaming gift cards in Nepal instantly. Steam, Google Play, Apple, Netflix, Spotify and more with local payment via eSewa, Khalti and Fonepay.",
   },
   "topup": {
     name: "Game Top-ups",
-    title: "Online Game Recharge & Top-Up Nepal | PUBG, Valorant, Free Fire | Byiora",
-    description: "Instant in-game currency top-up in Nepal. Buy PUBG UC, Free Fire Diamonds, Valorant Points, Mobile Legends Diamonds with eSewa, Khalti, and Fonepay QR.",
+    title: "Online Game Recharge & Top-Up Nepal | PUBG, Valorant, Free Fire",
+    description: "Instant in-game currency top-up in Nepal. Buy PUBG UC, Free Fire Diamonds, Valorant Points, Mobile Legends Diamonds with eSewa, Khalti and Fonepay QR.",
   },
   "games": {
     name: "Games",
-    title: "Buy PC & Console Games in Nepal | Instant Digital Delivery | Byiora",
+    title: "Buy PC & Console Games in Nepal | Instant Digital Delivery",
     description: "Browse and buy top digital PC and console games in Nepal. Fast delivery, 100% genuine keys, secure local payments.",
   },
   "direct-login": {
     name: "Direct Login Recharge",
-    title: "Direct Account Top-Up & Subscriptions Nepal | Byiora",
+    title: "Direct Account Top-Up & Subscriptions Nepal",
     description: "Direct account top-up services in Nepal. Safe, secure, and delivered quickly with local payment options.",
   },
 }
@@ -34,7 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
   const meta = CATEGORY_META[slug] || {
     name: "Products",
-    title: "Browse Products | Byiora Nepal",
+    title: "Browse Products in Nepal",
     description: "Discover genuine game top-ups and digital gift cards in Nepal with instant delivery on Byiora.",
   }
 

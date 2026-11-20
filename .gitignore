@@ -28,3 +28,5 @@ next-env.d.ts
 
 # network archives / debug captures
 *.har
+# Plain "env" secrets file (no dot) must never be committed
+/env

@@ -19,9 +19,12 @@ if (dsn) {
 
     integrations: [
       Sentry.replayIntegration({
-        maskAllText: false,
-        blockAllMedia: false,
+        // Replays fire on errors, which can include decrypted checkout values,
+        // generated passwords, or reset credentials rendered in the page.
+        maskAllText: true,
+        blockAllMedia: true,
         maskAllInputs: true,
+        networkCaptureBodies: false,
         networkDetailAllowUrls: [
           typeof window !== "undefined" ? window.location.origin : "https://byiora.com.np",
           "https://admin.byiora.com.np",

@@ -4,12 +4,15 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
+import Link from "next/link"
 import { LayoutDashboard, ShoppingBag, Package, Settings, Users, LogOut, Menu, X, Bell, ImageIcon, DollarSign, KeyRound, UserCheck, Mail, Ticket } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
+import { AdminSessionProvider } from "@/lib/admin-session-context"
+import AdminDashboardLoading from "./loading"
 
 export default function AdminDashboardLayout({
   children,
@@ -20,6 +23,9 @@ export default function AdminDashboardLayout({
   const [adminUser, setAdminUser] = useState<AdminSession | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  // Highlight the clicked item immediately; the route catches up behind it.
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
 
@@ -39,8 +45,9 @@ export default function AdminDashboardLayout({
 
         setAdminUser(session.data)
       } catch (error) {
+        // Network blip or rate limit: not proof of a bad session, so don't sign out.
         console.error("Session validation error:", error)
-        router.replace("/admin/login")
+        setLoadError(true)
       } finally {
         setIsLoading(false)
       }
@@ -64,6 +71,17 @@ export default function AdminDashboardLayout({
     }
   }, [router])
 
+  useEffect(() => {
+    setPendingHref(null)
+  }, [pathname])
+
+  // Never leave the spinner up if a navigation fails or is cancelled.
+  useEffect(() => {
+    if (!pendingHref) return
+    const t = setTimeout(() => setPendingHref(null), 10_000)
+    return () => clearTimeout(t)
+  }, [pendingHref])
+
   const handleLogout = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
@@ -78,6 +96,17 @@ export default function AdminDashboardLayout({
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4"></div>
           <p className="text-[#4B5563]">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!adminUser && loadError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
+        <div className="text-center space-y-3">
+          <p className="text-[#4B5563]">Couldn't reach the server. Your session is still active.</p>
+          <Button className="bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white" onClick={() => window.location.reload()}>Try again</Button>
         </div>
       </div>
     )
@@ -116,6 +145,7 @@ export default function AdminDashboardLayout({
     { name: "Customisation", href: "/admin/dashboard/customisation", icon: ImageIcon, roles: ["admin", "sub_admin"] },
     { name: "Admin Users", href: "/admin/dashboard/admin-users", icon: Users, roles: ["admin"] },
     { name: "Notifications", href: "/admin/dashboard/notifications", icon: Bell, roles: ["admin", "sub_admin"] },
+    { name: "Broadcasts", href: "/admin/dashboard/broadcasts", icon: Mail, roles: ["admin"] },
     {
       name: "Settings",
       href: "/admin/dashboard/settings",
@@ -124,7 +154,7 @@ export default function AdminDashboardLayout({
     },
   ].filter((item) => item.roles.includes(adminUser?.role || ""))
 
-  const isActive = (path: string) => pathname === path
+  const isActive = (path: string) => (pendingHref ?? pathname) === path
 
   const getRoleDisplayName = (role: string) => {
     switch (role) {
@@ -175,13 +205,25 @@ export default function AdminDashboardLayout({
             {navItems.map((item) => (
               <Button
                 key={item.name}
+                asChild
                 variant="ghost"
                 className={`w-full justify-start text-white hover:bg-white/10 ${isActive(item.href) ? "bg-[#E0D4FD] text-[#1F2937]" : ""
                   }`}
-                onClick={() => router.push(item.href)}
               >
-                <item.icon className={`mr-3 h-5 w-5 ${isActive(item.href) ? "text-[#1F2937]" : ""}`} />
-                {item.name}
+                {/* Load only what the user is about to open: warm the one hovered page, never all of them. */}
+                <Link
+                  href={item.href}
+                  prefetch={false}
+                  onMouseEnter={() => router.prefetch(item.href)}
+                  onFocus={() => router.prefetch(item.href)}
+                  onClick={() => {
+                    setPendingHref(item.href)
+                    if (isMobile) setSidebarOpen(false)
+                  }}
+                >
+                  <item.icon className={`mr-3 h-5 w-5 ${isActive(item.href) ? "text-[#1F2937]" : ""}`} />
+                  {item.name}
+                </Link>
               </Button>
             ))}
           </nav>
@@ -222,7 +264,10 @@ export default function AdminDashboardLayout({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto bg-[#F9FAFB] p-4 md:p-6">{children}</main>
+        <main className="flex-1 overflow-auto bg-[#F9FAFB] p-4 md:p-6"><AdminSessionProvider value={adminUser}>
+          {/* Show the spinner on click so the highlight and the page move together. */}
+          {pendingHref && pendingHref !== pathname ? <AdminDashboardLoading /> : children}
+        </AdminSessionProvider></main>
       </div>
 
       {/* Mobile overlay */}

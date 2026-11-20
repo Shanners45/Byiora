@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { rateLimit } from "@/lib/rate-limit"
+import { createClient } from "@/lib/supabase/server"
+import { verifyCheckoutCapability } from "@/lib/crypto/checkout"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -29,11 +31,23 @@ export async function GET(req: Request) {
     const supabase = createServiceRoleClient()
     const { data, error } = await supabase
       .from("transactions")
-      .select("status, failure_remarks, transaction_id")
+      .select("status, failure_remarks, transaction_id, user_id")
       .eq("transaction_id", id)
       .single()
 
     if (error || !data) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 })
+    }
+
+    // SECURITY: order IDs are short and guessable; require the checkout
+    // capability or the owning session. Same 404 so IDs can't be enumerated.
+    let allowed = verifyCheckoutCapability(id, url.searchParams.get("ct") || "")
+    if (!allowed && (data as any).user_id) {
+      const userSupabase = await createClient()
+      const { data: { user } } = await userSupabase.auth.getUser()
+      allowed = Boolean(user && user.id === (data as any).user_id)
+    }
+    if (!allowed) {
       return NextResponse.json({ error: "Not found" }, { status: 404 })
     }
 
@@ -42,6 +56,6 @@ export async function GET(req: Request) {
       failure_remarks: (data as any).failure_remarks
     })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Unexpected error" }, { status: 500 })
+    return NextResponse.json({ error: "Unexpected error" }, { status: 500 })
   }
 }

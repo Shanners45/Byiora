@@ -9,6 +9,7 @@ import { checkIsBanned } from "@/lib/security/blacklist"
 import { checkStrikePenalty } from "@/lib/security/strike-counter"
 import { verifyTurnstileToken } from "@/lib/captcha"
 import { trackRateLimitViolation, trackEmailVelocity, isTrustedBuyer } from "@/lib/security/spam-detection"
+import { createCheckoutCapability } from "@/lib/crypto/checkout"
 
 interface TransactionData {
   product: string
@@ -56,7 +57,7 @@ export async function checkCheckoutSecurityAction(clientData?: { deviceId?: stri
  */
 import { transactionInputSchema } from "@/lib/validations/checkout"
 
-export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; error?: string; data?: any; paymentUrl?: string; isDuplicate?: boolean; isFreeOrder?: boolean }> {
+export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; checkoutToken?: string; error?: string; data?: any; paymentUrl?: string; isDuplicate?: boolean; isFreeOrder?: boolean }> {
   try {
     // ── LAYER 0: Zod Runtime Schema Validation ──
     const parseResult = transactionInputSchema.safeParse(transactionData)
@@ -232,12 +233,27 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
       const { data: activeOrders } = await activeOrderQuery.limit(1)
       if (activeOrders && activeOrders.length > 0) {
-        const activeTxn = activeOrders[0]
+        const activeTxn = activeOrders[0] as any
+        // Only hand back a resumable capability when the caller plausibly owns
+        // the pending order (same session, device, or IP) — not on an email match alone.
+        const activeGuest = activeTxn.guest_user_data || {}
+        const sameUser = Boolean(sessionUserId && activeTxn.user_id === sessionUserId)
+        const sameDevice = Boolean(deviceId && activeGuest.deviceId === deviceId)
+        const sameIp = Boolean(ip && ip !== "unknown" && activeGuest.ip === ip)
+        const canResume = activeTxn.user_id ? sameUser : (sameDevice || sameIp)
+
+        if (canResume) {
+          return {
+            success: false,
+            error: `ACTIVE_ORDER_EXISTS:${activeTxn.transaction_id}`,
+            transactionId: activeTxn.transaction_id,
+            checkoutToken: createCheckoutCapability(activeTxn.transaction_id),
+            data: { activeTransactionId: activeTxn.transaction_id },
+          }
+        }
         return {
           success: false,
-          error: `ACTIVE_ORDER_EXISTS:${activeTxn.transaction_id}`,
-          transactionId: activeTxn.transaction_id,
-          data: { activeTransactionId: activeTxn.transaction_id },
+          error: "ACTIVE_ORDER_EXISTS:",
         }
       }
     } catch (concurrencyErr: any) {
@@ -249,17 +265,18 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     // SECURITY: Validate price against the database to prevent tampering
     const { data: productData, error: productError } = await serviceSupabase
       .from("products")
-      .select("denominations")
+      .select("denominations, category")
       .eq("id", productId)
       .single()
 
     let denominations = productData?.denominations
+    let verifiedCategory = (productData as any)?.category as string | undefined
 
     if (productError || !denominations) {
       // Fallback to slug search if id lookup fails
       const { data: slugProduct, error: slugError } = await serviceSupabase
         .from("products")
-        .select("denominations")
+        .select("denominations, category")
         .eq("slug", productId)
         .single()
 
@@ -267,6 +284,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         return { success: false, error: "Product not found or unavailable." }
       }
       denominations = slugProduct.denominations
+      verifiedCategory = (slugProduct as any)?.category
     }
 
     // SECURITY: Strictly match denomination by label or id against DB records
@@ -305,7 +323,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       const promoResult = await applyPromoCodeServerSide({
         code: transactionData.promoCode,
         productId: productId,
-        productCategory: transactionData.productCategory || "",
+        productCategory: verifiedCategory || "",
         denominationLabel: transactionData.amount,
         email: transactionData.email,
         userId: sessionUserId,
@@ -406,7 +424,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     }
 
     if (transactionData.productCategory) {
-      insertPayload.product_category = transactionData.productCategory
+      insertPayload.product_category = verifiedCategory || transactionData.productCategory
     }
 
     let data: any = null
@@ -638,10 +656,10 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       } catch (fulfillErr) {
         console.error("[Checkout] Free promo order auto-fulfillment error:", fulfillErr)
       }
-      return { success: true, transactionId, data, isFreeOrder: true }
+      return { success: true, transactionId, checkoutToken: createCheckoutCapability(transactionId), data, isFreeOrder: true }
     }
 
-    return { success: true, transactionId, data, paymentUrl }
+    return { success: true, transactionId, checkoutToken: createCheckoutCapability(transactionId), data, paymentUrl }
   } catch (error: any) {
     console.error("Add transaction error:", error)
     return { success: false, error: error.message || "An unexpected error occurred" }

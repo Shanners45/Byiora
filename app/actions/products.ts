@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import { sanitizeHtml, sanitizePlainText } from "@/lib/sanitize"
 
-import { verifyAdmin } from "./admin-utils"
+import { getAdminSessionAction } from "./admin-utils"
 import { submitToIndexNow, submitAllSiteUrlsToIndexNow } from "@/lib/indexnow"
 
 function sanitizeProductData<T extends Record<string, any>>(data: T): T {
@@ -48,6 +48,12 @@ function sanitizeProductData<T extends Record<string, any>>(data: T): T {
   return result as T
 }
 
+/** Catalog access matches the Products page: admin and sub-admin only. */
+async function verifyCatalogManager(): Promise<boolean> {
+  const session = await getAdminSessionAction()
+  return session.success && (session.data.role === "admin" || session.data.role === "sub_admin")
+}
+
 /**
  * Creates a new product (admin only)
  * Uses Service Role to bypass RLS
@@ -70,7 +76,7 @@ export async function createProductAction(productData: {
   uid_guide_image?: string | null
   servers?: Array<{ id: string; name: string }>
 }) {
-  if (!(await verifyAdmin())) {
+  if (!(await verifyCatalogManager())) {
     return { error: "Unauthorized: Admin access required" }
   }
 
@@ -127,7 +133,7 @@ export async function updateProductAction(
     servers?: Array<{ id: string; name: string }>
   }
 ) {
-  if (!(await verifyAdmin())) {
+  if (!(await verifyCatalogManager())) {
     return { error: "Unauthorized: Admin access required" }
   }
 
@@ -173,7 +179,7 @@ export async function updateProductAction(
  * Uses Service Role to bypass RLS
  */
 export async function getProductByIdAction(id: string) {
-  if (!(await verifyAdmin())) {
+  if (!(await verifyCatalogManager())) {
     return { error: "Unauthorized: Admin access required" }
   }
 
@@ -203,7 +209,7 @@ export async function getProductByIdAction(id: string) {
  * Uses Service Role to bypass RLS
  */
 export async function deleteProductAction(id: string) {
-  if (!(await verifyAdmin())) {
+  if (!(await verifyCatalogManager())) {
     return { error: "Unauthorized: Admin access required" }
   }
 
@@ -234,7 +240,7 @@ export async function deleteProductAction(id: string) {
  * Uses Service Role to bypass RLS
  */
 export async function updateProductStatusAction(id: string, isActive: boolean) {
-  if (!(await verifyAdmin())) {
+  if (!(await verifyCatalogManager())) {
     return { error: "Unauthorized: Admin access required" }
   }
 
@@ -267,7 +273,7 @@ export async function updateProductStatusAction(id: string, isActive: boolean) {
  * Triggers batch IndexNow submission of all site URLs to Bing & Search Engines (admin only)
  */
 export async function triggerSiteIndexNowAction() {
-  if (!(await verifyAdmin())) {
+  if (!(await verifyCatalogManager())) {
     return { error: "Unauthorized: Admin access required", success: false, submittedCount: 0, urls: [] }
   }
 

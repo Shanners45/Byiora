@@ -292,7 +292,7 @@ export default function ForgotPasswordPage() {
               <p className="text-white/60 text-sm mb-8">
                 Your password has been updated successfully. You can now sign in with your new password.
               </p>
-              <Link href="/en-np/sign-up">
+              <Link href="/en-np/sign-in">
                 <Button className="w-full h-12 bg-[#FFD700] hover:bg-[#FFD700]/90 text-[#311144] font-bold rounded-xl transition-all duration-200">
                   Sign In Now
                 </Button>
@@ -450,7 +450,7 @@ export default function ForgotPasswordPage() {
 
                 <div className="text-center">
                   <Link
-                    href="/en-np/sign-up"
+                    href="/en-np/sign-in"
                     className="text-sm text-white/60 hover:text-[#FFD700] transition-colors flex items-center gap-1 justify-center"
                   >
                     <ArrowLeft className="w-3 h-3" /> Back to Sign In

@@ -12,6 +12,36 @@ import posthog from "posthog-js"
 
 let posthogInitialised = false
 
+const SENSITIVE_QUERY_PARAM = /^(token|code|otp|access_token|refresh_token|password|secret|key)$/i
+
+const ANALYTICS_URL_KEYS = [
+  "$current_url",
+  "$referrer",
+  "$initial_current_url",
+  "$initial_referrer",
+  "$session_entry_url",
+  "$session_entry_referrer",
+]
+
+/** Collapses bearer-bearing path segments (e.g. /checkout/BYI-…) for analytics. */
+export function sanitizeAnalyticsPath(pathname: string): string {
+  return pathname.replace(/^\/checkout\/[^/?#]+/i, "/checkout/[id]")
+}
+
+/** Strips reset/verification tokens and checkout IDs from an absolute URL. */
+export function sanitizeAnalyticsUrl(value: string): string {
+  try {
+    const url = new URL(value)
+    for (const name of [...url.searchParams.keys()]) {
+      if (SENSITIVE_QUERY_PARAM.test(name)) url.searchParams.delete(name)
+    }
+    url.pathname = sanitizeAnalyticsPath(url.pathname)
+    return url.toString()
+  } catch {
+    return value
+  }
+}
+
 export function initPostHog() {
   if (typeof window === "undefined") return
   if (posthogInitialised) return
@@ -49,6 +79,18 @@ export function initPostHog() {
       enable_heatmaps: false,
       capture_dead_clicks: false,
       enable_recording_console_log: false,
+      before_send: (event) => {
+        const properties = event?.properties as Record<string, unknown> | undefined
+        if (!properties) return event
+        for (const key of ANALYTICS_URL_KEYS) {
+          const value = properties[key]
+          if (typeof value === "string") properties[key] = sanitizeAnalyticsUrl(value)
+        }
+        if (typeof properties.$pathname === "string") {
+          properties.$pathname = sanitizeAnalyticsPath(properties.$pathname)
+        }
+        return event
+      },
     })
     posthogInitialised = true
   } catch (err) {

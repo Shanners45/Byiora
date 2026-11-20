@@ -89,6 +89,18 @@ export async function updateTransactionStatusAction(
         ]).then(({ error: notifErr }) => {
           if (notifErr) console.error("Error inserting order failed notification:", notifErr)
         })
+      } else if (newStatus === "Refunded") {
+        await serviceSupabase.from("notifications").insert([
+          {
+            title: "Order Refunded 🟣",
+            message: `Your order for ${existingTxn.product_name || "your item"} (${existingTxn.amount || ""}) has been refunded. Your refund has been processed from byiora's side. Most refunds appear in 3-5 days, though some payment methods may vary.`,
+            type: "info",
+            user_id: existingTxn.user_id,
+            is_read: false,
+          },
+        ]).then(({ error: notifErr }) => {
+          if (notifErr) console.error("Error inserting order refunded notification:", notifErr)
+        })
       }
     }
 
@@ -605,7 +617,7 @@ export async function refundKhaltiTransactionAction(
     if (txn.user_id) {
       await insertNotificationAction(
         "Order Refunded 🟣",
-        `Your order ${transactionId} for ${txn.product_name} has been refunded via Khalti (${refundRemark}).`,
+        `Your order ${transactionId} for ${txn.product_name} has been refunded (${refundRemark}). Your refund has been processed from byiora's side. Most refunds appear in 3-5 days, though some payment methods may vary.`,
         "info",
         txn.user_id
       ).catch(() => {})

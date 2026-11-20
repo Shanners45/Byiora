@@ -3,7 +3,13 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { createClient } from "@/lib/supabase/server"
 
-import { verifyAdmin } from "./admin-utils"
+import { getAdminSessionAction, verifyAdmin } from "./admin-utils"
+
+/** Notifications match the dashboard nav: admin and sub-admin only. */
+async function verifyAdminOrSubAdmin(): Promise<boolean> {
+  const session = await getAdminSessionAction()
+  return session.success && (session.data.role === "admin" || session.data.role === "sub_admin")
+}
 
 /**
  * Gets dashboard stats (admin only)
@@ -29,7 +35,17 @@ export async function getDashboardStatsAction() {
       serviceSupabase.auth.admin.listUsers({ perPage: 1000 }).catch(() => ({ data: { users: [] } })),
       serviceSupabase.from("products").select("*", { count: "exact", head: true }),
       serviceSupabase.from("transactions").select("*", { count: "exact" }).order("created_at", { ascending: false }).limit(5),
-      serviceSupabase.from("transactions").select("price,product_name").eq("status", "Completed"),
+      (async () => {
+        // Page past the 1000-row response cap so total revenue stays complete.
+        const rows: any[] = []
+        for (let from = 0; ; from += 1000) {
+          const res = await serviceSupabase.from("transactions").select("price,product_name").eq("status", "Completed").order("created_at").order("transaction_id").range(from, from + 999)
+          if (res.error) return { data: null, error: res.error }
+          rows.push(...(res.data || []))
+          if (!res.data || res.data.length < 1000) break
+        }
+        return { data: rows, error: null }
+      })(),
       serviceSupabase.from("products").select("*").eq("is_active", true).limit(5)
     ])
 
@@ -98,31 +114,48 @@ export async function getAllTransactionsAction(options?: GetAllTransactionsOptio
   try {
     const serviceSupabase = createServiceRoleClient()
 
-    let txQuery = serviceSupabase
-      .from("transactions")
-      .select("*, users(id, name)", { count: "exact" })
-      .order("created_at", { ascending: false })
-
-    if (options?.status && options.status !== "all") {
-      txQuery = txQuery.eq("status", options.status as any)
+    const buildQuery = () => {
+      let q = serviceSupabase
+        .from("transactions")
+        .select("*, users(id, name)", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .order("transaction_id", { ascending: false })
+      if (options?.status && options.status !== "all") {
+        q = q.eq("status", options.status as any)
+      }
+      if (options?.search && options.search.trim()) {
+        // Strip PostgREST filter syntax so search text can't inject extra filters.
+        const s = options.search.trim().replace(/[,()*%\\]/g, " ")
+        q = q.or(`product_name.ilike.%${s}%,user_email.ilike.%${s}%,transaction_id.ilike.%${s}%`)
+      }
+      return q
     }
 
-    if (options?.search && options.search.trim()) {
-      const s = options.search.trim()
-      txQuery = txQuery.or(`product_name.ilike.%${s}%,user_email.ilike.%${s}%,transaction_id.ilike.%${s}%`)
-    }
-
-    if (options?.page && options?.pageSize) {
-      const from = (options.page - 1) * options.pageSize
-      const to = from + options.pageSize - 1
-      txQuery = txQuery.range(from, to)
+    // Supabase caps every response at 1000 rows. Without paging through,
+    // older completed orders silently drop out of revenue and CSV exports.
+    const fetchTransactions = async () => {
+      if (options?.page && options?.pageSize) {
+        const from = (options.page - 1) * options.pageSize
+        return await buildQuery().range(from, from + options.pageSize - 1)
+      }
+      const PAGE = 1000
+      const rows: any[] = []
+      let count: number | null = null
+      for (let from = 0; ; from += PAGE) {
+        const res = await buildQuery().range(from, from + PAGE - 1)
+        if (res.error) return { data: null, count: null, error: res.error }
+        count = res.count
+        rows.push(...(res.data || []))
+        if (!res.data || res.data.length < PAGE) break
+      }
+      return { data: rows, count, error: null }
     }
 
     const [
       { data, count, error },
       { data: productsData }
     ] = await Promise.all([
-      txQuery,
+      fetchTransactions(),
       serviceSupabase
         .from("products")
         .select("id, name, slug")
@@ -308,7 +341,7 @@ export async function getAllProductsAdminAction() {
  * Uses Service Role to bypass RLS
  */
 export async function getAllNotificationsAction() {
-  if (!(await verifyAdmin())) {
+  if (!(await verifyAdminOrSubAdmin())) {
     return { error: "Unauthorized: Admin access required" }
   }
 
@@ -319,7 +352,7 @@ export async function getAllNotificationsAction() {
       .from("notifications")
       .select(`
         *,
-        users (
+        users!notifications_user_id_fkey (
           name,
           email
         )
@@ -348,7 +381,7 @@ export async function sendNotificationAction(
   type: "info" | "success" | "warning" | "error",
   userId: string | null
 ) {
-  if (!(await verifyAdmin())) {
+  if (!(await verifyAdminOrSubAdmin())) {
     return { error: "Unauthorized: Admin access required" }
   }
 
@@ -383,7 +416,7 @@ export async function sendNotificationAction(
  * Uses Service Role to bypass RLS
  */
 export async function deleteNotificationAction(id: string) {
-  if (!(await verifyAdmin())) {
+  if (!(await verifyAdminOrSubAdmin())) {
     return { error: "Unauthorized: Admin access required" }
   }
 

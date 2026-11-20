@@ -31,6 +31,13 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   const router = useRouter()
   const { transaction_id } = use(params)
 
+  // HMAC capability issued when this order was created. It authorises guest
+  // checkout actions; the raw transaction ID alone must not be enough.
+  const getCheckoutCapability = () => {
+    if (typeof window === "undefined") return null
+    return new URLSearchParams(window.location.search).get("ct")
+  }
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [qrData, setQrData] = useState<any>(null)
@@ -92,7 +99,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
         }
       }
 
-      const res = await getOrGenerateQRAction(transaction_id)
+      const res = await getOrGenerateQRAction(transaction_id, getCheckoutCapability())
       const normalized = {
         ...res,
         price: res.price || res.amount || "0",
@@ -201,7 +208,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
     if (isNewlyExpired) {
       // Fire-and-forget: don't block on server action (DB update + email)
-      expireTransactionAction(transaction_id).catch(() => { })
+      expireTransactionAction(transaction_id, getCheckoutCapability()).catch(() => { })
 
       if (!qrData.isGuest) {
         setOverlayType("failed")
@@ -250,7 +257,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
     const checkStatus = async () => {
       if (!isMounted) return
       try {
-        const res = await fetch(`/api/transaction-status?id=${transaction_id}`, { cache: "no-store" })
+        const res = await fetch(`/api/transaction-status?id=${encodeURIComponent(transaction_id)}&ct=${encodeURIComponent(getCheckoutCapability() || "")}`, { cache: "no-store" })
         if (res.ok) {
           const data = await res.json()
           if (data.status === "Completed" || data.status === "Paid") {
@@ -332,8 +339,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
     setIsVerifying(true)
     try {
-      const provider = qrData.paymentCategory || "nepalpay"
-      const res = await verifyPaymentAction(transaction_id, qrData.validationTraceId, provider)
+      const res = await verifyPaymentAction(transaction_id, getCheckoutCapability())
 
       if (res.success && res.completed) {
         setIsCompleted(true)
@@ -357,7 +363,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
   const handleCancelOrder = async () => {
     setIsCancelling(true)
     try {
-      const res = await cancelTransactionAction(transaction_id)
+      const res = await cancelTransactionAction(transaction_id, getCheckoutCapability())
       if (res.success) {
         localStorage.removeItem(`qr_${transaction_id}`)
         setIsCancelled(true)

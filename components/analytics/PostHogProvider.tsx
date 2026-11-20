@@ -2,11 +2,11 @@
 
 import { useEffect } from "react"
 import { usePathname, useSearchParams } from "next/navigation"
-import { initPostHog, posthog } from "@/lib/analytics/posthog"
+import { initPostHog, posthog, sanitizeAnalyticsUrl } from "@/lib/analytics/posthog"
 import { touchLastActiveAction } from "@/app/actions/activity"
 
 let lastHeartbeatAt = 0
-const HEARTBEAT_INTERVAL_MS = 60_000
+const HEARTBEAT_INTERVAL_MS = 5 * 60_000
 
 /**
  * PostHogProvider
@@ -24,9 +24,9 @@ export function PostHogProvider() {
     initPostHog()
   }, [])
 
-  // Server-side activity heartbeat (works even when PostHog is not configured).
-  // Beats on mount, then every minute while the tab is visible so an idle
-  // reader still shows as active in the admin dashboard.
+  // Server-side "last active" timestamp (works even when PostHog is not
+  // configured). Beats on mount, then every five minutes while the tab is
+  // visible. The green online dot is Realtime presence, not this heartbeat.
   useEffect(() => {
     if (typeof window === "undefined") return
 
@@ -51,8 +51,7 @@ export function PostHogProvider() {
     if (typeof window === "undefined") return
     if (!posthog.__loaded) return
 
-    const url = pathname + (searchParams?.toString() ? `?${searchParams.toString()}` : "")
-    posthog.capture("$pageview", { $current_url: window.location.origin + url })
+    posthog.capture("$pageview", { $current_url: sanitizeAnalyticsUrl(window.location.href) })
   }, [pathname, searchParams])
 
   return null // No DOM — purely a side-effect component

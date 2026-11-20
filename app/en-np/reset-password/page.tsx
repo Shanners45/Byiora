@@ -152,7 +152,7 @@ function ResetPasswordForm() {
             Your password has been successfully reset. All previous sessions have been signed out for security.
             You can now sign in with your new password.
           </p>
-          <Link href="/en-np/sign-up">
+          <Link href="/en-np/sign-in">
             <Button className="w-full h-12 bg-[#FFD700] hover:bg-[#FFD700]/90 text-[#311144] font-bold rounded-xl transition-all duration-200">
               Sign In Now
             </Button>

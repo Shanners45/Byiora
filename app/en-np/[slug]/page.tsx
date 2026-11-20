@@ -317,7 +317,7 @@ export default function ProductDetailPage() {
 
     try {
       // Add transaction and keep it as "Processing" - no status updates
-      const { transactionId, paymentUrl, isDuplicate, isFreeOrder: freeFromAction } = await addTransaction({
+      const { transactionId, checkoutToken, paymentUrl, isDuplicate, isFreeOrder: freeFromAction } = await addTransaction({
         product: `${giftCard.name}`,
         amount: selectedDenom?.label || selectedDenomination,
         price: `${selectedDenom?.price}`,
@@ -342,7 +342,8 @@ export default function ProductDetailPage() {
       // Encrypt checkout field values
       if ((isDirectLoginProduct || isTopupProduct) && Object.keys(checkoutFieldValues).length > 0) {
         try {
-          await encryptCheckoutData(transactionId, checkoutFieldValues)
+          if (!checkoutToken) throw new Error("Missing checkout session capability")
+          await encryptCheckoutData(transactionId, checkoutFieldValues, checkoutToken)
         } catch (encryptError) {
           console.error("Failed to encrypt checkout data:", encryptError)
           toast.error("Failed to secure your login details. Please try again.")
@@ -395,7 +396,7 @@ export default function ProductDetailPage() {
       if (isAutomatedGateway) {
         toast.info("Redirecting to secure payment gateway...")
         localStorage.setItem(`returnUrl_${transactionId}`, window.location.pathname)
-        router.push(`/checkout/${transactionId}`)
+        router.push(`/checkout/${transactionId}?ct=${encodeURIComponent(checkoutToken || "")}`)
         return
       }
 
@@ -429,12 +430,23 @@ export default function ProductDetailPage() {
 
       if (error?.message?.startsWith("ACTIVE_ORDER_EXISTS:")) {
         const activeId = error.message.replace("ACTIVE_ORDER_EXISTS:", "").trim()
+        const resumeToken = (error as any).checkoutToken as string | undefined
+        if (!activeId) {
+          toast.error("Payment in progress", {
+            description: "Please wait for your existing payment to finish, or try again in a few minutes.",
+            duration: 6000,
+          })
+          return
+        }
+        const target = resumeToken
+          ? `/checkout/${activeId}?ct=${encodeURIComponent(resumeToken)}`
+          : `/checkout/${activeId}`
         toast.error("Payment in progress", {
           description: "Please complete your existing payment first.",
           duration: 6000,
           action: {
             label: "Go to Payment",
-            onClick: () => router.push(`/checkout/${activeId}`),
+            onClick: () => router.push(target),
           },
         })
         return
@@ -1235,8 +1247,15 @@ export default function ProductDetailPage() {
                   size="sm"
                   className="mb-4 text-brand-sky-blue border-brand-sky-blue/30 hover:bg-brand-sky-blue/10 rounded-lg"
                   onClick={async () => {
+                    let qrUrl: URL;
                     try {
-                      const response = await fetch(selectedPaymentMethod.qr_url!);
+                      qrUrl = new URL(selectedPaymentMethod.qr_url!, window.location.origin);
+                    } catch {
+                      return;
+                    }
+                    if (qrUrl.protocol !== "http:" && qrUrl.protocol !== "https:") return;
+                    try {
+                      const response = await fetch(qrUrl.toString());
                       const blob = await response.blob();
                       const blobUrl = URL.createObjectURL(blob);
                       const link = document.createElement('a');
@@ -1247,7 +1266,7 @@ export default function ProductDetailPage() {
                       document.body.removeChild(link);
                       setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
                     } catch (err) {
-                      window.open(selectedPaymentMethod.qr_url!, '_blank');
+                      window.open(qrUrl.toString(), '_blank', 'noopener,noreferrer');
                     }
                   }}
                 >

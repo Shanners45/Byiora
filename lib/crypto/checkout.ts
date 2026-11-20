@@ -15,3 +15,23 @@ export function getCheckoutEncryptionKey(): Buffer {
   }
   return crypto.createHash("sha256").update(key).digest()
 }
+
+/**
+ * Server-issued proof that the caller created this transaction. Handed back
+ * only from the order-creation action so an attacker cannot write checkout
+ * credentials into somebody else's pending order by guessing its ID.
+ */
+export function createCheckoutCapability(transactionId: string): string {
+  return crypto
+    .createHmac("sha256", getCheckoutEncryptionKey())
+    .update(`checkout-capability:v1:${transactionId}`)
+    .digest("hex")
+}
+
+export function verifyCheckoutCapability(transactionId: string, capability: string): boolean {
+  if (!capability || typeof capability !== "string") return false
+  const expected = Buffer.from(createCheckoutCapability(transactionId), "hex")
+  const provided = Buffer.from(capability, "hex")
+  if (provided.length !== expected.length) return false
+  return crypto.timingSafeEqual(expected, provided)
+}

@@ -5,7 +5,7 @@ import crypto from "crypto"
 import { verifyAdmin } from "./admin-utils"
 import { headers } from "next/headers"
 import { rateLimit } from "@/lib/rate-limit"
-import { getCheckoutEncryptionKey } from "@/lib/crypto/checkout"
+import { getCheckoutEncryptionKey, verifyCheckoutCapability } from "@/lib/crypto/checkout"
 
 const ALGORITHM = "aes-256-gcm"
 
@@ -18,7 +18,8 @@ const ALGORITHM = "aes-256-gcm"
  */
 export async function encryptCheckoutData(
   transactionId: string,
-  checkoutData: Record<string, string>
+  checkoutData: Record<string, string>,
+  checkoutCapability: string
 ) {
   try {
     // SECURITY: Rate-limit to prevent abuse (10 calls/min per IP)
@@ -27,6 +28,12 @@ export async function encryptCheckoutData(
     const rl = await rateLimit(`encrypt-checkout:${ip}`, { windowMs: 60_000, max: 10 })
     if (!rl.ok) {
       return { error: "Too many requests. Please try again later." }
+    }
+
+    // SECURITY: The capability is minted by the order-creation action and is
+    // bound to this transaction, so knowing a transaction ID is not enough.
+    if (!verifyCheckoutCapability(transactionId, checkoutCapability)) {
+      return { error: "Invalid checkout session." }
     }
 
     const serviceSupabase = createServiceRoleClient()
@@ -60,15 +67,20 @@ export async function encryptCheckoutData(
 
     const encryptedBlob = `${iv.toString("hex")}:${authTag}:${encrypted}`
 
-    // Store in the transactions table
-    const { error } = await serviceSupabase
+    // Store atomically: only the first writer wins.
+    const { data: updated, error } = await serviceSupabase
       .from("transactions")
       .update({ encrypted_checkout_data: encryptedBlob })
       .eq("transaction_id", transactionId)
+      .is("encrypted_checkout_data", null)
+      .select("id")
 
     if (error) {
       console.error("Error storing encrypted data:", error)
       return { error: `Failed to store encrypted data: ${error.message}` }
+    }
+    if (!updated || updated.length === 0) {
+      return { error: "Checkout data has already been submitted for this transaction." }
     }
 
     return { success: true }

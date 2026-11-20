@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Users, ShoppingBag, DollarSign, Package, UserCheck, Bell, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { getDashboardStatsAction } from "@/app/actions/dashboard"
-import { getAdminSessionAction } from "@/app/actions/admin-utils"
+import { useAdminSession } from "@/lib/admin-session-context"
 
 interface DashboardStats {
   totalUsers: number
@@ -30,18 +30,9 @@ export default function AdminDashboardPage() {
     topProducts: [],
   })
   const [loading, setLoading] = useState(true)
-  const [adminUser, setAdminUser] = useState<{ name: string; role: string } | null>(null)
+  const adminUser = useAdminSession()
 
   useEffect(() => {
-    ;(async () => {
-      try {
-        const session = await getAdminSessionAction()
-        if (session.success) setAdminUser({ name: session.data.name, role: session.data.role })
-      } catch (error) {
-        console.error("Error loading admin session:", error)
-      }
-    })()
-
     loadDashboardStats()
 
     const channel = supabase

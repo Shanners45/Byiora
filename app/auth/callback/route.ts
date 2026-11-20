@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { NextResponse } from "next/server"
 import { sendWelcomeEmail } from "@/lib/email/resend"
 
@@ -18,9 +19,12 @@ export async function GET(request: Request) {
       const forwardedFor = request.headers.get("x-forwarded-for")
       const realIp = request.headers.get("x-real-ip")
       const clientIp = forwardedFor ? forwardedFor.split(",")[0].trim() : (realIp || null)
+      // Profile rows are trusted server-managed data; the browser role no longer
+      // holds INSERT/UPDATE on public.users beyond display name.
+      const serviceSupabase = createServiceRoleClient()
 
       // Check if user exists in the public.users table by auth ID
-      const { data: existingUser } = await supabase
+      const { data: existingUser } = await serviceSupabase
         .from("users")
         .select("id")
         .eq("id", session.user.id)
@@ -28,13 +32,13 @@ export async function GET(request: Request) {
 
       if (existingUser) {
         if (clientIp) {
-          await (supabase.from("users") as any)
+          await (serviceSupabase.from("users") as any)
             .update({ last_ip: clientIp, updated_at: new Date().toISOString() })
             .eq("id", session.user.id)
         }
       } else if (session.user.email) {
         // Check if a user with the same email already exists (e.g. signed up with email+password, now logging in with Google)
-        const { data: existingByEmail } = await supabase
+        const { data: existingByEmail } = await serviceSupabase
           .from("users")
           .select("id")
           .eq("email", session.user.email.toLowerCase().trim())
@@ -42,7 +46,7 @@ export async function GET(request: Request) {
 
         if (existingByEmail) {
           // User already exists with this email — update their ID to the new auth provider ID
-          await (supabase.from("users") as any)
+          await (serviceSupabase.from("users") as any)
             .update({
               id: session.user.id,
               ...(clientIp ? { last_ip: clientIp } : {}),
@@ -53,7 +57,7 @@ export async function GET(request: Request) {
           const userName = session.user.user_metadata?.full_name || session.user.email.split("@")[0] || "User"
 
           // Completely new user — create in the public.users table with signup IP
-          await (supabase.from("users") as any).insert({
+          await (serviceSupabase.from("users") as any).insert({
             id: session.user.id,
             email: session.user.email,
             name: userName,

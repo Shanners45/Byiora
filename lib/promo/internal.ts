@@ -215,8 +215,23 @@ export async function applyPromoCodeServerSide({
       return { success: false, discountAmount: 0, finalPrice: verifiedPrice, originalPrice: verifiedPrice, error: "Promo code expired." }
     }
 
-    // Per-user check (by email & device)
+    // Per-user check (by account, email & device)
     if (promo.per_user_limit && promo.per_user_limit > 0) {
+      // The authenticated account is the identity that matters: email and
+      // device can both be changed by the same person between redemptions.
+      if (userId) {
+        const { data: accountUsages } = await supabase
+          .from("promo_code_usage")
+          .select("id, transaction_id")
+          .eq("promo_code_id", promo.id)
+          .eq("user_id", userId)
+
+        const activeAccountCount = await getEffectiveUsageCount(supabase, accountUsages || [])
+        if (activeAccountCount >= promo.per_user_limit) {
+          return { success: false, discountAmount: 0, finalPrice: verifiedPrice, originalPrice: verifiedPrice, error: "You've already used this promo code." }
+        }
+      }
+
       const { data: usages } = await supabase
         .from("promo_code_usage")
         .select("id, transaction_id")
@@ -294,23 +309,16 @@ export async function applyPromoCodeServerSide({
     discountAmount = Math.round(discountAmount * 100) / 100
     const finalPrice = Math.max(verifiedPrice - discountAmount, 0)
 
-    // ── ATOMIC: Increment usage_count with guard ──
-    const { data: updated, error: updateErr } = await supabase
-      .from("promo_codes")
-      .update({
-        usage_count: promo.usage_count + 1,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", promo.id)
-      .eq("is_active", true)
-      .or(
-        promo.usage_limit !== null
-          ? `usage_count.lt.${promo.usage_limit}`
-          : "usage_count.gte.0"
-      )
-      .select("id")
+    // ── ATOMIC: increment usage_count inside Postgres ──
+    // A read-modify-write from the app loses increments under concurrency and
+    // lets the cap be exceeded; the RPC increments and checks the limit in one
+    // statement and returns NULL when the code is exhausted.
+    const { data: newUsageCount, error: incrementErr } = await supabase.rpc("increment_promo_usage", {
+      p_promo_id: promo.id,
+      p_usage_limit: promo.usage_limit ?? null,
+    })
 
-    if (updateErr || !updated || updated.length === 0) {
+    if (incrementErr || newUsageCount === null || newUsageCount === undefined) {
       return { success: false, discountAmount: 0, finalPrice: verifiedPrice, originalPrice: verifiedPrice, error: "Code no longer available." }
     }
 

@@ -2,17 +2,23 @@ import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/lib/crypto/bank"
 import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
+import { rateLimit } from "@/lib/rate-limit"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const pidx = searchParams.get("pidx")
   const purchase_order_id = searchParams.get("purchase_order_id")
-  const status = searchParams.get("status")
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
 
   if (!pidx || !purchase_order_id) {
     return NextResponse.redirect(`${siteUrl}/?error=missing_params`)
+  }
+
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown"
+  const rl = await rateLimit(`khalti-callback:${ip}`, { windowMs: 60_000, max: 30 })
+  if (!rl.ok) {
+    return NextResponse.redirect(`${siteUrl}/?error=rate_limited`)
   }
 
   try {
@@ -43,23 +49,9 @@ export async function GET(request: Request) {
       return NextResponse.redirect(successRedirect)
     }
 
-    // If Khalti sent back a cancelled/failed status in the query param, handle it immediately
-    if (status === "User canceled") {
-      await supabase
-        .from("transactions")
-        .update({
-          status: "Payment Failed",
-          failure_remarks: "Khalti: User canceled payment",
-          updated_at: new Date().toISOString()
-        } as any)
-        .eq("transaction_id", purchase_order_id)
-
-      // Industry Standard: Release promo code hold on user cancellation
-      const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
-      releasePromoCodeOnFailure(purchase_order_id).catch(() => {})
-
-      return NextResponse.redirect(failRedirect)
-    }
+    // NOTE: cancellation status is handled only after the Khalti lookup below.
+    // Trusting a query-string status here would let anyone mark any pending order
+    // as failed with a crafted URL.
 
     // 2. Fetch Khalti credentials
     const credsRes = await supabase.from("payment_credentials").select("encrypted_username").eq("provider", "khalti").single() as any
@@ -110,6 +102,12 @@ export async function GET(request: Request) {
     const verifyData = verifyRes.data
     console.log(`[KHALTI] Lookup response:`, verifyData.status, verifyData.transaction_id || verifyData.tidx || verifyData.idx)
 
+    // SECURITY: when Khalti reports the order the pidx belongs to, it must be this one.
+    if (verifyData.purchase_order_id && String(verifyData.purchase_order_id) !== purchase_order_id) {
+      console.error(`[KHALTI FRAUD ALERT] pidx ${pidx} belongs to order ${verifyData.purchase_order_id}, not ${purchase_order_id}`)
+      return NextResponse.redirect(failRedirect)
+    }
+
     if (verifyData.status === "Completed") {
       // SECURITY: Validate paid amount against order price (Khalti returns total_amount in Paisa)
       const expectedPaisa = Math.round(Number(txn.price) * 100)
@@ -128,6 +126,19 @@ export async function GET(request: Request) {
       }
 
       const resolvedBankTxnId = verifyData.transaction_id || verifyData.tidx || verifyData.bank_txn_id || verifyData.idx || pidx
+
+      // SECURITY: never let one bank payment fulfil a second order.
+      const { data: alreadyClaimed } = await supabase
+        .from("transactions")
+        .select("transaction_id")
+        .eq("bank_txn_id", String(resolvedBankTxnId))
+        .neq("transaction_id", purchase_order_id)
+        .limit(1)
+
+      if (alreadyClaimed && alreadyClaimed.length > 0) {
+        console.error(`[KHALTI FRAUD ALERT] Payment ${resolvedBankTxnId} already claimed by ${alreadyClaimed[0].transaction_id}`)
+        return NextResponse.redirect(failRedirect)
+      }
 
       const fulfillResult = await fulfillOrderDirectly({
         transactionId: purchase_order_id,

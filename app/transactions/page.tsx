@@ -308,19 +308,53 @@ export default function TransactionsPage() {
       const finalY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 15 : 100;
 
       if (transaction.status === "Completed" && transaction.giftcard_code) {
+        const rawCode = String(transaction.giftcard_code || "").trim();
+        const isUrl = /^https?:\/\//i.test(rawCode);
+
+        const boxX = 20;
+        const boxWidth = pageWidth - 40;
+        const paddingX = 8;
+        const textX = boxX + paddingX;
+        const maxTextWidth = boxWidth - (paddingX * 2);
+
+        // Adjust font size dynamically so long URLs or codes wrap cleanly without overflowing
+        const codeFontSize = isUrl
+          ? (rawCode.length > 55 ? 9.5 : 10.5)
+          : (rawCode.length > 30 ? 11 : 13);
+
+        doc.setFontSize(codeFontSize);
+        doc.setFont("courier", "bold");
+        const codeLines: string[] = doc.splitTextToSize(rawCode, maxTextWidth);
+
+        const lineHeight = codeFontSize * 0.45;
+        const boxHeight = Math.max(24, 14 + (codeLines.length * lineHeight) + 4);
+
+        // Background rounded box
         doc.setFillColor(254, 252, 232); // bg-yellow-50
         doc.setDrawColor(254, 240, 138); // border-yellow-200
-        doc.roundedRect(20, finalY, pageWidth - 40, 25, 3, 3, 'FD');
+        doc.roundedRect(boxX, finalY, boxWidth, boxHeight, 3, 3, 'FD');
 
-        doc.setFontSize(11);
+        // Label
+        doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
         doc.setTextColor(146, 64, 14); // text-yellow-800
-        doc.text("YOUR GIFTCARD CODE:", 30, finalY + 10);
+        doc.text(isUrl ? "YOUR REDEMPTION LINK / CODE:" : "YOUR GIFTCARD CODE:", textX, finalY + 8);
 
-        doc.setFontSize(14);
+        // Render code/link lines
+        doc.setFontSize(codeFontSize);
         doc.setFont("courier", "bold");
         doc.setTextColor(180, 83, 9); // text-yellow-700
-        doc.text(transaction.giftcard_code, 30, finalY + 18);
+
+        let currentLineY = finalY + 15;
+        for (let i = 0; i < codeLines.length; i++) {
+          doc.text(codeLines[i], textX, currentLineY);
+          currentLineY += lineHeight;
+        }
+
+        // Clickable link annotation if it's a URL
+        if (isUrl) {
+          doc.link(textX, finalY + 11, maxTextWidth, (codeLines.length * lineHeight) + 2, { url: rawCode });
+        }
       }
 
       // Footer
@@ -354,7 +388,7 @@ export default function TransactionsPage() {
               Please sign in to view your transaction history.
             </p>
             <Button
-              onClick={() => router.push("/en-np/sign-up?redirect=/transactions")}
+              onClick={() => router.push("/en-np/sign-in?redirect=/transactions")}
               className="bg-brand-sky-blue hover:bg-brand-sky-blue/90 text-white rounded-full px-8"
             >
               Sign In

@@ -13,7 +13,7 @@ export function Footer() {
             <h2 className="text-3xl md:text-4xl font-bold mb-3 tracking-wider">BYIORA</h2>
             <h3 className="text-xl md:text-2xl font-semibold mb-4">WHY TOP UP ON BYIORA?</h3>
             <p className="text-white/90 max-w-4xl mx-auto text-sm md:text-base leading-relaxed">
-              Millions of gamers count on Byiora every month for a seamless purchase experience when buying game credits
+              Thousands of gamers count on Byiora every month for a seamless purchase experience when buying game credits
               or vouchers - No registration or log-in is required, and purchases are added to your game account
               instantly. Top-up PUBG Mobile and more now!
             </p>

@@ -184,7 +184,26 @@ export async function resetPasswordWithTokenAction({
       return { success: false, error: "This password reset link has expired. Please request a new one." }
     }
 
-    // 2. Update user's password in Supabase Auth
+    // 2. Atomically consume the token before touching Auth so two concurrent
+    // requests cannot both pass this point.
+    const nowIso = new Date().toISOString()
+    const { data: claimed, error: claimError } = await supabase
+      .from("password_reset_tokens")
+      .update({ used_at: nowIso })
+      .eq("id", tokenRow.id)
+      .is("used_at", null)
+      .gt("expires_at", nowIso)
+      .select("id")
+
+    if (claimError) {
+      console.error("[resetPasswordWithTokenAction] token claim error:", claimError.message)
+      return { success: false, error: "Could not validate this reset link. Please request a new one." }
+    }
+    if (!claimed || claimed.length === 0) {
+      return { success: false, error: "This password reset link is invalid or has already been used." }
+    }
+
+    // 3. Update user's password in Supabase Auth
     const { error: updateAuthError } = await supabase.auth.admin.updateUserById(tokenRow.user_id, {
       password: newPassword,
     })
@@ -194,26 +213,25 @@ export async function resetPasswordWithTokenAction({
       return { success: false, error: updateAuthError.message || "Failed to update account password." }
     }
 
-    // 3. Revoke all active sessions everywhere for this user
+    // 4. Revoke all active sessions everywhere for this user
     try {
-      await supabase.rpc("revoke_all_user_sessions", { target_user_id: tokenRow.user_id })
+      const { error: revokeError } = await supabase.rpc("revoke_all_user_sessions", { target_user_id: tokenRow.user_id })
+      if (revokeError) {
+        console.warn("[resetPasswordWithTokenAction] Could not revoke sessions via RPC:", revokeError.message)
+      }
     } catch (e: any) {
       console.warn("[resetPasswordWithTokenAction] Could not revoke sessions via RPC:", e.message)
     }
 
-    // 4. Mark token as permanently consumed in database and invalidate any other tokens for this user
-    const nowIso = new Date().toISOString()
-    await supabase
-      .from("password_reset_tokens")
-      .update({ used_at: nowIso })
-      .eq("id", tokenRow.id)
-
-    // Immediately purge any other pending reset tokens for this user
-    await supabase
+    // 5. Invalidate any other pending reset tokens for this user
+    const { error: purgeError } = await supabase
       .from("password_reset_tokens")
       .delete()
       .eq("user_id", tokenRow.user_id)
       .neq("id", tokenRow.id)
+    if (purgeError) {
+      console.warn("[resetPasswordWithTokenAction] Could not purge sibling tokens:", purgeError.message)
+    }
 
     // Clear from Redis cache if present
     try {

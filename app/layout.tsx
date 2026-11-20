@@ -8,6 +8,7 @@ import { AuthProvider } from "@/lib/auth-context"
 import { NotificationProvider } from "@/lib/notification-context"
 import { GlobalAnnouncement } from "@/components/global-announcement"
 import { PostHogProvider } from "@/components/analytics/PostHogProvider"
+import { PresenceTracker } from "@/lib/presence"
 
 const nunito = Nunito({
   subsets: ["latin"],
@@ -32,7 +33,7 @@ export const metadata: Metadata = {
     template: "%s | Byiora",
   },
   description:
-    "Buy premium game top-ups and gift cards in Nepal instantly. Secure local payments with eSewa, Khalti, and Fonepay QR. Instant digital delivery.",
+    "Buy premium game top-ups and gift cards in Nepal instantly. Pay securely with eSewa, Khalti, Fonepay QR or mobile banking. Instant digital delivery.",
   keywords: [
     "gift cards Nepal",
     "game top-up Nepal",
@@ -71,7 +72,7 @@ export const metadata: Metadata = {
     siteName: "Byiora",
     title: "Byiora – Buy Game Top-Up & Gift Cards in Nepal | Instant Delivery",
     description:
-      "Buy premium game top-ups and gift cards in Nepal instantly. Secure local payments with eSewa, Khalti, and Fonepay QR. Instant digital delivery.",
+      "Buy premium game top-ups and gift cards in Nepal instantly. Pay securely with eSewa, Khalti, Fonepay QR or mobile banking. Instant digital delivery.",
     images: [
       {
         url: `https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png`,
@@ -85,7 +86,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Byiora – Buy Game Top-Up & Gift Cards in Nepal | Instant Delivery",
     description:
-      "Buy premium game top-ups and gift cards in Nepal instantly. Secure local payments with eSewa, Khalti, and Fonepay QR. Instant digital delivery.",
+      "Buy premium game top-ups and gift cards in Nepal instantly. Pay securely with eSewa, Khalti, Fonepay QR or mobile banking. Instant digital delivery.",
     images: [`https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png`],
   },
   icons: {
@@ -167,12 +168,20 @@ export default function RootLayout({
         {/* Service Worker Registration */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `
+            // Dev chunks keep their names while changing, so a cache-first worker
+            // serves stale code ("module factory is not available"). Production only;
+            // in dev, remove any worker and cache left over from earlier runs.
+            __html: process.env.NODE_ENV === "production" ? `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js').catch(function() {});
                 });
               }
+            ` : `
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(function(rs) { rs.forEach(function(r) { r.unregister(); }); });
+              }
+              if (window.caches) caches.keys().then(function(ks) { ks.forEach(function(k) { caches.delete(k); }); });
             `,
           }}
         />
@@ -190,6 +199,7 @@ export default function RootLayout({
           <PostHogProvider />
         </Suspense>
         <AuthProvider>
+          <PresenceTracker />
           <NotificationProvider>
             <GlobalAnnouncement />
             {children}

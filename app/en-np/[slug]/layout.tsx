@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
-import { Suspense } from "react"
+import { Suspense, cache } from "react"
+import { notFound } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import type { Product } from "@/lib/product-categories"
 
@@ -15,38 +16,45 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
 }
 
+// One DB read per request, shared by metadata, JSON-LD, title and the 404 check.
+const getProduct = cache(async (slug: string): Promise<Product | null> => {
+  const supabase = await createClient()
+  const { data, error } = await (supabase as any)
+    .from("products")
+    .select("*")
+    .eq("slug", slug)
+    .eq("is_active", true)
+    .maybeSingle()
+  if (error) throw error // a DB hiccup must not look like "product does not exist"
+  return (data as Product | null) ?? null
+})
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  const supabase = await createClient()
 
   try {
-    const { data: product, error } = await (supabase as any)
-      .from("products")
-      .select("*")
-      .eq("slug", slug)
-      .eq("is_active", true)
-      .single()
+    const typedProduct = await getProduct(slug)
 
-    const typedProduct = product as Product | null
-
-    if (error || !typedProduct) {
+    if (!typedProduct) {
       return {
-        title: "Product Not Found | Byiora",
+        title: "Product Not Found",
         description: "The product you are looking for does not exist or has been moved.",
       }
     }
 
     const categoryLabel = typedProduct.category === "topup" ? "Top-Up" : "Gift Card"
-    const title = `Buy ${typedProduct.name} in Nepal | Byiora`
+    // The root layout's "%s | Byiora" template adds the brand.
+    const title = `Buy ${typedProduct.name} in Nepal`
 
-    // Build a rich meta description with pricing info
-    const cleanDesc = typedProduct.description ? stripHtml(typedProduct.description).slice(0, 120) : ''
-    const priceInfo = typedProduct.denominations && typedProduct.denominations.length > 0
-      ? ` Starting from Rs. ${typedProduct.denominations[0].price}.`
-      : ''
-    const description = cleanDesc
-      ? `${cleanDesc}${priceInfo} Pay via eSewa, Khalti or Fonepay. Instant delivery in Nepal.`
-      : `Buy ${typedProduct.name} ${categoryLabel} instantly in Nepal.${priceInfo} Secure payment with eSewa, Khalti, Fonepay. Fast digital delivery by Byiora.`
+    // Product descriptions hold redemption steps, not a summary, so the meta
+    // description is built from structured fields instead.
+    const prices = (typedProduct.denominations || [])
+      .map((d: any) => parseFloat(String(d.price).replace(/,/g, "")))
+      .filter((n: number) => Number.isFinite(n) && n > 0)
+    const priceInfo = prices.length ? ` From Rs. ${Math.min(...prices).toLocaleString("en-IN")}.` : ""
+    // Avoid "Amazon Gift Card Gift Card" when the name already says it.
+    const label = typedProduct.name.toLowerCase().includes(categoryLabel.toLowerCase()) ? "" : ` ${categoryLabel}`
+    const description = `Buy ${typedProduct.name}${label} in Nepal.${priceInfo} Pay with eSewa, Khalti or Fonepay QR and get instant digital delivery from Byiora.`
 
     const productUrl = `${BASE_URL}/en-np/${slug}`
     const imageUrl = typedProduct.logo || `${BASE_URL}/byiora-logo-full.png`
@@ -82,7 +90,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     }
   } catch {
     return {
-      title: "Product | Byiora",
+      title: "Product",
       description: "Browse premium gift cards and game top-ups on Byiora in Nepal.",
     }
   }
@@ -91,17 +99,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 // Separate async component for JSON-LD — wrapped in Suspense so it doesn't
 // block the layout from rendering {children} immediately.
 async function ProductJsonLd({ slug }: { slug: string }) {
-  const supabase = await createClient()
-
   try {
-    const { data: product } = await (supabase as any)
-      .from("products")
-      .select("*")
-      .eq("slug", slug)
-      .eq("is_active", true)
-      .single()
-
-    const typedProduct = product as Product | null
+    const typedProduct = await getProduct(slug)
     if (!typedProduct) return null
 
     const productUrl = `${BASE_URL}/en-np/${slug}`
@@ -231,16 +230,8 @@ async function ProductJsonLd({ slug }: { slug: string }) {
 }
 
 async function ProductHiddenTitle({ slug }: { slug: string }) {
-  const supabase = await createClient()
-
   try {
-    const { data: product } = await (supabase as any)
-      .from("products")
-      .select("name")
-      .eq("slug", slug)
-      .eq("is_active", true)
-      .single()
-
+    const product = await getProduct(slug)
     if (product) {
       return <h1 className="sr-only">{product.name}</h1>
     }
@@ -252,6 +243,9 @@ async function ProductHiddenTitle({ slug }: { slug: string }) {
 
 export default async function ProductLayout({ params, children }: Props) {
   const { slug } = await params
+  // Real 404 instead of a 200 "not found" page, so search engines drop dead URLs.
+  const exists = await getProduct(slug).then(Boolean, () => true)
+  if (!exists) notFound()
 
   return (
     <>

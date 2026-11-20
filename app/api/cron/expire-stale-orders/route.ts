@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/lib/crypto/bank"
-import { fulfillOrderDirectly } from "@/lib/fulfillment"
+import { fulfillOrderDirectly, handlePartialPayment, flagOrderForManualReview } from "@/lib/fulfillment"
 import { incrementFailureStrike } from "@/lib/security/strike-counter"
 import { cleanupExpiredBans } from "@/lib/security/blacklist"
 
@@ -107,6 +107,10 @@ export async function GET(req: Request) {
                   headers: { "Content-Type": "application/json", "x-internal-secret": PROXY_SECRET },
                   body: JSON.stringify({
                     nqrTxnId: typedTxn.validation_trace_id,
+                    // Without the expected amount and order remarks the proxy
+                    // cannot enforce the underpayment check (it defaults to 0).
+                    remarks: txn.transaction_id,
+                    amount: Math.round(parseFloat(String(typedTxn.price || "0").replace(/,/g, ''))),
                     username,
                     password,
                     orderCreatedAt: txn.created_at
@@ -116,7 +120,40 @@ export async function GET(req: Request) {
 
                 const proxyData = await response.json()
 
+                if (proxyData.needsReview) {
+                  // Possible stripped-remarks payment: park for a human instead
+                  // of expiring the order or auto-fulfilling it.
+                  await flagOrderForManualReview({
+                    transactionId: txn.transaction_id,
+                    provider: category,
+                    bankTxnId: proxyData.data?.bankTxnId || proxyData.data?.txnId,
+                    paidAmount: proxyData.data?.paidAmount,
+                  })
+                  continue
+                }
+
                 if (proxyData.success && proxyData.data?.status === "SUCCESS") {
+                  // Independently require a usable, sufficient paid amount — a
+                  // trace match alone must never recover an order.
+                  const expectedAmount = Math.round(parseFloat(String(typedTxn.price || "0").replace(/,/g, '')))
+                  const paidAmount = Math.round(parseFloat(String(proxyData.data.paidAmount ?? "").replace(/,/g, '')))
+                  if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+                    console.error(`[CRON] Refusing recovery for ${txn.transaction_id}: proxy returned no usable paid amount`)
+                    results.errors++
+                    continue
+                  }
+                  if (paidAmount < expectedAmount) {
+                    await handlePartialPayment({
+                      transactionId: txn.transaction_id,
+                      expectedAmount,
+                      paidAmount,
+                      productName: typedTxn.product_name,
+                      userEmail: typedTxn.user_email,
+                      source: `Cron Recovery (${category.toUpperCase()})`,
+                    })
+                    continue
+                  }
+
                   // PAYMENT FOUND! Recover the order
                   console.log(`[CRON] 🎉 RECOVERED payment for ${txn.transaction_id}`)
 

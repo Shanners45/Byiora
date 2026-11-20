@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { recordAbuse, getLockMinutes } from "@/lib/security/auto-ban"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/lib/crypto/bank"
 import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
@@ -11,10 +12,15 @@ import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
 export async function POST(req: Request) {
   try {
     // SECURITY: Verify internal secret
+    const callerIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || null
+    if (await getLockMinutes("webhook_probe", { ip: callerIp })) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
     const internalSecret = req.headers.get("x-internal-secret")
     const expectedSecret = process.env.INTERNAL_API_SECRET
     if (!expectedSecret || internalSecret !== expectedSecret) {
       console.error(`[FONEPAY-WS] REJECTED: Invalid internal secret`)
+      await recordAbuse("webhook_probe", { ip: callerIp })
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

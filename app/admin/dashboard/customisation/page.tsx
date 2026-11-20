@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
-import { Upload, Trash2, ImageIcon, Plus, ChevronUp, ChevronDown, Check, X, Layers, Package, Megaphone } from "lucide-react"
+import { Upload, Trash2, ImageIcon, Plus, ChevronUp, ChevronDown, Check, X, Layers, Package, Megaphone, Pencil } from "lucide-react"
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { revalidateHomepageAction } from "@/app/actions/customisation"
@@ -505,14 +505,17 @@ export default function CustomisationPage() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-3 max-w-2xl h-12 bg-[#FEF7E0] border border-[#F59E0B]/20 p-1">
-          <TabsTrigger value="announcements" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full">
-            <Megaphone className="h-4 w-4 mr-2" /> Announcements
+          <TabsTrigger value="announcements" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full text-xs sm:text-sm px-1.5 sm:px-3 flex items-center justify-center gap-1 sm:gap-2">
+            <Megaphone className="h-4 w-4 shrink-0" />
+            <span className="truncate">Announcements</span>
           </TabsTrigger>
-          <TabsTrigger value="banners" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full">
-            <ImageIcon className="h-4 w-4 mr-2" /> Hero Banners
+          <TabsTrigger value="banners" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full text-xs sm:text-sm px-1.5 sm:px-3 flex items-center justify-center gap-1 sm:gap-2">
+            <ImageIcon className="h-4 w-4 shrink-0" />
+            <span className="truncate">Hero Banners</span>
           </TabsTrigger>
-          <TabsTrigger value="categories" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full">
-            <Layers className="h-4 w-4 mr-2" /> Categories
+          <TabsTrigger value="categories" className="text-[#1F2937] data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white h-full text-xs sm:text-sm px-1.5 sm:px-3 flex items-center justify-center gap-1 sm:gap-2">
+            <Layers className="h-4 w-4 shrink-0" />
+            <span className="truncate">Categories</span>
           </TabsTrigger>
         </TabsList>
 
@@ -604,10 +607,16 @@ export default function CustomisationPage() {
                       <p className="font-semibold text-gray-800">{banner.title || "Untitled"}</p>
                       <p className="text-xs text-gray-500">{banner.link_url || "No link"}</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
                       <Switch checked={banner.is_active} onCheckedChange={() => handleToggleBannerActive(banner)} />
-                      <Button variant="ghost" size="sm" onClick={() => { setEditingBannerId(banner.id); setEditBannerForm({ ...banner }) }}>Edit</Button>
-                      <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteBanner(banner.id)}>Delete</Button>
+                      <Button variant="outline" size="sm" className="flex items-center gap-1.5 h-8 px-2.5" onClick={() => { setEditingBannerId(banner.id); setEditBannerForm({ ...banner }) }}>
+                        <Pencil className="h-3.5 w-3.5 shrink-0" />
+                        <span>Edit</span>
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600 hover:bg-red-50 flex items-center gap-1.5 h-8 px-2.5" onClick={() => handleDeleteBanner(banner.id)}>
+                        <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                        <span>Delete</span>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -846,9 +855,10 @@ export default function CustomisationPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <Megaphone className="h-4 w-4 text-[#F59E0B] shrink-0" />
                         <span className={`px-2 py-0.5 text-xs font-bold rounded-full ${
                           ann.type === 'modal' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
                         }`}>
@@ -861,23 +871,29 @@ export default function CustomisationPage() {
                           {ann.theme}
                         </span>
                       </div>
-                      <p className="font-bold text-lg text-gray-900">{ann.title}</p>
-                      <p className="text-sm text-gray-600">{ann.message}</p>
+                      <p className="font-bold text-lg text-gray-900 break-words">{ann.title}</p>
+                      <p className="text-sm text-gray-600 break-words">{ann.message}</p>
                       {ann.link_url && (
-                        <p className="text-xs text-blue-500 mt-1">Link: {ann.link_text} ({ann.link_url})</p>
+                        <p className="text-xs text-blue-500 mt-1 break-all">Link: {ann.link_text} ({ann.link_url})</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col items-end mr-4">
-                        <span className="text-xs font-medium text-gray-500 mb-1">Active</span>
+                    <div className="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 flex-shrink-0">
+                      <div className="flex items-center gap-2 mr-2">
+                        <span className="text-xs font-medium text-gray-500">Active</span>
                         <Switch 
                           checked={ann.is_active} 
                           onCheckedChange={(checked) => handleUpdateAnnouncementStatus(ann.id, checked)} 
                         />
                       </div>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={() => handleEditAnnouncement(ann)}>Edit</Button>
-                        <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDeleteAnnouncement(ann.id)}>Delete</Button>
+                      <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" className="flex items-center gap-1.5 h-8 px-2.5" onClick={() => handleEditAnnouncement(ann)}>
+                          <Pencil className="h-3.5 w-3.5 shrink-0" />
+                          <span>Edit</span>
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600 hover:bg-red-50 flex items-center gap-1.5 h-8 px-2.5" onClick={() => handleDeleteAnnouncement(ann.id)}>
+                          <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                          <span>Delete</span>
+                        </Button>
                       </div>
                     </div>
                   </div>

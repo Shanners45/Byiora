@@ -12,6 +12,13 @@ import { getCheckoutEncryptionKey } from "@/lib/crypto/checkout"
 
 const ALGORITHM = "aes-256-gcm"
 
+// Purpose binding: checkout blobs use the same key, so without distinct AAD a
+// checkout ciphertext could be replayed as a guest token.
+const TOKEN_AAD = Buffer.from("byiora:guest-verification:v2", "utf8")
+const TOKEN_TTL_MS = 24 * 60 * 60 * 1000
+const MAX_CLOCK_SKEW_MS = 60_000
+const TRANSACTION_ID_PATTERN = /^[A-Za-z0-9-]{6,80}$/
+
 /**
  * Generates an encrypted 24-hour token for guest payment verification.
  */
@@ -19,9 +26,9 @@ export async function generateGuestVerificationToken(transactionId: string): Pro
   const key = getCheckoutEncryptionKey()
   const iv = crypto.randomBytes(12)
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv)
+  cipher.setAAD(TOKEN_AAD)
 
-  // Expiry is exactly 24 hours from now
-  const expiry = Date.now() + 24 * 60 * 60 * 1000
+  const expiry = Date.now() + TOKEN_TTL_MS
   const payload = JSON.stringify({ t: transactionId, e: expiry })
 
   let encrypted = cipher.update(payload, "utf8", "hex")
@@ -48,13 +55,25 @@ export async function verifyGuestVerificationToken(base64Token: string): Promise
     const authTag = Buffer.from(authTagHex, "hex")
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv)
     decipher.setAuthTag(authTag)
+    decipher.setAAD(TOKEN_AAD)
 
     let decrypted = decipher.update(ciphertext, "hex", "utf8")
     decrypted += decipher.final("utf8")
 
-    const payload = JSON.parse(decrypted) as { t: string; e: number }
-    if (Date.now() > payload.e) {
+    const payload = JSON.parse(decrypted) as { t?: unknown; e?: unknown }
+    const now = Date.now()
+
+    if (typeof payload.t !== "string" || !TRANSACTION_ID_PATTERN.test(payload.t)) {
+      return { success: false, error: "Invalid token" }
+    }
+    if (typeof payload.e !== "number" || !Number.isFinite(payload.e)) {
+      return { success: false, error: "Invalid token" }
+    }
+    if (now > payload.e) {
       return { success: false, error: "Token expired" }
+    }
+    if (payload.e > now + TOKEN_TTL_MS + MAX_CLOCK_SKEW_MS) {
+      return { success: false, error: "Invalid token" }
     }
 
     return { success: true, transactionId: payload.t }

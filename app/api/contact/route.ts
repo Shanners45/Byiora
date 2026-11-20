@@ -50,49 +50,9 @@ export async function POST(request: Request) {
 
     const { createServiceRoleClient } = await import("@/lib/supabase/service-role")
     const supabase = createServiceRoleClient() as any
-    const normalizedEmail = sanitizedEmail.trim().toLowerCase()
 
-    // Check if customer already has an active ongoing ticket (Open or Replied)
-    const { data: existingTicket } = await supabase
-      .from("support_tickets")
-      .select("id, ticket_number, replies, status")
-      .ilike("email", normalizedEmail)
-      .in("status", ["open", "replied"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (existingTicket) {
-      // Append follow-up customer message to existing conversation thread
-      const nowIso = new Date().toISOString()
-      const currentReplies = Array.isArray(existingTicket.replies) ? existingTicket.replies : []
-      const updatedReplies = [
-        ...currentReplies,
-        {
-          reply: sanitizedMessage,
-          reply_by: sanitizedName,
-          replied_at: nowIso,
-          sender: "customer",
-        },
-      ]
-
-      const { error: updateErr } = await supabase
-        .from("support_tickets")
-        .update({
-          status: "open", // Reopen/flag for admin attention
-          replies: updatedReplies,
-        })
-        .eq("id", existingTicket.id)
-
-      if (updateErr) {
-        console.error("Failed to append follow-up message to support ticket:", updateErr.message)
-        return NextResponse.json({ error: "Failed to submit ticket" }, { status: 500 })
-      }
-
-      return NextResponse.json({ success: true, ticketNumber: existingTicket.ticket_number })
-    }
-
-    // Otherwise, create a brand new ticket
+    // Always open a new ticket: CAPTCHA does not prove email ownership, so a
+    // public form must never append to (or reveal) another customer's thread.
     const ticketNumber = `BYI-TICK-${Math.floor(1000 + Math.random() * 9000)}`
     const { error: dbErr } = await supabase.from("support_tickets").insert({
       ticket_number: ticketNumber,

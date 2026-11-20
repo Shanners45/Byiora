@@ -1,7 +1,7 @@
 // Byiora Service Worker v2
 // Provides offline caching, runtime image caching, and offline fallback
 
-const CACHE_VERSION = 'byiora-v2'
+const CACHE_VERSION = 'byiora-v3'
 const OFFLINE_URL = '/offline.html'
 
 // Assets to pre-cache on install (app shell)
@@ -12,6 +12,32 @@ const PRECACHE_ASSETS = [
   '/byiora-logo-full.png',
   '/manifest.json',
 ]
+
+// Routes that must never be cached or replayed from cache: they render account,
+// payment, or bearer-token content.
+const SENSITIVE_PATH_PREFIXES = [
+  '/admin',
+  '/checkout',
+  '/transactions',
+  '/verify-guest',
+  '/reset-password',
+  '/forgot-password',
+  '/sign-up',
+  '/en-np/sign-up',
+  '/en-np/reset-password',
+  '/en-np/forgot-password',
+]
+
+function isSensitivePath(pathname) {
+  return SENSITIVE_PATH_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
+  )
+}
+
+function isCacheableResponse(response) {
+  const cacheControl = response.headers.get('Cache-Control') || ''
+  return !/no-store|private/i.test(cacheControl)
+}
 
 // Install: pre-cache the offline page and essential assets
 self.addEventListener('install', (event) => {
@@ -59,11 +85,12 @@ self.addEventListener('fetch', (event) => {
 
   // For navigation requests (HTML pages): network-first with offline fallback
   if (request.mode === 'navigate') {
+    const sensitive = isSensitivePath(url.pathname)
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache successful page loads for offline access
-          if (response.ok) {
+          // Never persist authenticated, payment, or token-bearing HTML.
+          if (response.ok && !sensitive && isCacheableResponse(response)) {
             const clone = response.clone()
             caches.open(CACHE_VERSION).then((cache) => {
               cache.put(request, clone)
@@ -72,6 +99,7 @@ self.addEventListener('fetch', (event) => {
           return response
         })
         .catch(() => {
+          if (sensitive) return caches.match(OFFLINE_URL)
           // Try cache first, then offline fallback
           return caches.match(request).then((cached) => {
             return cached || caches.match(OFFLINE_URL)

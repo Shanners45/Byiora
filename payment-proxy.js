@@ -632,14 +632,17 @@ async function handleNepalPayVerifyTransaction(body, res) {
                     }
                 });
 
-                // Tier 2 Smart Fallback for NepalPay active checkout
+                // Tier 2: stripped-remarks candidates are NEVER auto-fulfilled.
+                // Amount + time alone does not prove which order was paid, so the
+                // candidate is reported for manual reconciliation instead.
+                let reviewTxn = null;
                 if (!matchingTxn && !isManualVerification && expectedAmount > 0 && orderCreatedAt) {
                     const orderCreatedMs = new Date(orderCreatedAt).getTime();
                     if (!isNaN(orderCreatedMs)) {
                         const windowStartMs = orderCreatedMs - (60 * 1000);
                         const windowEndMs = orderCreatedMs + (6 * 60 * 1000);
 
-                        matchingTxn = resultArr.find(txn => {
+                        reviewTxn = resultArr.find(txn => {
                             const isSuccess = txn.status === "SUCCESS" || txn.paymentStatus === "Success" || txn.status === "Success";
                             if (!isSuccess && txn.status !== undefined) return false;
 
@@ -661,6 +664,22 @@ async function handleNepalPayVerifyTransaction(body, res) {
                             return false;
                         });
                     }
+                }
+
+                if (!matchingTxn && reviewTxn) {
+                    console.log(`🟡 [NEPALPAY] Stripped-remarks candidate parked for manual review`);
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({
+                        success: false,
+                        needsReview: true,
+                        message: "Possible stripped-remarks payment found; requires manual reconciliation",
+                        data: {
+                            bankTxnId: reviewTxn.nqrTxnId || reviewTxn.transactionId || reviewTxn.retrievalReferenceNumber,
+                            paidAmount: reviewTxn.amount || reviewTxn.transactionAmount,
+                            paymentDate: reviewTxn.transactionDate || reviewTxn.paymentDate || reviewTxn.transmissionDateTime
+                        }
+                    }));
+                    return;
                 }
 
                 if (matchingTxn) {
@@ -995,15 +1014,18 @@ async function handleFonepayVerifyTransaction(body, res) {
             });
 
             // ====================================================================
-            // TIER 2: PILLAR 1 ACTIVE-WINDOW SMART FALLBACK (For YONO SBI / stripped apps)
+            // TIER 2: STRIPPED-REMARKS CANDIDATE (YONO SBI / stripped apps)
+            // Never auto-fulfilled: amount + time is not proof of which order was
+            // paid, so the candidate goes to manual reconciliation.
             // ====================================================================
+            let reviewTxn = null;
             if (!matchingTxn && !isManualVerification && expectedAmount > 0 && orderCreatedAt) {
                 const orderCreatedMs = new Date(orderCreatedAt).getTime();
                 if (!isNaN(orderCreatedMs)) {
                     const windowStartMs = orderCreatedMs - (60 * 1000); // 1 min clock drift
                     const windowEndMs = orderCreatedMs + (6 * 60 * 1000); // 5m checkout + 1m grace
 
-                    matchingTxn = resultArr.find(txn => {
+                    reviewTxn = resultArr.find(txn => {
                         const isSuccess = txn.paymentStatus === "Success" || txn.status === "SUCCESS" || txn.status === "Success";
                         if (!isSuccess) return false;
 
@@ -1036,6 +1058,22 @@ async function handleFonepayVerifyTransaction(body, res) {
                         return false;
                     });
                 }
+            }
+
+            if (!matchingTxn && reviewTxn) {
+                console.log(`🟡 [FONEPAY] Stripped-remarks candidate parked for manual review`);
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: false,
+                    needsReview: true,
+                    message: "Possible stripped-remarks payment found; requires manual reconciliation",
+                    data: {
+                        bankTxnId: reviewTxn.fonepayTransactionId || reviewTxn.retrievalReferenceNumber || reviewTxn.id,
+                        paidAmount: reviewTxn.transactionAmount || reviewTxn.amount,
+                        paymentDate: reviewTxn.dateTransmissionDateTime || reviewTxn.transmissionDateTime || reviewTxn.paymentDate
+                    }
+                }));
+                return;
             }
 
             if (matchingTxn) {

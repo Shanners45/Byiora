@@ -1,14 +1,16 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { sendWelcomeEmail, sendPasswordChangedEmail } from "@/lib/email/resend"
 import { headers } from "next/headers"
 import { verifyTurnstileToken } from "@/lib/captcha"
 import { rateLimit } from "@/lib/rate-limit"
+import { recordAbuse, getLockMinutes } from "@/lib/security/auto-ban"
 
-import { isDisposableEmail } from "@/lib/security/disposable-emails"
+import { isDisposableEmail, isSuspiciousProbeEmail } from "@/lib/security/disposable-emails"
 import { checkIsBanned } from "@/lib/security/blacklist"
 
 // Must match your Supabase Dashboard → Auth → Email OTP Length
@@ -31,6 +33,11 @@ export async function loginWithPassword(
   if (!rl.ok) {
     return { error: "Too many login attempts. Please wait a few minutes before trying again." }
   }
+  // Per-account limit: attackers rotate IPs, the target account stays the same.
+  const emailRl = await rateLimit(`login-email:${String(email || "").trim().toLowerCase()}`, { windowMs: 900_000, max: 10 })
+  if (!emailRl.ok) {
+    return { error: "Too many login attempts. Please wait a few minutes before trying again." }
+  }
 
   const captchaOk = await verifyTurnstileToken(captchaToken, ip)
   if (!captchaOk) return { error: "Captcha validation failed. Please try again." }
@@ -43,6 +50,11 @@ export async function loginWithPassword(
     return { error: banCheck.reason || "Account suspended due to security policy." }
   }
 
+  const lockedFor = await getLockMinutes("login_failure", { email: cleanEmail, ip })
+  if (lockedFor > 0) {
+    return { error: `Too many failed sign-in attempts. Sign-in is locked for ${lockedFor} more minute${lockedFor === 1 ? "" : "s"}, or reset your password.` }
+  }
+
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.signInWithPassword({
@@ -52,6 +64,9 @@ export async function loginWithPassword(
 
   // We explicitly serialize error since native Error objects cannot be passed from server action without serialization
   if (error) {
+    if (/invalid login credentials/i.test(error.message)) {
+      await recordAbuse("login_failure", { email: cleanEmail, ip })
+    }
     return { error: error.message }
   }
 
@@ -61,7 +76,9 @@ export async function loginWithPassword(
       const updatePayload: Record<string, any> = { updated_at: new Date().toISOString() }
       if (ip) updatePayload.last_ip = ip
       if (deviceId) updatePayload.last_device_id = deviceId
-      await (supabase.from("users") as any).update(updatePayload).eq("id", data.user.id)
+      // Profile metadata is written with the service role: authenticated users
+      // only hold UPDATE(name), so they cannot spoof IP/device/activity fields.
+      await (createServiceRoleClient().from("users") as any).update(updatePayload).eq("id", data.user.id)
     } catch (e) {
       console.warn("Could not update last login IP:", e)
     }
@@ -105,6 +122,11 @@ export async function signupWithPassword(
     return { error: "Please provide a valid email address." }
   }
 
+  // Security: Block attacker-pattern probe emails (brand name, recon keywords, timestamp usernames)
+  if (isSuspiciousProbeEmail(cleanEmail)) {
+    return { error: "Please provide a valid email address." }
+  }
+
   // Security: Block banned users, IPs, or devices from creating new accounts
   const banCheck = await checkIsBanned({ email: cleanEmail, ip: ip || undefined, deviceId })
   if (banCheck.banned) {
@@ -129,6 +151,9 @@ export async function signupWithPassword(
   if (error) {
     return { error: error.message }
   }
+
+  // Many new accounts from one device in a day = account farming (promo/referral abuse).
+  await recordAbuse("signup_burst", { deviceId })
 
   revalidatePath("/")
   return { success: true }
@@ -168,7 +193,9 @@ export async function verifySignupOtp(email: string, token: string, deviceId?: s
     const signupIp = ip || data.user.user_metadata?.signup_ip || null
     const finalDeviceId = deviceId || data.user.user_metadata?.last_device_id || null
 
-    const { error: insertError } = await (supabase.from("users") as any)
+    const serviceSupabase = createServiceRoleClient()
+
+    const { error: insertError } = await (serviceSupabase.from("users") as any)
       .insert([{
         id: data.user.id,
         email: email.toLowerCase().trim(),
@@ -180,7 +207,7 @@ export async function verifySignupOtp(email: string, token: string, deviceId?: s
 
     if (insertError) {
       // User might already exist (e.g. race condition), update IP & details
-      await (supabase.from("users") as any)
+      await (serviceSupabase.from("users") as any)
         .update({
           name: userName,
           signup_ip: signupIp,
@@ -257,6 +284,10 @@ export async function requestPasswordReset(email: string, captchaToken?: string)
   // SECURITY: Rate limit password resets (3 per 15 min per IP)
   const rl = await rateLimit(`forgot-pw:${ip}`, { windowMs: 900_000, max: 3 })
   if (!rl.ok) {
+    return { error: "Too many password reset requests. Please wait a few minutes." }
+  }
+  const emailRl = await rateLimit(`forgot-pw-email:${email.trim().toLowerCase()}`, { windowMs: 3_600_000, max: 3 })
+  if (!emailRl.ok) {
     return { error: "Too many password reset requests. Please wait a few minutes." }
   }
 

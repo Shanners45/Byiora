@@ -4,7 +4,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
-import { verifyAdmin } from "./admin-utils"
+import { getAdminSessionAction } from "./admin-utils"
 
 /**
  * Deletes an admin user from both admin_users and users tables.
@@ -12,10 +12,14 @@ import { verifyAdmin } from "./admin-utils"
  * Uses Service Role to bypass RLS for admin operations.
  */
 export async function deleteAdminUserAction(userId: string) {
-  if (!(await verifyAdmin())) {
-    return { error: "Unauthorized: Admin access required" }
+  const session = await getAdminSessionAction()
+  if (!session.success || session.data.role !== "admin") {
+    return { error: "Unauthorized: Super admin access required" }
   }
-  
+  if (session.data.id === userId) {
+    return { error: "You cannot delete your own account." }
+  }
+
   const supabase = createServiceRoleClient()
 
   try {

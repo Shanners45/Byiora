@@ -15,24 +15,12 @@ const API_KEY = process.env.POSTHOG_PERSONAL_API_KEY
 const CACHE_TTL_MS = 5 * 60 * 1000
 let cachedResult: { at: number; data: Map<string, string> } | null = null
 
-interface PostHogPerson {
-  id: number
-  distinct_ids: string[]
-  properties: Record<string, any>
-  created_at: string
-}
-
-interface PostHogPersonsResponse {
-  results: PostHogPerson[]
-  next?: string | null
-}
-
 /**
- * Fetch all identified persons from PostHog and return a map of
- * email → last_seen_at ISO string.
+ * Map of email → most recent event timestamp (ISO) over the last 30 days.
  *
- * We page through results in batches of 100 (PostHog default) and
- * cap at 2000 persons to avoid runaway queries.
+ * PostHog person profiles have no "last seen" property, so this asks the
+ * events table directly with one HogQL query. The personal API key needs the
+ * `query:read` scope.
  */
 export async function getPostHogLastActive(): Promise<Map<string, string>> {
   if (cachedResult && Date.now() - cachedResult.at < CACHE_TTL_MS) {
@@ -47,55 +35,39 @@ export async function getPostHogLastActive(): Promise<Map<string, string>> {
   }
 
   try {
-    let url: string | null = `${POSTHOG_HOST}/api/projects/${PROJECT_ID}/persons/?format=json`
-    let pages = 0
-    const MAX_PAGES = 20 // Safety cap: 20 × 100 = 2000 persons max
-
-    while (url && pages < MAX_PAGES) {
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${API_KEY}`,
-          "Content-Type": "application/json",
+    const res = await fetch(`${POSTHOG_HOST}/api/projects/${PROJECT_ID}/query/`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: {
+          kind: "HogQLQuery",
+          query:
+            "SELECT lower(person.properties.email) AS email, max(timestamp) AS last_seen " +
+            "FROM events WHERE timestamp > now() - INTERVAL 30 DAY AND notEmpty(person.properties.email) " +
+            "GROUP BY email LIMIT 10000",
         },
-        next: { revalidate: 300 }, // Cache for 5 minutes in Next.js fetch cache
-      })
+      }),
+      cache: "no-store",
+    })
 
-      if (!res.ok) {
-        console.error(`[PostHog] Persons API returned ${res.status}: ${await res.text().catch(() => "")}`)
-        break
-      }
+    if (!res.ok) {
+      console.error(`[PostHog] Query API returned ${res.status}: ${await res.text().catch(() => "")}`)
+      return emailToLastSeen
+    }
 
-      const data: PostHogPersonsResponse = await res.json()
-
-      for (const person of data.results || []) {
-        const email = (
-          person.properties?.email ||
-          person.properties?.$email ||
-          ""
-        ).toLowerCase().trim()
-
-        if (!email) continue
-
-        // PostHog stores `$last_seen_at` automatically for identified persons
-        const lastSeen =
-          person.properties?.$last_seen_at ||
-          person.properties?.last_seen_at ||
-          person.created_at
-
-        if (lastSeen) {
-          // If we already have a value, keep the more recent one
-          const existing = emailToLastSeen.get(email)
-          if (!existing || new Date(lastSeen) > new Date(existing)) {
-            emailToLastSeen.set(email, lastSeen)
-          }
-        }
-      }
-
-      url = data.next || null
-      pages++
+    const data: { results?: [string, string][] } = await res.json()
+    for (const [email, lastSeen] of data.results || []) {
+      if (!email || !lastSeen) continue
+      // HogQL returns "YYYY-MM-DD HH:MM:SS[.fff]" in UTC without a zone marker.
+      const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(lastSeen) ? lastSeen : `${lastSeen.replace(" ", "T")}Z`
+      emailToLastSeen.set(email.trim(), iso)
     }
   } catch (err) {
-    console.error("[PostHog] Error fetching persons for last-active:", err)
+    console.error("[PostHog] Error fetching last-active:", err)
+    return emailToLastSeen
   }
 
   cachedResult = { at: Date.now(), data: emailToLastSeen }

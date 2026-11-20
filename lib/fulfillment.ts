@@ -42,7 +42,20 @@ export async function fulfillOrderDirectly({
       return { success: false, error: "Transaction not found" }
     }
 
-    if (["Completed", "Paid"].includes(txn.status)) {
+    // A Paid/Completed order is finished UNLESS its inventory code was never
+    // delivered (crash or claim failure after payment). Those orders resume at
+    // the claim step instead of being reported as "already processed".
+    const inventoryCategories = ["digital-goods", "games"]
+    const awaitsInventoryCode = Boolean(
+      txn.product_category &&
+      inventoryCategories.includes(String(txn.product_category).toLowerCase()) &&
+      txn.product_category !== "direct-login" &&
+      txn.product_category !== "topup" &&
+      !txn.encrypted_checkout_data &&
+      parseFloat(txn.price || "0") > 0
+    )
+    const isResume = ["Completed", "Paid"].includes(txn.status)
+    if (isResume && !(awaitsInventoryCode && !txn.giftcard_code)) {
       return { success: true, message: "Transaction already processed", alreadyProcessed: true }
     }
 
@@ -64,49 +77,54 @@ export async function fulfillOrderDirectly({
       }
     }
 
-    // 3. Optimistic DB Lock: Atomically update status to Paid ONLY if eligible
-    // This prevents TOCTOU race conditions — two concurrent calls can't both succeed
-    const updatePayload: any = { 
-      status: "Paid",
-      failure_remarks: null
+    if (!isResume) {
+      // 3. Optimistic DB Lock: Atomically update status to Paid ONLY if eligible
+      // This prevents TOCTOU race conditions — two concurrent calls can't both succeed
+      const updatePayload: any = {
+        status: "Paid",
+        failure_remarks: null
+      }
+      if (bankTxnId) {
+        updatePayload.bank_txn_id = bankTxnId
+      }
+      const { data: updatedRows, error: updateError } = await supabase
+        .from("transactions")
+        .update(updatePayload)
+        .eq("transaction_id", transactionId)
+        .in("status", ["Payment Pending", "Processing", "Payment Failed", "Cancelled", "Failed"])
+        .select("transaction_id")
+
+      if (updateError) {
+        console.error(`[FULFILLMENT ERROR] Failed to update status to Paid for ${transactionId}:`, updateError)
+        return { success: false, error: `Failed to mark order as paid: ${updateError.message}` }
+      }
+
+      // If no rows were updated, the order was already processed by another concurrent call
+      if (!updatedRows || updatedRows.length === 0) {
+        console.log(`[FULFILLMENT] Optimistic lock: ${transactionId} already processed, skipping`)
+        return { success: true, message: "Already processed", alreadyProcessed: true }
+      }
     }
-    if (bankTxnId) {
-      updatePayload.bank_txn_id = bankTxnId
-    }
-    const { data: updatedRows, error: updateError } = await supabase
-      .from("transactions")
-      .update(updatePayload)
-      .eq("transaction_id", transactionId)
-      .in("status", ["Payment Pending", "Processing", "Payment Failed", "Cancelled", "Failed"])
-      .select("transaction_id")
 
-    if (updateError) {
-      console.error(`[FULFILLMENT ERROR] Failed to update status to Paid for ${transactionId}:`, updateError)
-    }
+    if (!isResume) {
+      // Reset any failure strikes for this buyer since payment succeeded
+      resetFailureStrikes({
+        email: txn.user_email,
+        ip: (txn.guest_user_data as any)?.ip,
+      }).catch(() => {})
 
-    // If no rows were updated, the order was already processed by another concurrent call
-    if (!updatedRows || updatedRows.length === 0) {
-      console.log(`[FULFILLMENT] Optimistic lock: ${transactionId} already processed, skipping`)
-      return { success: true, message: "Already processed", alreadyProcessed: true }
-    }
+      // Mark this buyer as trusted for higher rate limits on future orders
+      const { markTrustedBuyer } = await import("@/lib/security/spam-detection")
+      markTrustedBuyer({
+        userId: txn.user_id,
+        ip: (txn.guest_user_data as any)?.ip,
+      }).catch(() => {})
 
-    // Reset any failure strikes for this buyer since payment succeeded
-    resetFailureStrikes({
-      email: txn.user_email,
-      ip: (txn.guest_user_data as any)?.ip,
-    }).catch(() => {})
-
-    // Mark this buyer as trusted for higher rate limits on future orders
-    const { markTrustedBuyer } = await import("@/lib/security/spam-detection")
-    markTrustedBuyer({
-      userId: txn.user_id,
-      ip: (txn.guest_user_data as any)?.ip,
-    }).catch(() => {})
-
-    // Industry Standard: Reclaim promo code usage if this was a recovered order
-    if (txn.promo_code) {
-      const { reclaimPromoCodeOnRecovery } = await import("@/lib/promo/internal")
-      reclaimPromoCodeOnRecovery(transactionId).catch(() => {})
+      // Industry Standard: Reclaim promo code usage if this was a recovered order
+      if (txn.promo_code) {
+        const { reclaimPromoCodeOnRecovery } = await import("@/lib/promo/internal")
+        reclaimPromoCodeOnRecovery(transactionId).catch(() => {})
+      }
     }
 
     // 4. Fulfillment: Claim inventory gift card code if applicable
@@ -135,6 +153,9 @@ export async function fulfillOrderDirectly({
 
       if (claimError) {
         console.error("[FULFILLMENT] RPC claim error:", claimError)
+        // Stay resumable: the order is Paid but has no code, so a later
+        // verification or cron pass retries the claim instead of reporting success.
+        return { success: false, error: `Inventory claim failed: ${claimError.message}` }
       } else if (claimData && (claimData as any).length > 0 && (claimData as any)[0].encrypted_code) {
         deliveredCode = (claimData as any)[0].encrypted_code
         decryptedCode = decryptInventoryCode(deliveredCode as string)
@@ -296,6 +317,14 @@ export async function handlePartialPayment({
   source?: string
 }) {
   try {
+    // Count each underpaid order once (verification can report it repeatedly).
+    const { getRedis } = await import("@/lib/redis")
+    const firstReport = await getRedis()?.set(`autoban:partial-seen:${transactionId}`, "1", { nx: true, ex: 7 * 86400 })
+    if (firstReport) {
+      const { recordAbuse } = await import("@/lib/security/auto-ban")
+      await recordAbuse("partial_payment", { email: userEmail })
+    }
+
     const supabase = createServiceRoleClient()
     const remarks = `Partial payment: Received Rs. ${paidAmount} of Rs. ${expectedAmount}`
 
@@ -337,6 +366,59 @@ export async function handlePartialPayment({
     }
   } catch (err: any) {
     console.error("[PARTIAL PAYMENT] Handler error:", err)
+  }
+}
+
+/**
+ * Parks an order for human reconciliation when the bank reports a payment that
+ * cannot be tied to this order with certainty (e.g. the banking app stripped
+ * the remarks/order ID). Never marks the order paid and never claims inventory:
+ * only an exact trace/remarks/receipt match may fulfil an order.
+ */
+export async function flagOrderForManualReview({
+  transactionId,
+  provider,
+  bankTxnId,
+  paidAmount,
+}: {
+  transactionId: string
+  provider: string
+  bankTxnId?: string | null
+  paidAmount?: string | number | null
+}) {
+  try {
+    const supabase = createServiceRoleClient()
+    const remarks = `Manual review required: a ${provider} payment with stripped remarks may match this order (bank ref ${bankTxnId || "unknown"}, amount Rs. ${paidAmount ?? "unknown"}). Not auto-fulfilled.`
+
+    await supabase
+      .from("transactions")
+      .update({ failure_remarks: remarks, updated_at: new Date().toISOString() } as any)
+      .eq("transaction_id", transactionId)
+      .in("status", ["Payment Pending", "Processing"])
+      .is("bank_txn_id", null)
+
+    if (process.env.DISCORD_WEBHOOK_URL) {
+      await fetch(process.env.DISCORD_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          embeds: [{
+            title: "🟡 PAYMENT NEEDS MANUAL RECONCILIATION",
+            color: 0xFFB300,
+            description: "A bank payment with stripped remarks could not be matched to an order ID. The order was **not** auto-fulfilled. Verify in the bank dashboard and fulfil manually if it is genuine.",
+            fields: [
+              { name: "Order ID", value: transactionId, inline: true },
+              { name: "Provider", value: provider.toUpperCase(), inline: true },
+              { name: "Bank Ref", value: String(bankTxnId || "unknown"), inline: true },
+              { name: "Paid Amount", value: `Rs. ${paidAmount ?? "unknown"}`, inline: true },
+            ],
+            timestamp: new Date().toISOString(),
+          }]
+        }),
+      })
+    }
+  } catch (err: any) {
+    console.error("[MANUAL REVIEW] Failed to flag order:", err)
   }
 }
 

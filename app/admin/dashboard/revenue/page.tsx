@@ -6,8 +6,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DollarSign, ArrowUpRight, TrendingUp, CreditCard, Package, RotateCcw } from "lucide-react"
 import { getAllTransactionsAction } from "@/app/actions/dashboard"
 import {
-  AreaChart,
+  ComposedChart,
   Area,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -118,14 +119,18 @@ export default function RevenuePage() {
     const year = parseInt(selectedYear)
     const month = parseInt(selectedMonth)
     const daysInMonth = new Date(year, month + 1, 0).getDate()
+    // For the current month, stop at today instead of drawing a flat line of future zeros.
+    const now = new Date()
+    const isCurrentMonth = now.getFullYear() === year && now.getMonth() === month
+    const lastDay = isCurrentMonth ? now.getDate() : daysInMonth
 
-    const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
+    const dailyData = Array.from({ length: lastDay }, (_, i) => {
       const day = i + 1
       return {
         date: `${day} ${months[month].substring(0, 3)}`,
         dayNum: day,
         revenue: 0,
-        refunds: 0,
+        orders: 0,
       }
     })
 
@@ -134,21 +139,14 @@ export default function RevenuePage() {
       const day = date.getDate()
       const cleanPrice = String(t.price || '0').replace(/,/g, '')
       const parsed = Number.parseFloat(cleanPrice)
-      if (!isNaN(parsed) && day >= 1 && day <= daysInMonth) {
-        dailyData[day - 1].revenue += parsed
-      }
-    })
-
-    refundedTransactions.forEach(t => {
-      const date = new Date(t.created_at)
-      const day = date.getDate()
-      if (day >= 1 && day <= daysInMonth) {
-        dailyData[day - 1].refunds += getRefundAmount(t)
+      if (day >= 1 && day <= lastDay) {
+        dailyData[day - 1].orders += 1
+        if (!isNaN(parsed)) dailyData[day - 1].revenue += parsed
       }
     })
 
     return dailyData
-  }, [completedTransactions, refundedTransactions, selectedMonth, selectedYear])
+  }, [completedTransactions, selectedMonth, selectedYear])
 
   // 2. Payment Methods Split
   const paymentMethodData = useMemo(() => {
@@ -328,7 +326,7 @@ export default function RevenuePage() {
                   <div>
                     <CardTitle className="text-lg text-[#1F2937]">Revenue Trend</CardTitle>
                     <CardDescription className="text-[#92400E]">
-                      {totalRefunded > 0 ? "Daily revenue and refunds for the selected month" : "Daily revenue for the selected month"}
+                      Daily revenue and completed orders for the selected month
                     </CardDescription>
                   </div>
                 </div>
@@ -337,23 +335,21 @@ export default function RevenuePage() {
                 <div className="bg-white p-4 rounded-lg border border-[#F59E0B]/20 shadow-inner">
                   <div className="flex items-center justify-end gap-4 pb-2 text-[11px] font-semibold text-[#4B5563]">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full bg-[#7E3AF2]" />
-                      Revenue
+                      <span className="h-0.5 w-4 rounded bg-[#7E3AF2]" />
+                      Revenue (left)
                     </span>
-                    {totalRefunded > 0 && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="h-0.5 w-4 rounded bg-[#EF4444]" />
-                        Refunds
-                      </span>
-                    )}
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-2.5 w-2.5 rounded-sm bg-[#0EA5E9]/40" />
+                      Orders (right)
+                    </span>
                   </div>
                   <div className="h-[300px] w-full">
                     {isMounted && (
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                        <ComposedChart data={trendData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                           <defs>
                             <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#7E3AF2" stopOpacity={0.3} />
+                              <stop offset="5%" stopColor="#7E3AF2" stopOpacity={0.18} />
                               <stop offset="95%" stopColor="#7E3AF2" stopOpacity={0} />
                             </linearGradient>
                           </defs>
@@ -373,33 +369,46 @@ export default function RevenuePage() {
                             tickFormatter={(value) => value >= 1000 ? `Rs. ${value / 1000}k` : `Rs. ${value}`}
                             width={80}
                           />
+                          <YAxis
+                            yAxisId="orders"
+                            orientation="right"
+                            allowDecimals={false}
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: '#0EA5E9', fontSize: 12 }}
+                            width={32}
+                          />
                           <Tooltip
                             contentStyle={{ borderRadius: '8px', border: '1px solid #E5E7EB', backgroundColor: '#ffffff', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                            cursor={{ fill: '#7E3AF2', fillOpacity: 0.05 }}
                             formatter={(value, name) => {
                               const n = typeof value === "number" ? value : Number(value ?? 0)
-                              return [`Rs. ${n.toLocaleString()}`, name === "refunds" ? "Refunds" : "Revenue"]
+                              if (name === "orders") return [`${n} ${n === 1 ? "order" : "orders"}`, "Orders"]
+                              return [`Rs. ${n.toLocaleString()}`, "Revenue"]
                             }}
                             labelStyle={{ fontWeight: 'bold', color: '#1F2937', marginBottom: '4px' }}
                           />
+                          {/* Bars first so the revenue line draws on top. */}
+                          <Bar
+                            yAxisId="orders"
+                            dataKey="orders"
+                            fill="#0EA5E9"
+                            fillOpacity={0.25}
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={18}
+                          />
+                          {/* monotoneX never overshoots, so peaks/dips match the real numbers. */}
                           <Area
-                            type="monotone"
+                            type="monotoneX"
                             dataKey="revenue"
                             stroke="#7E3AF2"
-                            strokeWidth={3}
+                            strokeWidth={2.5}
                             fillOpacity={1}
                             fill="url(#colorRevenue)"
+                            dot={false}
+                            activeDot={{ r: 4 }}
                           />
-                          {totalRefunded > 0 && (
-                            <Area
-                              type="monotone"
-                              dataKey="refunds"
-                              stroke="#EF4444"
-                              strokeWidth={2}
-                              strokeDasharray="6 4"
-                              fill="transparent"
-                            />
-                          )}
-                        </AreaChart>
+                        </ComposedChart>
                       </ResponsiveContainer>
                     )}
                   </div>

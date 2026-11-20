@@ -32,7 +32,8 @@ import { Trash2, UserPlus, UserX, UserCheck, KeyRound } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { deleteAdminUserAction } from "@/app/actions/admin"
 import { promoteUserAction, addAdminUserAction, toggleAdminStatusAction, getAdminUsersAction, resetAdminPasswordAction } from "@/app/actions/admin-users"
-import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
+import { type AdminSession } from "@/app/actions/admin-utils"
+import { useAdminSession } from "@/lib/admin-session-context"
 
 interface AdminUser {
   id: string
@@ -55,7 +56,7 @@ export default function AdminUsersPage() {
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
   const [regularUsers, setRegularUsers] = useState<RegularUser[]>([])
   const [eligibleUsers, setEligibleUsers] = useState<RegularUser[]>([])
-  const [currentUser, setCurrentUser] = useState<Pick<AdminSession, "name" | "email" | "role"> | null>(null)
+  const currentUser: Pick<AdminSession, "name" | "email" | "role"> | null = useAdminSession()
   const [newAdminName, setNewAdminName] = useState("")
   const [newAdminEmail, setNewAdminEmail] = useState("")
   const [newAdminPassword, setNewAdminPassword] = useState("")
@@ -68,15 +69,6 @@ export default function AdminUsersPage() {
   const [promoteUserRole, setPromoteUserRole] = useState<"sub_admin" | "order_management">("sub_admin")
 
   useEffect(() => {
-    ;(async () => {
-      try {
-        const session = await getAdminSessionAction()
-        if (session.success) setCurrentUser({ name: session.data.name, email: session.data.email, role: session.data.role })
-      } catch (e) {
-        console.error("Failed to load admin session", e)
-      }
-    })()
-
     // Load admin users and regular users from Supabase
     loadAdminUsers()
     loadEligibleSubAdmins()

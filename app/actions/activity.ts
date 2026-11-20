@@ -4,17 +4,19 @@ import { headers } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
-const THROTTLE_MS = 60_000
+const THROTTLE_MS = 5 * 60_000
 
 /**
  * Records the signed-in user's activity so the admin dashboard can show a
  * reliable "last active" timestamp even when PostHog is unavailable.
  *
- * Throttled to one write per minute per user via a conditional UPDATE.
+ * Throttled to one write per five minutes per user via a conditional UPDATE —
+ * this is only a timestamp, so minute-level writes would be wasted load.
+ * Live online status is Realtime presence (lib/presence.tsx), not this column.
  */
 export async function touchLastActiveAction(): Promise<void> {
   try {
-    const supabase = await createClient()
+    const supabase = await createClient({ readOnly: true })
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 

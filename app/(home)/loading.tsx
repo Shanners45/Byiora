@@ -1,18 +1,12 @@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Header } from "@/components/header"
-import { MobileAppLoader } from "@/components/mobile-app-loader"
 
 export default function Loading() {
   return (
-    <>
-      {/* Mobile: clean skeleton loader — no logo splash, no bottom accent line */}
-      <MobileAppLoader />
+    <div className="min-h-screen bg-brand-purple home-layout no-scrollbar">
+      <Header />
 
-      {/* Desktop */}
-      <div className="hidden md:block min-h-screen bg-brand-purple home-layout no-scrollbar">
-        <Header />
-
-        <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8">
         {/* Banner Skeleton — matches BannerCarousel dimensions */}
         <section className="mb-12">
           <Skeleton className="w-full h-[340px] md:h-[420px] rounded-2xl bg-white/5" />
@@ -51,8 +45,7 @@ export default function Loading() {
         </section>
       </main>
 
-        {/* No Footer — prevents the yellow footer flash during route transitions */}
-      </div>
-    </>
+      {/* No Footer — prevents the yellow footer flash during route transitions */}
+    </div>
   )
 }

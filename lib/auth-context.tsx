@@ -50,7 +50,7 @@ interface AuthContextType {
       turnstileToken?: string
       promoCode?: string
     },
-  ) => Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean, isFreeOrder?: boolean }>
+  ) => Promise<{ transactionId: string, checkoutToken?: string, paymentUrl?: string, isDuplicate?: boolean, isFreeOrder?: boolean }>
   refreshTransactions: () => Promise<void>
   isLoading: boolean
 }
@@ -279,6 +279,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (posthog.__loaded) {
       posthog.reset()
     }
+    // Drop cached HTML/assets so a shared device can't restore account pages.
+    if ("caches" in window) {
+      caches.keys()
+        .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+        .catch(() => {})
+    }
     setTransactions([])
     await logoutUser("/")
   }
@@ -292,7 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       turnstileToken?: string
       promoCode?: string
     },
-  ): Promise<{ transactionId: string, paymentUrl?: string, isDuplicate?: boolean, isFreeOrder?: boolean }> => {
+  ): Promise<{ transactionId: string, checkoutToken?: string, paymentUrl?: string, isDuplicate?: boolean, isFreeOrder?: boolean }> => {
     try {
       const enrichedGuestData = {
         ...(transactionData.guestData || {}),
@@ -311,7 +317,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!result.success || result.error) {
-        throw new Error(result.error || "Failed to add transaction")
+        const err: any = new Error(result.error || "Failed to add transaction")
+        if (result.checkoutToken) err.checkoutToken = result.checkoutToken
+        throw err
       }
 
       const data = result.data
@@ -337,6 +345,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return {
         transactionId: result.transactionId!,
+        checkoutToken: result.checkoutToken,
         paymentUrl: (result as any).paymentUrl,
         isFreeOrder: (result as any).isFreeOrder,
       }

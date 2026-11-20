@@ -3,13 +3,14 @@
 import { verifyTurnstileToken } from "@/lib/captcha"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/lib/crypto/bank"
-import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
+import { fulfillOrderDirectly, handlePartialPayment, flagOrderForManualReview } from "@/lib/fulfillment"
 import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
 import { headers } from "next/headers"
 import * as Sentry from "@sentry/nextjs"
 import { incrementFailureStrike } from "@/lib/security/strike-counter"
 import { rateLimit } from "@/lib/rate-limit"
+import { verifyCheckoutCapability } from "@/lib/crypto/checkout"
 
 // Rate limit for polling (30 req/min)
 let ratelimit: Ratelimit | null = null
@@ -41,6 +42,26 @@ if (!PROXY_SECRET) {
 
 const QR_EXPIRY_MINUTES = 5
 
+/**
+ * A transaction ID alone is not a bearer credential: it is printed in emails,
+ * receipts and browser history. Access is granted only to the session owner or
+ * to a caller holding the HMAC capability handed out when the order was created.
+ */
+async function authorizeTransactionAccess(txn: any, capability?: string | null): Promise<boolean> {
+  const transactionId = String(txn?.transaction_id || "")
+  if (!transactionId) return false
+  if (capability && verifyCheckoutCapability(transactionId, capability)) return true
+  if (!txn?.user_id) return false
+  try {
+    const { createClient } = await import("@/lib/supabase/server")
+    const userSupabase = await createClient()
+    const { data: { user } } = await userSupabase.auth.getUser()
+    return Boolean(user && user.id === txn.user_id)
+  } catch {
+    return false
+  }
+}
+
 function getProxyEndpoints(category: string) {
   if (category === "fonepay") {
     return { qr: "/api/trigger-fonepay-qr", verify: "/api/verify-fonepay-transaction" }
@@ -52,7 +73,7 @@ function getProxyEndpoints(category: string) {
  * Gets or generates a QR code payload for a transaction.
  * Uses payment_methods.category from DB instead of name string matching.
  */
-export async function getOrGenerateQRAction(transactionId: string) {
+export async function getOrGenerateQRAction(transactionId: string, capability?: string | null) {
   try {
     const supabase = createServiceRoleClient()
 
@@ -75,6 +96,10 @@ export async function getOrGenerateQRAction(transactionId: string) {
 
     if (txnError || !txn) {
       return { success: false, error: "Transaction not found" }
+    }
+
+    if (!(await authorizeTransactionAccess(txn, capability))) {
+      return { success: false, error: "This checkout link is no longer valid. Please start a new order." }
     }
 
     // 1b. INDUSTRY STANDARD STATE MACHINE: If order is Paid, Completed, or has bank_txn_id, NEVER expire or fail
@@ -284,7 +309,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
       .single() as any
 
     if (credsRes.error || !credsRes.data) {
-      await supabase.from("transactions").delete().eq("transaction_id", transactionId)
+      await supabase.from("transactions").delete().eq("transaction_id", transactionId).in("status", ["Payment Pending", "Processing"]).is("bank_txn_id", null)
       Sentry.captureException(new Error(`[Checkout Alert] ${paymentCategory} credentials not configured by Admin`), {
         tags: { section: "checkout_qr", transactionId, paymentCategory },
         extra: { transactionId, paymentCategory }
@@ -296,7 +321,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
     const password = await decryptBankCredentials(credsRes.data.encrypted_password)
 
     if (!username || !password) {
-      await supabase.from("transactions").delete().eq("transaction_id", transactionId)
+      await supabase.from("transactions").delete().eq("transaction_id", transactionId).in("status", ["Payment Pending", "Processing"]).is("bank_txn_id", null)
       Sentry.captureException(new Error(`[Checkout Alert] Failed to decrypt bank credentials for ${paymentCategory}`), {
         tags: { section: "checkout_qr", transactionId, paymentCategory },
         extra: { transactionId, paymentCategory }
@@ -369,7 +394,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
 
     if (!proxyData.success) {
       // Clean up the abandoned transaction row so it doesn't clutter the DB or Admin Dashboard
-      await supabase.from("transactions").delete().eq("transaction_id", transactionId)
+      await supabase.from("transactions").delete().eq("transaction_id", transactionId).in("status", ["Payment Pending", "Processing"]).is("bank_txn_id", null)
       
       // SENTRY ALERT: Inform admin immediately
       Sentry.captureMessage(`[Checkout Alert] Checkout QR generation failed for ${transactionId}: ${proxyData.message || "Proxy failed to generate QR"}`, {
@@ -476,7 +501,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
     console.error("QR Generation error:", error)
     try {
       const supabase = createServiceRoleClient()
-      await supabase.from("transactions").delete().eq("transaction_id", transactionId)
+      await supabase.from("transactions").delete().eq("transaction_id", transactionId).in("status", ["Payment Pending", "Processing"]).is("bank_txn_id", null)
     } catch {}
     Sentry.captureException(error, {
       tags: { section: "checkout_qr_unhandled", transactionId },
@@ -491,7 +516,7 @@ export async function getOrGenerateQRAction(transactionId: string) {
  * Uses Session Token Architecture: sends cached session token instead of bank credentials.
  * Falls back to credentials only if proxy reports session expired (e.g. after proxy restart).
  */
-export async function verifyPaymentAction(transactionId: string, validationTraceId: string, provider: string) {
+export async function verifyPaymentAction(transactionId: string, capability?: string | null) {
   try {
     const headersList = await headers()
     const ip = headersList.get("x-forwarded-for") ?? "127.0.0.1"
@@ -505,13 +530,25 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
     const supabase = createServiceRoleClient()
 
     // Ensure it exists and not already completed
-    const { data: txn } = await supabase.from("transactions").select("status, price, created_at, product_name, user_email").eq("transaction_id", transactionId).single()
+    const { data: txn } = await supabase.from("transactions").select("transaction_id, status, price, created_at, product_name, user_email, user_id, validation_trace_id, payment_category").eq("transaction_id", transactionId).single()
     if (!txn) {
       return { success: false, error: "Transaction not found" }
+    }
+    if (!(await authorizeTransactionAccess(txn, capability))) {
+      return { success: false, error: "This checkout link is no longer valid. Please start a new order." }
     }
     if (txn.status === "Completed" || txn.status === "Paid") {
       return { success: true, completed: true }
     }
+
+    // Never trust caller-supplied verification parameters — use what we stored
+    // when the QR was generated for this specific order.
+    const storedTraceId = (txn as any).validation_trace_id as string | null
+    const storedCategory = (txn as any).payment_category as string | null
+    if (!storedTraceId) {
+      return { success: false, error: "Payment session has not been initialised yet." }
+    }
+    const provider = storedCategory === "fonepay" ? "fonepay" : "nepalpay"
 
     const proxyUrl = PAYMENT_PROXY_URL
     const endpoints = getProxyEndpoints(provider)
@@ -533,7 +570,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
 
     // Build verify payload WITHOUT credentials
     const verifyPayload: any = {
-      nqrTxnId: validationTraceId,
+      nqrTxnId: storedTraceId,
       remarks: transactionId,
       amount: Math.round(parseFloat(String(txn.price || "0").replace(/,/g, ''))),
       orderCreatedAt: txn.created_at
@@ -573,6 +610,22 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
       }
     }
 
+    // SECURITY: a stripped-remarks payment matched only by amount and time is
+    // not proof of payment for THIS order — park it for manual reconciliation.
+    if (proxyData.needsReview) {
+      await flagOrderForManualReview({
+        transactionId,
+        provider,
+        bankTxnId: proxyData.data?.bankTxnId || proxyData.data?.txnId,
+        paidAmount: proxyData.data?.paidAmount,
+      })
+      return {
+        success: false,
+        needsReview: true,
+        error: "We found a payment that could not be matched to your order automatically. Our team has been notified and will confirm it shortly.",
+      }
+    }
+
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
       // SECURITY: Validate paid amount matches order amount (anti-underpayment fraud)
       const rawPaidAmount = proxyData.data.paidAmount
@@ -595,7 +648,7 @@ export async function verifyPaymentAction(transactionId: string, validationTrace
 
       const fulfillResult = await fulfillOrderDirectly({
         transactionId,
-        validationTraceId,
+        validationTraceId: storedTraceId,
         provider,
         bankTxnId: proxyData.data.bankTxnId || proxyData.data.txnId,
         source: `${provider.toUpperCase()} (Web Verification)`,
@@ -808,7 +861,7 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
  * Fallback to explicitly fail a transaction if the frontend timer reaches 0.
  * This is primarily for immediate feedback locally since QStash/Cron might not fire immediately.
  */
-export async function expireTransactionAction(transactionId: string) {
+export async function expireTransactionAction(transactionId: string, capability?: string | null) {
   try {
     // SECURITY: throttle guest-accessible expiry calls (20/min per IP)
     const expH = await headers()
@@ -819,18 +872,14 @@ export async function expireTransactionAction(transactionId: string) {
     const supabase = createServiceRoleClient()
 
     // SECURITY: Verify ownership — only the transaction's owner can trigger expiry
-    const { createClient } = await import("@/lib/supabase/server")
-    const userSupabase = await createClient()
-    const { data: { user } } = await userSupabase.auth.getUser()
-
+    // (session owner, or the holder of the checkout capability issued at creation)
     // Verify it is still in an unpaid state (Payment Pending or Processing for dynamic QR) and NO payment received
     const { data: txn } = await supabase.from("transactions").select("*").eq("transaction_id", transactionId).single()
     if (!txn || !["Payment Pending", "Processing"].includes(txn.status as string) || (txn as any).payment_category === "static" || txn.bank_txn_id) {
       return { success: false }
     }
 
-    // For registered users, prevent unauthenticated or DIFFERENT logged-in users from expiring
-    if (txn.user_id && (!user || user.id !== txn.user_id)) {
+    if (!(await authorizeTransactionAccess(txn, capability))) {
       return { success: false, error: "Unauthorized" }
     }
 
@@ -917,7 +966,7 @@ export async function expireTransactionAction(transactionId: string) {
 /**
  * Explicitly cancel a transaction by the user.
  */
-export async function cancelTransactionAction(transactionId: string) {
+export async function cancelTransactionAction(transactionId: string, capability?: string | null) {
   try {
     // SECURITY: throttle guest-accessible cancel calls (20/min per IP)
     const cancelH = await headers()
@@ -932,14 +981,10 @@ export async function cancelTransactionAction(transactionId: string) {
       return { success: false, error: "Cannot cancel this transaction" }
     }
 
-    // SECURITY: Prevent unauthenticated or DIFFERENT logged-in users from cancelling
-    if (txn.user_id) {
-      const { createClient } = await import("@/lib/supabase/server")
-      const userSupabase = await createClient()
-      const { data: { user } } = await userSupabase.auth.getUser()
-      if (!user || user.id !== txn.user_id) {
-        return { success: false, error: "Unauthorized" }
-      }
+    // SECURITY: Only the session owner or the holder of the checkout capability
+    // issued at order creation may cancel this order.
+    if (!(await authorizeTransactionAccess(txn, capability))) {
+      return { success: false, error: "Unauthorized" }
     }
 
     const { error: cancelError } = await supabase

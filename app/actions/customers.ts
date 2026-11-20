@@ -3,8 +3,9 @@
 import crypto from "crypto"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { getAdminSessionAction } from "./admin-utils"
-import { banEntity, unbanEntity, getBannedEntities, cleanupExpiredBans, BannedEntity } from "@/lib/security/blacklist"
-import { sendPasswordResetEmail } from "@/lib/email/resend"
+import { banEntity, unbanEntity, getBannedEntities, cleanupExpiredBans, BannedEntity, PROTECTED_EMAIL_DOMAINS } from "@/lib/security/blacklist"
+import { sendPasswordResetEmail, sendReviewRequestEmail } from "@/lib/email/resend"
+import { rateLimit } from "@/lib/rate-limit"
 import { Resend } from "resend"
 import { getPostHogLastActive } from "@/lib/analytics/posthog-server"
 
@@ -328,12 +329,24 @@ export async function sendCustomerPasswordResetAction(email: string): Promise<{
   error?: string
 }> {
   const session = await getAdminSessionAction()
-  if (!session.success) return { success: false, error: "Unauthorized" }
+  if (!session.success || session.data.role !== "admin") {
+    return { success: false, error: "Unauthorized: Super admin access required" }
+  }
 
   const cleanEmail = email.trim().toLowerCase()
 
   try {
     const supabase = createServiceRoleClient() as any
+
+    // Administrator accounts must never be reset from the customer directory.
+    const { data: adminTarget } = await supabase
+      .from("admin_users")
+      .select("id")
+      .ilike("email", cleanEmail)
+      .maybeSingle()
+    if (adminTarget) {
+      return { success: false, error: "Administrator accounts cannot be reset from the customer directory." }
+    }
 
     // 1. Locate user ID in Supabase
     let targetUserId: string | null = null
@@ -612,10 +625,10 @@ export async function banEntireCustomerAction({
       }
     }
 
-    // 6. Optionally ban entire email domain
+    // 6. Optionally ban entire email domain (never ban major public providers like gmail.com)
     if (banDomain) {
       const domain = cleanEmail.split("@")[1]?.trim()
-      if (domain) {
+      if (domain && !PROTECTED_EMAIL_DOMAINS.has(domain.toLowerCase())) {
         await banEntity({
           type: "email_domain",
           value: domain,
@@ -725,4 +738,29 @@ export async function getBannedListAction(): Promise<{
   await cleanupExpiredBans().catch(() => {})
   const data = await getBannedEntities()
   return { success: true, data }
+}
+
+/**
+ * Emails a customer asking for a Trustpilot review. Admin only, at most once per
+ * customer every 14 days and 100 per hour overall, so nobody gets nagged.
+ */
+export async function sendReviewRequestAction(email: string, name?: string): Promise<{ success: boolean; error?: string }> {
+  const session = await getAdminSessionAction()
+  if (!session.success || session.data.role !== "admin") return { success: false, error: "Unauthorized" }
+
+  const cleanEmail = String(email || "").trim().toLowerCase()
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return { success: false, error: "Invalid email address." }
+
+  const global = await rateLimit("review-request:global", { windowMs: 3_600_000, max: 100 })
+  if (!global.ok) return { success: false, error: "Hourly review-request limit reached. Try again later." }
+  const perCustomer = await rateLimit(`review-request:${cleanEmail}`, { windowMs: 14 * 24 * 3_600_000, max: 1 })
+  if (!perCustomer.ok) return { success: false, error: "A review request was already sent to this customer in the last 14 days." }
+
+  try {
+    const { error } = await sendReviewRequestEmail({ email: cleanEmail, userName: name })
+    if (error) return { success: false, error: error.message || "Email could not be sent." }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Email could not be sent." }
+  }
 }
