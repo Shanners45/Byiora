@@ -11,6 +11,8 @@ import { submitToIndexNow, submitAllSiteUrlsToIndexNow } from "@/lib/indexnow"
 function sanitizeProductData<T extends Record<string, any>>(data: T): T {
   const result: any = { ...data }
   if (result.name) result.name = sanitizePlainText(result.name)
+  // URLs are case-sensitive: one canonical lowercase slug avoids duplicate/404 variants.
+  if (result.slug) result.slug = String(result.slug).trim().toLowerCase()
   if (result.description) result.description = sanitizeHtml(result.description)
   if (result.ribbon_text) result.ribbon_text = sanitizePlainText(result.ribbon_text)
   if (result.uid_instructions) result.uid_instructions = sanitizePlainText(result.uid_instructions)

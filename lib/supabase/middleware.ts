@@ -79,9 +79,9 @@ export async function updateSession(request: NextRequest) {
   // │ ADMIN ROUTES — Layered protection
   // └──────────────────────────────────────────────────────────────────────────
   if (isAdminRoute) {
-    // Root /admin access -> immediately redirect to /admin/login at HTTP level (307)
+    // Root /admin -> dashboard; the dashboard guard below sends signed-out users to /admin/login
     if (pathname === "/admin") {
-      url.pathname = "/admin/login"
+      url.pathname = "/admin/dashboard"
       return NextResponse.redirect(url)
     }
 

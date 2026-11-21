@@ -5,7 +5,6 @@ import type React from "react"
 import { Menu, Search, User, Bell, LogOut, Settings, History, Home, Headset, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet"
-import { Skeleton } from "@/components/ui/skeleton"
 
 import { Badge } from "@/components/ui/badge"
 import { NotificationPanel } from "./notification-panel"
@@ -115,6 +114,7 @@ export function Header() {
                 ref={mobileSearchRef}
                 type="text"
                 placeholder="Search gift cards..."
+                aria-label="Search gift cards"
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onFocus={() => searchQuery.trim() && setShowSearchResults(true)}
@@ -129,6 +129,7 @@ export function Header() {
               size="icon"
               className="text-brand-charcoal hover:bg-gray-100 flex-shrink-0"
               onClick={() => setIsMobileSearchOpen(false)}
+              aria-label="Close search"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -154,6 +155,7 @@ export function Header() {
                   size="icon"
                   className="md:hidden text-brand-charcoal hover:bg-brand-sky-blue/10"
                   onClick={() => setIsMobileSidebarOpen(true)}
+                  aria-label="Open menu"
                 >
                   <Menu className="h-5 w-5" />
                 </Button>
@@ -320,6 +322,7 @@ export function Header() {
               <input
                 type="text"
                 placeholder="Search gift cards..."
+                aria-label="Search gift cards"
                 value={searchQuery}
                 onChange={handleSearchChange}
                 onFocus={() => searchQuery.trim() && setShowSearchResults(true)}
@@ -338,6 +341,7 @@ export function Header() {
               size="icon"
               className="md:hidden text-brand-charcoal hover:bg-brand-sky-blue/10"
               onClick={() => setIsMobileSearchOpen(true)}
+              aria-label="Search gift cards"
             >
               <Search className="h-5 w-5" />
             </Button>
@@ -351,6 +355,7 @@ export function Header() {
                     size="icon"
                     className="text-brand-charcoal hover:bg-brand-sky-blue/10"
                     onClick={() => setIsNotificationOpen(true)}
+                    aria-label="Notifications"
                   >
                     <Bell className="h-5 w-5" />
                     {unreadCount > 0 && (

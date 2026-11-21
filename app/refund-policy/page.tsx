@@ -6,7 +6,7 @@ import type { Metadata } from "next"
 const BASE_URL = "https://www.byiora.com.np"
 
 export const metadata: Metadata = {
-  title: { absolute: "Refund & Return Policy | Byiora - Buy Game Gift Cards & Top-Ups Nepal" },
+  title: { absolute: "Refund & Return Policy | Byiora" },
   description: "Learn about the Refund and Return Policy at Byiora. Understand our terms for refunds on game top-ups, digital gift cards, and promotional orders in Nepal.",
   alternates: {
     canonical: `${BASE_URL}/refund-policy`,

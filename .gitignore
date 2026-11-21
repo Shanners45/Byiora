@@ -30,3 +30,6 @@ next-env.d.ts
 *.har
 # Plain "env" secrets file (no dot) must never be committed
 /env
+
+# SEO audit reports (claude-seo plugin output)
+/byiora.com.np-audit/

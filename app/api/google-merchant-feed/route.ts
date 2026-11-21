@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
+import { brandOf } from "@/lib/product-categories"
 
 export const dynamic = "force-dynamic"
-export const revalidate = 3600 // Cache for 1 hour
 
 function escapeXml(unsafe: string): string {
   if (!unsafe) return ""
@@ -13,10 +13,6 @@ function escapeXml(unsafe: string): string {
     .replace(/'/g, "&apos;")
 }
 
-function stripHtml(html: string): string {
-  if (!html) return ""
-  return html.replace(/<[^>]*>?/gm, "").replace(/\s+/g, " ").trim()
-}
 
 /**
  * Google Merchant Center Dynamic Product Feed (RSS 2.0 XML)
@@ -51,7 +47,8 @@ export async function GET(req: Request) {
 
     for (const p of products || []) {
       const denoms = Array.isArray(p.denominations) ? p.denominations : []
-      const productDescription = stripHtml(p.description || `Buy ${p.name} instant digital delivery online at Byiora.`)
+      const productDescription = `Buy ${p.name} in Nepal with instant digital delivery by email. Pay in NPR with eSewa, Khalti or Fonepay QR at Byiora.`
+      const brand = brandOf(p.name)
       const productLink = `${siteUrl}/en-np/${p.slug}`
       const imageLink = p.logo || `${siteUrl}/icon.png`
 
@@ -65,7 +62,7 @@ export async function GET(req: Request) {
       <g:image_link>${escapeXml(imageLink)}</g:image_link>
       <g:availability>${p.is_active ? "in_stock" : "out_of_stock"}</g:availability>
       <g:price>0.00 ${currency}</g:price>
-      <g:brand>Byiora</g:brand>
+      <g:brand>${escapeXml(brand)}</g:brand>
       <g:condition>new</g:condition>
       <g:google_product_category>53</g:google_product_category>
       <g:identifier_exists>no</g:identifier_exists>
@@ -94,7 +91,7 @@ export async function GET(req: Request) {
       <g:image_link>${escapeXml(imageLink)}</g:image_link>${denom.icon_url && denom.icon_url !== imageLink ? `\n      <g:additional_image_link>${escapeXml(denom.icon_url)}</g:additional_image_link>` : ""}
       <g:availability>${isItemInStock ? "in_stock" : "out_of_stock"}</g:availability>
       <g:price>${formattedPrice}</g:price>
-      <g:brand>Byiora</g:brand>
+      <g:brand>${escapeXml(brand)}</g:brand>
       <g:condition>new</g:condition>
       <g:google_product_category>53</g:google_product_category>
       <g:identifier_exists>no</g:identifier_exists>

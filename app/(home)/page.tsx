@@ -91,13 +91,36 @@ export default async function Home() {
       <Header />
 
       <main className="container mx-auto px-4 py-8">
-        <h1 className="sr-only">
-          Buy Game Top-Ups and Gift Cards in Nepal
-        </h1>
-        <p className="sr-only">
-          Instant digital delivery for popular games, entertainment, and online services in Nepal.
-        </p>
+        {/* Visually hidden, but in the HTML for search engines, AI crawlers and screen readers. */}
+        <div className="sr-only">
+          <h1>Buy Game Top-Ups and Gift Cards in Nepal</h1>
+          <p>Pay with eSewa, Khalti or Fonepay QR. Codes are emailed to you automatically after payment.</p>
+        </div>
         <HomeContent categories={categories} banners={banners} />
+
+        {/* Checkable facts for search engines and AI answers; visually hidden by request. */}
+        <section className="sr-only">
+          <h2>How buying on Byiora works</h2>
+          <ol>
+            <li>
+              <p>1. Pick a product</p>
+              <p>Choose a gift card, game top-up or game key and the amount you need. For top-ups, enter your Player ID; each product page shows where to find it.</p>
+            </li>
+            <li>
+              <p>2. Pay in NPR</p>
+              <p>Scan the QR with eSewa, Khalti, Fonepay or your bank app. No international card or PayPal account is needed.</p>
+            </li>
+            <li>
+              <p>3. Get it by email</p>
+              <p>Once payment is confirmed, your code is emailed to you and kept in your order history; top-ups are credited to your game ID.</p>
+            </li>
+          </ol>
+          <p>
+            Byiora is a Nepal-registered business (PAN 151285437). Support replies by email and WhatsApp, Sunday to Friday, 9 AM to 6 PM Nepal time.
+            Problems with a code? Read our <a href="/refund-policy">Refund Policy</a>, or see what customers say on{" "}
+            <a href="https://www.trustpilot.com/review/byiora.com.np" target="_blank" rel="noopener noreferrer">Trustpilot</a>.
+          </p>
+        </section>
       </main>
 
       <Footer />

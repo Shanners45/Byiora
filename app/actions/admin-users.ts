@@ -1,7 +1,6 @@
 "use server"
 
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
-import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 import crypto from "crypto"
 

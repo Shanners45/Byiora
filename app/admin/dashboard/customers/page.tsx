@@ -9,19 +9,15 @@ import {
   KeyRound,
   Ban,
   CheckCircle2,
-  AlertTriangle,
   Send,
   Plus,
   RefreshCw,
   ShoppingBag,
   Clock,
   SendHorizontal,
-  FileText,
   MessageSquare,
   ChevronRight,
   ChevronLeft,
-  Copy,
-  ExternalLink,
   Star
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -55,7 +51,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { toast } from "sonner"
-import { useOnlineUserIds } from "@/lib/presence"
+import { usePresence } from "@/lib/presence"
 import {
   getCustomersOverviewAction,
   sendCustomerPasswordResetAction,
@@ -139,7 +135,13 @@ export default function CustomersAndSecurityPage() {
   const [customers, setCustomers] = useState<CustomerProfile[]>(() => pageCache.customers ?? [])
   const [bans, setBans] = useState<BannedEntity[]>(() => pageCache.bans ?? [])
   const [tickets, setTickets] = useState<SupportTicket[]>(() => pageCache.tickets ?? [])
-  const onlineUserIds = useOnlineUserIds()
+  const { online: onlineUserIds, leftAt } = usePresence()
+  // Newest of: left-while-watching, PostHog activity, saved heartbeat. Order/signup dates are fallbacks.
+  const lastActiveOf = (c: CustomerProfile) => {
+    const signals = [c.userId ? leftAt[c.userId] : null, c.posthogLastSeen, c.lastActiveAt].filter(Boolean) as string[]
+    const newest = signals.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
+    return newest || c.lastOrderDate || c.createdAt || null
+  }
 
   // Search & filter states
   const [customerSearch, setCustomerSearch] = useState("")
@@ -267,7 +269,14 @@ export default function CustomersAndSecurityPage() {
     }
   }, [activeTab])
 
-  const tabLoadingCard = <div className="min-h-[60vh] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200" /></div>
+  const tabLoadingCard = (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4" />
+        <p className="text-[#4B5563]">Loading customers & security...</p>
+      </div>
+    </div>
+  )
 
   // ── Customer Handlers ──
   const handleViewCustomerOrders = async (cust: CustomerProfile) => {
@@ -696,14 +705,20 @@ export default function CustomersAndSecurityPage() {
   const paginatedTickets = filteredTickets.slice((ticketsPage - 1) * pageSize, ticketsPage * pageSize)
 
   // Customer statistics (count only verified registered accounts)
-  const totalSpendRs = customers.reduce((acc, c) => acc + c.totalSpent, 0)
   const bannedCount = customers.filter((c) => c.isBanned).length
   const registeredCount = customers.filter((c) => c.isRegistered && c.isEmailVerified !== false).length
   const guestCount = customers.filter((c) => !c.isRegistered).length
   const openTicketsCount = tickets.filter((t) => t.status === "open").length
 
   if (loading) {
-    return <div className="min-h-[60vh] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200" /></div>
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4" />
+          <p className="text-[#4B5563]">Loading customers & security...</p>
+        </div>
+      </div>
+    )
   }
 
   const supportInboxCard = (
@@ -1094,13 +1109,7 @@ export default function CustomersAndSecurityPage() {
                           </TableCell>
                           <TableCell className="py-3 whitespace-nowrap">
                             {(() => {
-                              // PostHog is the source of truth for actual site activity.
-                              // Supabase last sign-in is intentionally not used as a fallback.
-                              const bestTimestamp =
-                                cust.posthogLastSeen ||
-                                cust.lastActiveAt ||
-                                cust.lastOrderDate ||
-                                cust.createdAt
+                              const bestTimestamp = lastActiveOf(cust)
 
                               if (!bestTimestamp) return <span className="text-xs text-gray-400">—</span>
 
@@ -1335,9 +1344,7 @@ export default function CustomersAndSecurityPage() {
                           <TableCell className="py-3.5 whitespace-nowrap">
                             {(() => {
                               const c = findBanCustomer(ban)
-                              const ts = c
-                                ? c.posthogLastSeen || c.lastActiveAt || c.lastOrderDate || c.createdAt
-                                : null
+                              const ts = c ? lastActiveOf(c) : null
                               if (!ts) return <span className="text-xs text-gray-400">—</span>
                               const online = c?.userId ? onlineUserIds.has(c.userId) : false
                               return <LastActiveDisplay timestamp={ts} online={online} />
@@ -1572,11 +1579,7 @@ export default function CustomersAndSecurityPage() {
                   <div className="bg-white/90 rounded-lg p-2.5 border border-[#F59E0B]/20 shadow-xs col-span-2 sm:col-span-1">
                     <span className="text-[11px] text-[#92400E] font-medium block">Last Active</span>
                     {(() => {
-                      const bestTs =
-                        selectedCustomer.posthogLastSeen ||
-                        selectedCustomer.lastActiveAt ||
-                        selectedCustomer.lastOrderDate ||
-                        selectedCustomer.createdAt
+                      const bestTs = lastActiveOf(selectedCustomer)
                       if (!bestTs) return <span className="text-sm font-bold text-gray-400">—</span>
                       const isOnline = selectedCustomer.userId ? onlineUserIds.has(selectedCustomer.userId) : false
                       return <LastActiveDisplay timestamp={bestTs} online={isOnline} textSize="text-sm" />

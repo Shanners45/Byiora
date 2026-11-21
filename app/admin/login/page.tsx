@@ -13,6 +13,7 @@ import { TurnstileWidget } from "@/components/turnstile-widget"
 import { loginAdminWithPassword } from "@/app/actions/admin-auth"
 import { getAdminMfaStageAction, trustAdminDeviceAction } from "@/app/actions/admin-utils"
 import { createClient } from "@/lib/supabase/client"
+import { BrandLoader } from "@/components/brand-loader"
 
 type MfaStage = "enroll" | "verify"
 
@@ -136,16 +137,19 @@ export default function AdminLogin() {
   const [isLoading, setIsLoading] = useState(false)
   const [captchaToken, setCaptchaToken] = useState("")
   const [mfaStage, setMfaStage] = useState<MfaStage | null>(null)
+  // Show the logo loader (not the form) until we know whether a session exists.
+  const [checkingSession, setCheckingSession] = useState(true)
   const router = useRouter()
 
-  // Already signed in with a password (e.g. bounced from the dashboard): resume at 2FA.
+  // Already signed in (trusted device or bounced from the dashboard): go straight in, or resume at 2FA.
   useEffect(() => {
     getAdminMfaStageAction()
       .then(({ stage }) => {
-        if (stage === "done") router.replace("/admin/dashboard")
-        else if (stage !== "none") setMfaStage(stage)
+        if (stage === "done") return router.replace("/admin/dashboard")
+        if (stage !== "none") setMfaStage(stage)
+        setCheckingSession(false)
       })
-      .catch(() => {})
+      .catch(() => setCheckingSession(false))
   }, [router])
 
   // Full navigation so the server reads the upgraded (2FA) session cookie.
@@ -153,8 +157,6 @@ export default function AdminLogin() {
     toast.success("Login successful!")
     window.location.href = "/admin/dashboard"
   }
-
-
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -181,10 +183,7 @@ export default function AdminLogin() {
     }
   }
 
-  // Remove isCheckingAuth logic because we let the edge router handle auth detection
-  // if they hit /admin/login while logged in, they can stay or be auto-redirected by middleware if we made middleware redirect. 
-  // Let's render the login form immediately
-
+  if (checkingSession) return <BrandLoader label="Checking your session" />
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB] px-4 py-8" style={{ colorScheme: "light" }}>

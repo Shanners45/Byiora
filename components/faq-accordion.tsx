@@ -38,7 +38,7 @@ export function FaqAccordion({ faqs }: { faqs: FaqItemProps[] }) {
               aria-expanded={isOpen}
             >
               <h4 className={`text-sm font-medium pr-4 ${isOpen ? "text-brand-charcoal" : "text-brand-charcoal/80"}`}>
-                {faq.question}
+                {faq.question.replace(/^\s*(?:\d+[.)]|Q:)\s*/i, "")}
               </h4>
               <div 
                 className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-300 ${
@@ -58,7 +58,7 @@ export function FaqAccordion({ faqs }: { faqs: FaqItemProps[] }) {
                 <div 
                   className="p-4 pt-0 text-xs text-brand-light-gray prose-rich-text"
                   dangerouslySetInnerHTML={{ 
-                    __html: sanitizeHtml(faq.answer) 
+                    __html: sanitizeHtml(faq.answer.replace(/^\s*A:\s*/i, "")) 
                   }} 
                 />
               </div>

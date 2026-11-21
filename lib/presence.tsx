@@ -69,9 +69,14 @@ export function PresenceTracker() {
   return null
 }
 
-/** Set of user IDs currently tracked on the presence channel, pushed on change. */
-export function useOnlineUserIds(): Set<string> {
-  const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set())
+/**
+ * Who is online now (Realtime presence), plus when each user went offline
+ * while this page was open. The leave time is exact even if the user's last
+ * heartbeat write was cut off by closing the tab.
+ */
+export function usePresence(): { online: Set<string>; leftAt: Record<string, string> } {
+  const [online, setOnline] = useState<Set<string>>(new Set())
+  const [leftAt, setLeftAt] = useState<Record<string, string>>({})
 
   useEffect(() => {
     const supabase = createClient()
@@ -80,8 +85,13 @@ export function useOnlineUserIds(): Set<string> {
     channel
       .on("presence", { event: "sync" }, () => {
         const next = new Set(Object.keys(channel.presenceState()))
-        setOnlineIds((prev) => {
+        setOnline((prev) => {
           if (prev.size === next.size && [...next].every((id) => prev.has(id))) return prev
+          const gone = [...prev].filter((id) => !next.has(id))
+          if (gone.length) {
+            const now = new Date().toISOString()
+            setLeftAt((m) => ({ ...m, ...Object.fromEntries(gone.map((id) => [id, now])) }))
+          }
           return next
         })
       })
@@ -92,5 +102,5 @@ export function useOnlineUserIds(): Set<string> {
     }
   }, [])
 
-  return onlineIds
+  return { online, leftAt }
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { useState, useEffect } from "react"
 import { BannerCarousel } from "@/components/banner-carousel"
 import { GiftCard } from "@/components/gift-card"
@@ -24,7 +24,6 @@ interface HomeContentProps {
 }
 
 export function HomeContent({ categories, banners }: HomeContentProps) {
-  const router = useRouter()
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({})
   const [isMobile, setIsMobile] = useState(false)
 
@@ -35,13 +34,8 @@ export function HomeContent({ categories, banners }: HomeContentProps) {
     return () => window.removeEventListener("resize", checkMobile)
   }, [])
 
-  const handleGiftCardClick = (card: any) => {
-    if (card.category && card.slug) {
-      router.push(`/en-np/${card.slug}`)
-    } else {
-      router.push(`/gift-card/${card.id}`)
-    }
-  }
+  // Real links (not click handlers) so crawlers can follow every product from the homepage.
+  const cardHref = (card: any) => (card.category && card.slug ? `/en-np/${card.slug}` : `/gift-card/${card.id}`)
 
   const toggleCategory = (categoryId: string) => {
     setExpandedCategories((prev) => ({
@@ -83,12 +77,9 @@ export function HomeContent({ categories, banners }: HomeContentProps) {
                 {category.products
                   .slice(0, isExpanded ? undefined : maxVisible)
                   .map((card) => (
-                    <GiftCard
-                      key={card.id}
-                      {...card}
-                      ribbon_text={card.ribbon_text}
-                      onClick={() => handleGiftCardClick(card)}
-                    />
+                    <Link key={card.id} href={cardHref(card)} className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300">
+                      <GiftCard {...card} ribbon_text={card.ribbon_text} />
+                    </Link>
                   ))}
               </div>
 

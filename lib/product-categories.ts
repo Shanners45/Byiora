@@ -67,8 +67,17 @@ export async function getAllProducts(): Promise<Product[]> {
       return []
     }
 
-    // Transform Supabase data to our Product interface
-    const products: Product[] = data.map((product: any) => ({
+    return data.map(mapProductRow)
+  } catch (error) {
+    console.error("Error fetching products:", error)
+    console.warn("Using empty array due to network error")
+    return []
+  }
+}
+
+/** Supabase products row -> Product (shared by the browser fetch and server rendering). */
+export function mapProductRow(product: any): Product {
+  return {
       id: product.id,
       name: decodeHtmlEntities(product.name || ""),
       slug: product.slug,
@@ -96,13 +105,6 @@ export async function getAllProducts(): Promise<Product[]> {
       uid_instructions: product.uid_instructions || null,
       uid_guide_image: product.uid_guide_image || null,
       servers: product.servers || [],
-    }))
-
-    return products
-  } catch (error) {
-    console.error("Error fetching products:", error)
-    console.warn("Using empty array due to network error")
-    return []
   }
 }
 
@@ -135,6 +137,20 @@ export async function getProductById(id: string): Promise<Product | null> {
 export async function getProductBySlug(slug: string): Promise<Product | null> {
   const allProducts = await getAllProducts()
   return allProducts.find(p => p.slug === slug) || null
+}
+
+/**
+ * Brand = the issuer named in the product title ("Steam Gift Card" -> "Steam").
+ * shortcut: derived from the name, add a brand column if a name ever misleads it.
+ */
+export function brandOf(name: string): string {
+  const brand = String(name || "")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\b(e-?gift\s*card|gift\s*card|giftcard|top-?up|topup|recharge|subscription|official|key|codes?|global|digital|pc|console|uc|diamonds?|inr|usd|npr)\b/gi, " ")
+    .replace(/[|:–-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+  return brand || String(name || "").trim() || "Byiora"
 }
 
 // Legacy exports and unused code removed

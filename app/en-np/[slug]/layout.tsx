@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
-import { Suspense, cache } from "react"
+import { Suspense } from "react"
 import { notFound } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import type { Product } from "@/lib/product-categories"
+import { getProduct } from "./get-product"
+import { brandOf } from "@/lib/product-categories"
 
 const BASE_URL = "https://www.byiora.com.np"
 
@@ -16,18 +16,22 @@ function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
 }
 
-// One DB read per request, shared by metadata, JSON-LD, title and the 404 check.
-const getProduct = cache(async (slug: string): Promise<Product | null> => {
-  const supabase = await createClient()
-  const { data, error } = await (supabase as any)
-    .from("products")
-    .select("*")
-    .eq("slug", slug)
-    .eq("is_active", true)
-    .maybeSingle()
-  if (error) throw error // a DB hiccup must not look like "product does not exist"
-  return (data as Product | null) ?? null
-})
+// What top-up buyers actually search for ("pubg uc", "free fire diamonds").
+const TOPUP_CURRENCY: [RegExp, string][] = [
+  [/pubg/i, "UC"],
+  [/free\s*fire/i, "Diamonds"],
+  [/genshin/i, "Genesis Crystals"],
+  [/clash of clans/i, "Gems"],
+  [/fc mobile/i, "FC Points"],
+]
+
+/** "Buy PUBG Mobile UC Top-Up in Nepal"; other categories keep "Buy <name> in Nepal". */
+function productTitle(name: string, category?: string): string {
+  if (category !== "topup") return `Buy ${name} in Nepal`
+  const clean = name.replace(/\s*\(UID\)/gi, "").replace(/\btop-?up\b/gi, "").replace(/\s+/g, " ").trim()
+  const currency = TOPUP_CURRENCY.find(([re]) => re.test(name))?.[1]
+  return `Buy ${clean}${currency ? ` ${currency}` : ""} Top-Up in Nepal`
+}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
@@ -44,7 +48,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
     const categoryLabel = typedProduct.category === "topup" ? "Top-Up" : "Gift Card"
     // The root layout's "%s | Byiora" template adds the brand.
-    const title = `Buy ${typedProduct.name} in Nepal`
+    const title = productTitle(typedProduct.name, typedProduct.category)
 
     // Product descriptions hold redemption steps, not a summary, so the meta
     // description is built from structured fields instead.
@@ -104,7 +108,11 @@ async function ProductJsonLd({ slug }: { slug: string }) {
     if (!typedProduct) return null
 
     const productUrl = `${BASE_URL}/en-np/${slug}`
-    const cleanDesc = typedProduct.description ? stripHtml(typedProduct.description).slice(0, 300) : `Buy ${typedProduct.name} in Nepal with instant delivery.`
+    // DB descriptions are redemption steps; schema wants a product summary.
+    const cleanDesc = `Buy ${typedProduct.name} in Nepal with instant digital delivery by email. Pay in NPR with eSewa, Khalti or Fonepay QR.`
+    const denoms: any[] = typedProduct.denominations || []
+    const prices = denoms.map((d) => parseFloat(String(d.price).replace(/,/g, ""))).filter((n) => Number.isFinite(n) && n > 0)
+    const anyInStock = denoms.some((d) => d.in_stock !== false)
 
     const productSchema: any = {
       "@context": "https://schema.org",
@@ -113,22 +121,23 @@ async function ProductJsonLd({ slug }: { slug: string }) {
       description: cleanDesc,
       image: typedProduct.logo || `${BASE_URL}/icon.png`,
       url: productUrl,
+      sku: typedProduct.id,
+      itemCondition: "https://schema.org/NewCondition",
       brand: {
         "@type": "Brand",
-        name: "Byiora",
+        name: brandOf(typedProduct.name),
       },
-      offers: typedProduct.denominations && typedProduct.denominations.length > 0
-        ? typedProduct.denominations.map((d: any) => ({
-          "@type": "Offer",
-          name: `${typedProduct.name} - ${d.label || d.amount || ''}`,
-          price: parseFloat(String(d.price).replace(/,/g, "")) || 0,
+      // One price range instead of a repeated Offer per pack (7–11 per product).
+      offers: prices.length
+        ? {
+          "@type": "AggregateOffer",
+          lowPrice: Math.min(...prices),
+          highPrice: Math.max(...prices),
+          offerCount: prices.length,
           priceCurrency: "NPR",
-          availability: d.in_stock === false ? "https://schema.org/OutOfStock" : "https://schema.org/InStock",
+          availability: anyInStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
           url: productUrl,
-          seller: {
-            "@type": "Organization",
-            name: "Byiora",
-          },
+          seller: { "@type": "Organization", name: "Byiora", url: BASE_URL },
           hasMerchantReturnPolicy: {
             "@type": "MerchantReturnPolicy",
             applicableCountry: "NP",
@@ -137,32 +146,15 @@ async function ProductJsonLd({ slug }: { slug: string }) {
           },
           shippingDetails: {
             "@type": "OfferShippingDetails",
-            shippingDestination: {
-              "@type": "DefinedRegion",
-              addressCountry: "NP",
-            },
+            shippingDestination: { "@type": "DefinedRegion", addressCountry: "NP" },
             deliveryTime: {
               "@type": "ShippingDeliveryTime",
-              handlingTime: {
-                "@type": "QuantitativeValue",
-                minValue: 0,
-                maxValue: 0,
-                unitCode: "DAY",
-              },
-              transitTime: {
-                "@type": "QuantitativeValue",
-                minValue: 0,
-                maxValue: 0,
-                unitCode: "DAY",
-              },
+              handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
+              transitTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
             },
-            shippingRate: {
-              "@type": "MonetaryAmount",
-              value: 0,
-              currency: "NPR",
-            },
+            shippingRate: { "@type": "MonetaryAmount", value: 0, currency: "NPR" },
           },
-        }))
+        }
         : undefined,
     }
 
@@ -172,10 +164,10 @@ async function ProductJsonLd({ slug }: { slug: string }) {
         "@type": "FAQPage",
         mainEntity: typedProduct.faqs.map((faq: any) => ({
           "@type": "Question",
-          name: faq.question,
+          name: String(faq.question || "").replace(/^\s*(?:\d+[.)]|Q:)\s*/i, ""),
           acceptedAnswer: {
             "@type": "Answer",
-            text: stripHtml(faq.answer),
+            text: stripHtml(faq.answer).replace(/^\s*A:\s*/i, ""),
           },
         })),
       }
@@ -229,18 +221,6 @@ async function ProductJsonLd({ slug }: { slug: string }) {
   }
 }
 
-async function ProductHiddenTitle({ slug }: { slug: string }) {
-  try {
-    const product = await getProduct(slug)
-    if (product) {
-      return <h1 className="sr-only">{product.name}</h1>
-    }
-  } catch {
-    return null
-  }
-  return null
-}
-
 export default async function ProductLayout({ params, children }: Props) {
   const { slug } = await params
   // Real 404 instead of a 200 "not found" page, so search engines drop dead URLs.
@@ -251,7 +231,6 @@ export default async function ProductLayout({ params, children }: Props) {
     <>
       <Suspense fallback={null}>
         <ProductJsonLd slug={slug} />
-        <ProductHiddenTitle slug={slug} />
       </Suspense>
       {children}
     </>

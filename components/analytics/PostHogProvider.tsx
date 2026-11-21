@@ -19,19 +19,25 @@ export function PostHogProvider() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  // Initialise once
+  // Initialise once, when the browser is idle, so analytics never delays first paint.
   useEffect(() => {
-    initPostHog()
+    const idle = (window as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined
+    if (idle) idle(() => initPostHog(), { timeout: 4000 })
+    else setTimeout(initPostHog, 2000)
   }, [])
 
   // Server-side "last active" timestamp (works even when PostHog is not
-  // configured). Beats on mount, then every five minutes while the tab is
-  // visible. The green online dot is Realtime presence, not this heartbeat.
+  // configured). Beats on mount, every five minutes while visible, and once
+  // when the tab is hidden. The green online dot is Realtime presence.
   useEffect(() => {
     if (typeof window === "undefined") return
 
     const beat = () => {
-      if (document.visibilityState !== "visible") return
+      if (document.visibilityState !== "visible") {
+        // Leaving: record the real last-active time, not the last 5-minute tick.
+        touchLastActiveAction(true).catch(() => {})
+        return
+      }
       if (Date.now() - lastHeartbeatAt < HEARTBEAT_INTERVAL_MS) return
       lastHeartbeatAt = Date.now()
       touchLastActiveAction().catch(() => {})

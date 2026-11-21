@@ -557,17 +557,17 @@ export function AuthPage({ mode }: { mode: "signup" | "signin" }) {
               <div>
                 <h3 className="font-bold text-brand-charcoal mb-4">Stay updated with us:</h3>
                 <div className="flex space-x-2">
-                  <a href="https://www.facebook.com/byiora" target="_blank" rel="noopener noreferrer">
+                  <a href="https://www.facebook.com/byiora" target="_blank" rel="noopener noreferrer" aria-label="Byiora on Facebook">
                     <Button variant="ghost" size="icon" className="text-brand-charcoal hover:text-blue-600 hover:bg-blue-50">
                       <Facebook className="h-5 w-5" />
                     </Button>
                   </a>
-                  <a href="https://www.instagram.com/byiora" target="_blank" rel="noopener noreferrer">
+                  <a href="https://www.instagram.com/byiora" target="_blank" rel="noopener noreferrer" aria-label="Byiora on Instagram">
                     <Button variant="ghost" size="icon" className="text-brand-charcoal hover:text-pink-500 hover:bg-pink-50">
                       <Instagram className="h-5 w-5" />
                     </Button>
                   </a>
-                  <a href="https://www.youtube.com/@byiora" target="_blank" rel="noopener noreferrer">
+                  <a href="https://www.youtube.com/@byiora" target="_blank" rel="noopener noreferrer" aria-label="Byiora on YouTube">
                     <Button variant="ghost" size="icon" className="text-brand-charcoal hover:text-red-600 hover:bg-red-50">
                       <Youtube className="h-5 w-5" />
                     </Button>

@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 
 const THROTTLE_MS = 5 * 60_000
+// Leaving (tab hidden/closed) records the exact time; a short throttle still caps writes.
+const LEAVE_THROTTLE_MS = 30_000
 
 /**
  * Records the signed-in user's activity so the admin dashboard can show a
@@ -14,7 +16,7 @@ const THROTTLE_MS = 5 * 60_000
  * this is only a timestamp, so minute-level writes would be wasted load.
  * Live online status is Realtime presence (lib/presence.tsx), not this column.
  */
-export async function touchLastActiveAction(): Promise<void> {
+export async function touchLastActiveAction(leaving = false): Promise<void> {
   try {
     const supabase = await createClient({ readOnly: true })
     const { data: { user } } = await supabase.auth.getUser()
@@ -26,7 +28,7 @@ export async function touchLastActiveAction(): Promise<void> {
       h.get("x-real-ip") ||
       null
 
-    const cutoff = new Date(Date.now() - THROTTLE_MS).toISOString()
+    const cutoff = new Date(Date.now() - (leaving ? LEAVE_THROTTLE_MS : THROTTLE_MS)).toISOString()
     const service = createServiceRoleClient()
 
     await (service.from("users") as any)

@@ -29,7 +29,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
-    default: "Byiora – Buy Game Top-Up & Gift Cards in Nepal | Instant Delivery",
+    default: "Byiora – Buy Game Top-Ups & Gift Cards in Nepal",
     template: "%s | Byiora",
   },
   description:
@@ -70,7 +70,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: BASE_URL,
     siteName: "Byiora",
-    title: "Byiora – Buy Game Top-Up & Gift Cards in Nepal | Instant Delivery",
+    title: "Byiora – Buy Game Top-Ups & Gift Cards in Nepal",
     description:
       "Buy premium game top-ups and gift cards in Nepal instantly. Pay securely with eSewa, Khalti, Fonepay QR or mobile banking. Instant digital delivery.",
     images: [
@@ -84,7 +84,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Byiora – Buy Game Top-Up & Gift Cards in Nepal | Instant Delivery",
+    title: "Byiora – Buy Game Top-Ups & Gift Cards in Nepal",
     description:
       "Buy premium game top-ups and gift cards in Nepal instantly. Pay securely with eSewa, Khalti, Fonepay QR or mobile banking. Instant digital delivery.",
     images: [`https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png`],
@@ -122,7 +122,7 @@ const organizationJsonLd = {
   "@type": "Organization",
   name: "Byiora",
   url: BASE_URL,
-  logo: `https://tkovigthghwpwbtjikyp.supabase.co/storage/v1/object/public/product-images/byiora-logo-full.png`,
+  logo: `${BASE_URL}/byiora-logo-full.png`,
   description: "Nepal's trusted platform for game top-ups & digital gift cards with instant delivery.",
   contactPoint: {
     "@type": "ContactPoint",
@@ -130,7 +130,12 @@ const organizationJsonLd = {
     url: `${BASE_URL}/contact`,
     availableLanguage: ["English", "Nepali"],
   },
-  sameAs: [],
+  sameAs: [
+    "https://www.facebook.com/byiora",
+    "https://www.instagram.com/byiora",
+    "https://www.youtube.com/@byiora",
+    "https://www.trustpilot.com/review/byiora.com.np",
+  ],
   areaServed: {
     "@type": "Country",
     name: "Nepal",

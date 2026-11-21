@@ -6,10 +6,8 @@ import { getAdminSessionAction } from "./admin-utils"
 import { banEntity, unbanEntity, getBannedEntities, cleanupExpiredBans, BannedEntity, PROTECTED_EMAIL_DOMAINS } from "@/lib/security/blacklist"
 import { sendPasswordResetEmail, sendReviewRequestEmail } from "@/lib/email/resend"
 import { rateLimit } from "@/lib/rate-limit"
-import { Resend } from "resend"
 import { getPostHogLastActive } from "@/lib/analytics/posthog-server"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
 
 export interface CustomerProfile {
   email: string
@@ -276,7 +274,6 @@ export async function getCustomersOverviewAction(): Promise<{
       const directBan = bannedEmailMap.get(profile.email)
       const domain = profile.email.split("@")[1] || ""
       const domainBan = bannedDomainSet.has(domain)
-      const ipBan = profile.lastIp ? bannedIpMap.get(profile.lastIp) : null
       const deviceBan = profile.lastDeviceId ? bannedDeviceMap.get(profile.lastDeviceId) : null
 
       const hardBan = directBan || deviceBan

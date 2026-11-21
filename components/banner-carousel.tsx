@@ -81,6 +81,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
             variant="ghost"
             size="icon"
             onClick={prevSlide}
+            aria-label="Previous banner"
             className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-black/20 hover:bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity"
           >
             <ChevronLeft className="h-6 w-6" />
@@ -89,6 +90,7 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
             variant="ghost"
             size="icon"
             onClick={nextSlide}
+            aria-label="Next banner"
             className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-black/20 hover:bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity"
           >
             <ChevronRight className="h-6 w-6" />
@@ -98,6 +100,8 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
               <button
                 key={index}
                 onClick={() => setCurrentSlide(index)}
+                aria-label={`Go to banner ${index + 1}`}
+                aria-current={index === currentSlide}
                 className={`h-2 rounded-full transition-all ${
                   index === currentSlide ? "bg-white w-8" : "bg-white/50 w-2"
                 }`}

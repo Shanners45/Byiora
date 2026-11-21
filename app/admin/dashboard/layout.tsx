@@ -12,6 +12,7 @@ import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
 import { AdminSessionProvider } from "@/lib/admin-session-context"
+import { BrandLoader } from "@/components/brand-loader"
 
 export default function AdminDashboardLayout({
   children,
@@ -89,16 +90,7 @@ export default function AdminDashboardLayout({
   }
 
   // Show loading while checking auth
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4"></div>
-          <p className="text-[#4B5563]">Loading dashboard...</p>
-        </div>
-      </div>
-    )
-  }
+  if (isLoading) return <BrandLoader label="Loading dashboard" />
 
   if (!adminUser && loadError) {
     return (

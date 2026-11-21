@@ -16,8 +16,6 @@ import { toast } from "sonner"
 import { updateTransactionStatusAction, sendGiftcardCodeAction, insertNotificationAction, refundKhaltiTransactionAction, sendRecoveryEmailAction } from "@/app/actions/orders"
 import { getAllTransactionsAction } from "@/app/actions/dashboard"
 import { decryptCheckoutData, clearCheckoutData } from "@/app/actions/checkout-encryption"
-import { type AdminSession } from "@/app/actions/admin-utils"
-import { useAdminSession } from "@/lib/admin-session-context"
 
 interface Transaction {
   id: string
@@ -122,7 +120,6 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
-  const adminUser: Pick<AdminSession, "role"> | null = useAdminSession()
   const [giftcardCodes, setGiftcardCodes] = useState<Record<string, string>>({})
   const [sendingCodeIds, setSendingCodeIds] = useState<Record<string, boolean>>({})
   const [sendingRecoveryIds, setSendingRecoveryIds] = useState<Record<string, boolean>>({})
@@ -769,13 +766,6 @@ export default function OrdersPage() {
                     <TableCell>
                       {(() => {
                         const status = transaction.status === ("Archived" as any) ? "Payment Failed" : transaction.status
-                        const isDynamic =
-                          transaction.payment_category === "nepalpay" ||
-                          transaction.payment_category === "fonepay" ||
-                          transaction.payment_category === "khalti" ||
-                          transaction.payment_method?.toLowerCase().includes("nepalpay") ||
-                          transaction.payment_method?.toLowerCase().includes("fonepay") ||
-                          transaction.payment_method?.toLowerCase().includes("khalti")
 
                         const isDirectLoginOrTopup =
                           transaction.product_category === "direct-login" ||

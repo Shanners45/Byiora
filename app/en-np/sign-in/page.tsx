@@ -4,6 +4,7 @@ import { AuthPage } from "../sign-up/auth-page"
 export const metadata: Metadata = {
   title: "Sign In",
   description: "Sign in to your Byiora account to see your orders and gift card codes.",
+  robots: { index: false, follow: true },
   alternates: { canonical: "https://www.byiora.com.np/en-np/sign-in" },
 }
 

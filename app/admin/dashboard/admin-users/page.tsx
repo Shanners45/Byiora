@@ -29,7 +29,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Trash2, UserPlus, UserX, UserCheck, KeyRound } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { deleteAdminUserAction } from "@/app/actions/admin"
 import { promoteUserAction, addAdminUserAction, toggleAdminStatusAction, getAdminUsersAction, resetAdminPasswordAction } from "@/app/actions/admin-users"
 import { type AdminSession } from "@/app/actions/admin-utils"
@@ -52,9 +51,7 @@ interface RegularUser {
 }
 
 export default function AdminUsersPage() {
-  const supabase = createClient()
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([])
-  const [regularUsers, setRegularUsers] = useState<RegularUser[]>([])
   const [eligibleUsers, setEligibleUsers] = useState<RegularUser[]>([])
   const currentUser: Pick<AdminSession, "name" | "email" | "role"> | null = useAdminSession()
   const [newAdminName, setNewAdminName] = useState("")

@@ -17,20 +17,8 @@ if (dsn) {
     // Security & Privacy Controls
     sendDefaultPii: false,
 
-    integrations: [
-      Sentry.replayIntegration({
-        // Replays fire on errors, which can include decrypted checkout values,
-        // generated passwords, or reset credentials rendered in the page.
-        maskAllText: true,
-        blockAllMedia: true,
-        maskAllInputs: true,
-        networkCaptureBodies: false,
-        networkDetailAllowUrls: [
-          typeof window !== "undefined" ? window.location.origin : "https://byiora.com.np",
-          "https://admin.byiora.com.np",
-        ],
-      }),
-    ],
+    // Replay is added after load (see below) so its bundle stays off the critical path.
+    integrations: [],
 
     // Noise filtering
     beforeSend(event, hint) {
@@ -54,6 +42,31 @@ if (dsn) {
       return event
     },
   })
+}
+
+// Error-only replay: fetch the replay integration from Sentry's CDN once the
+// browser is idle instead of shipping it in the first-load JS bundle.
+if (dsn && typeof window !== "undefined") {
+  const addReplay = () => {
+    Sentry.lazyLoadIntegration("replayIntegration")
+      .then((replayIntegration) =>
+        Sentry.addIntegration(
+          replayIntegration({
+            // Replays fire on errors, which can include decrypted checkout values,
+            // generated passwords, or reset credentials rendered in the page.
+            maskAllText: true,
+            blockAllMedia: true,
+            maskAllInputs: true,
+            networkCaptureBodies: false,
+            networkDetailAllowUrls: [window.location.origin, "https://admin.byiora.com.np"],
+          }),
+        ),
+      )
+      .catch(() => {})
+  }
+  const idle = (window as any).requestIdleCallback as ((cb: () => void, o?: { timeout: number }) => number) | undefined
+  if (idle) idle(addReplay, { timeout: 8000 })
+  else setTimeout(addReplay, 4000)
 }
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
