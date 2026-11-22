@@ -356,17 +356,35 @@ export const TOPUP_STATUS: Record<string, [string, string]> = {
 }
 export const KIND: Record<string, string> = { topup: "Top-up", order: "Order", refund: "Refund", adjustment: "Adjustment" }
 
+/** Formats numeric input value with commas, e.g. "5000" -> "5,000", "4960.5" -> "4,960.5" */
+export function formatAmountInput(val: string, allowDecimals = true): string {
+  if (!val) return ""
+  let cleaned = val.replace(/[^\d.]/g, "")
+  if (!allowDecimals) {
+    cleaned = cleaned.replace(/\./g, "")
+  }
+  if (!cleaned) return ""
+  const parts = cleaned.split(".")
+  const intPart = parts[0] ? Number(parts[0]).toLocaleString("en-US") : "0"
+  if (allowDecimals && parts.length > 1) {
+    return `${intPart}.${parts[1].slice(0, 2)}`
+  }
+  return intPart
+}
+
 /** One top-up request with approve / reject. Used in the queue and the merchant dialog. */
 export function TopupCard({ t, onChanged, showMerchant }: { t: AdminTopup; onChanged: () => void; showMerchant?: boolean }) {
   const [note, setNote] = useState("")
   const [busy, setBusy] = useState(false)
+  const [approveConfirm, setApproveConfirm] = useState(false)
+
   const decide = async (decision: "approved" | "rejected") => {
-    if (decision === "approved" && !window.confirm(`Credit ${npr(t.amountPaisa)} to ${t.businessName || "this merchant"}'s wallet? Only approve after the money has reached your account.`)) return
     setBusy(true)
     const res = await reviewTopupAction(t.id, decision, note)
     setBusy(false)
     if (!res.success) return toast.error(res.error)
     toast.success(decision === "approved" ? `${npr(t.amountPaisa)} credited` : "Top-up rejected")
+    setApproveConfirm(false)
     onChanged()
   }
   return (
@@ -391,11 +409,39 @@ export function TopupCard({ t, onChanged, showMerchant }: { t: AdminTopup; onCha
         <div className="flex flex-col sm:flex-row gap-2">
           <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Note (required to reject)" maxLength={500} className={`${inputCls} h-9 flex-1`} />
           <div className="flex gap-2">
-            <Button size="sm" disabled={busy} onClick={() => decide("approved")} className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"><CheckCircle2 className="h-4 w-4 mr-1.5" />Approve</Button>
+            <Button size="sm" disabled={busy} onClick={() => setApproveConfirm(true)} className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"><CheckCircle2 className="h-4 w-4 mr-1.5" />Approve</Button>
             <Button size="sm" disabled={busy} variant="outline" onClick={() => decide("rejected")} className="h-9 bg-white border-red-300 text-red-700 hover:bg-red-50 font-semibold">Reject</Button>
           </div>
         </div>
       )}
+
+      {/* Topup Approve Confirmation Dialog */}
+      <AlertDialog open={approveConfirm} onOpenChange={(open) => { if (!open && !busy) setApproveConfirm(false) }}>
+        <AlertDialogContent className="w-[94vw] max-w-md rounded-2xl bg-white p-5 sm:p-6 shadow-xl border-2 border-[#F59E0B]/30">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-bold text-[#1F2937]">Credit Top-up to Wallet?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs sm:text-sm text-[#4B5563]">
+              Credit {npr(t.amountPaisa)} to {t.businessName || "this merchant"}&apos;s wallet? Only approve after confirming the money has reached your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel
+              disabled={busy}
+              onClick={() => setApproveConfirm(false)}
+              className="rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold h-9"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              disabled={busy}
+              onClick={() => decide("approved")}
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm h-9 shadow-sm"
+            >
+              {busy ? "Crediting…" : "Yes, approve & credit"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -412,10 +458,13 @@ function useServerPage<T>(fetchPage: (page: number) => Promise<{ rows: T[]; tota
   return { page, setPage, data, load }
 }
 
-const money = (v: number | null) => (v == null ? "" : String(v / 100))
+const money = (v: number | null) => (v == null ? "" : formatAmountInput(String(v / 100), false))
 
 export function WalletTab({ merchant, onChanged, refreshKey = 0 }: { merchant: MerchantListRow; onChanged: () => void; refreshKey?: number }) {
   const [adj, setAdj] = useState({ amount: "", note: "" })
+  const [adjustTarget, setAdjustTarget] = useState<{ sign: 1 | -1; amount: number; note: string } | null>(null)
+  const [adjustCode, setAdjustCode] = useState("")
+  useEffect(() => { if (!adjustTarget) setAdjustCode("") }, [adjustTarget])
   const [terms, setTerms] = useState({
     discount: String(merchant.discount_percent),
     rate: String(merchant.api_rate_limit_per_min),
@@ -437,25 +486,45 @@ export function WalletTab({ merchant, onChanged, refreshKey = 0 }: { merchant: M
   }, [merchant.id, refreshKey])
   const changed = () => { topups.load(); ledger.load(); onChanged() }
 
-  const adjust = async (sign: 1 | -1) => {
-    const amount = Number(adj.amount)
+  const handleCreditClick = () => {
+    const raw = adj.amount.replace(/,/g, "").trim()
+    const amount = Number(raw)
     if (!(amount > 0)) return toast.error("Enter an amount.")
-    if (!window.confirm(`${sign > 0 ? "Credit" : "Debit"} ${npr(Math.round(amount * 100))} ${sign > 0 ? "to" : "from"} this wallet?`)) return
+    setAdjustTarget({ sign: 1, amount, note: adj.note.trim() })
+  }
+
+  const handleDebitClick = () => {
+    const raw = adj.amount.replace(/,/g, "").trim()
+    const amount = Number(raw)
+    if (!(amount > 0)) return toast.error("Enter an amount.")
+    setAdjustTarget({ sign: -1, amount, note: adj.note.trim() })
+  }
+
+  const confirmAdjust = async () => {
+    if (!adjustTarget) return
     setBusy(true)
-    const res = await adjustMerchantWalletAction(merchant.id, sign * amount, adj.note)
+    const res = await adjustMerchantWalletAction(merchant.id, adjustTarget.sign * adjustTarget.amount, adjustTarget.note, adjustCode)
     setBusy(false)
-    if (!res.success) return toast.error(res.error)
+    if (!res.success) {
+      setAdjustCode("")
+      return toast.error(res.error)
+    }
     toast.success(`Wallet is now ${npr(res.balancePaisa || 0)}`)
     setAdj({ amount: "", note: "" })
+    setAdjustTarget(null)
     changed()
   }
+
   const saveTerms = async () => {
     setBusy(true)
-    const n = (v: string) => (v.trim() === "" ? null : Number(v))
+    const n = (v: string) => {
+      const clean = v.replace(/,/g, "").trim()
+      return clean === "" ? null : Number(clean)
+    }
     const res = await updateMerchantTermsAction(merchant.id, {
       discountPercent: Number(terms.discount),
       rateLimitPerMin: Number(terms.rate),
-      creditLimitRupees: Number(terms.credit || 0),
+      creditLimitRupees: Number(terms.credit.replace(/,/g, "") || 0),
       perOrderRupees: n(terms.perOrder),
       dailyRupees: n(terms.daily),
       monthlyRupees: n(terms.monthly),
@@ -474,10 +543,20 @@ export function WalletTab({ merchant, onChanged, refreshKey = 0 }: { merchant: M
   }
 
   const pending = (topups.data?.rows || []).filter((t) => t.status === "pending")
-  const field = (k: keyof typeof terms, label: string, hint: string, step = "1") => (
+  const field = (k: keyof typeof terms, label: string, hint: string, isAmount = false) => (
     <label className="space-y-1">
       <span className="text-[11px] font-semibold text-[#6B7280]">{label}</span>
-      <Input type="number" min={0} step={step} value={terms[k]} onChange={(e) => setTerms({ ...terms, [k]: e.target.value })} placeholder={hint} className={`${inputCls} h-9`} />
+      <Input
+        type="text"
+        inputMode={isAmount ? "numeric" : "decimal"}
+        value={terms[k]}
+        onChange={(e) => {
+          const val = isAmount ? formatAmountInput(e.target.value, false) : e.target.value
+          setTerms({ ...terms, [k]: val })
+        }}
+        placeholder={hint}
+        className={`${inputCls} h-9`}
+      />
     </label>
   )
 
@@ -496,12 +575,12 @@ export function WalletTab({ merchant, onChanged, refreshKey = 0 }: { merchant: M
           <p className="text-xs text-[#4B5563] mt-0.5">Credit lets the balance go below zero by up to this amount. Spend limits use rolling 24-hour and 30-day windows; leave empty for no limit.</p>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {field("discount", "Default discount %", "0", "0.01")}
+          {field("discount", "Default discount %", "0")}
           {field("rate", "API requests / minute", "60")}
-          {field("credit", "Credit limit (Rs.)", "0")}
-          {field("perOrder", "Max per order (Rs.)", "No limit")}
-          {field("daily", "Max per 24 hours (Rs.)", "No limit")}
-          {field("monthly", "Max per 30 days (Rs.)", "No limit")}
+          {field("credit", "Credit limit (Rs.)", "0", true)}
+          {field("perOrder", "Max per order (Rs.)", "No limit", true)}
+          {field("daily", "Max per 24 hours (Rs.)", "No limit", true)}
+          {field("monthly", "Max per 30 days (Rs.)", "No limit", true)}
         </div>
         <Button size="sm" disabled={busy} onClick={saveTerms} className="h-9 bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white font-semibold">Save terms</Button>
       </div>
@@ -513,12 +592,20 @@ export function WalletTab({ merchant, onChanged, refreshKey = 0 }: { merchant: M
             <p className="text-xs text-[#4B5563] mt-0.5">For money received outside a top-up request, or corrections.</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Input type="number" min={0} step="0.01" placeholder="Amount (NPR)" value={adj.amount} onChange={(e) => setAdj({ ...adj, amount: e.target.value })} className={`${inputCls} h-9`} aria-label="Amount" />
+            <Input
+              type="text"
+              inputMode="decimal"
+              placeholder="Amount (NPR)"
+              value={adj.amount}
+              onChange={(e) => setAdj({ ...adj, amount: formatAmountInput(e.target.value, true) })}
+              className={`${inputCls} h-9`}
+              aria-label="Amount"
+            />
             <Input placeholder="Reason (required)" value={adj.note} onChange={(e) => setAdj({ ...adj, note: e.target.value })} maxLength={300} className={`${inputCls} h-9`} aria-label="Reason" />
           </div>
           <div className="flex gap-2">
-            <Button size="sm" disabled={busy} onClick={() => adjust(1)} className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Credit</Button>
-            <Button size="sm" disabled={busy} variant="outline" onClick={() => adjust(-1)} className="h-9 bg-white border-red-300 text-red-700 hover:bg-red-50 font-semibold">Debit</Button>
+            <Button size="sm" type="button" disabled={busy} onClick={handleCreditClick} className="h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Credit</Button>
+            <Button size="sm" type="button" disabled={busy} variant="outline" onClick={handleDebitClick} className="h-9 bg-white border-red-300 text-red-700 hover:bg-red-50 font-semibold">Debit</Button>
           </div>
         </div>
         <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-3">
@@ -534,6 +621,86 @@ export function WalletTab({ merchant, onChanged, refreshKey = 0 }: { merchant: M
           </div>
         </div>
       </div>
+
+      {/* Wallet Adjustment Confirmation Alert Dialog */}
+      <AlertDialog open={!!adjustTarget} onOpenChange={(open) => { if (!open && !busy) setAdjustTarget(null) }}>
+        <AlertDialogContent className="w-[94vw] max-w-md rounded-2xl bg-white p-5 sm:p-6 shadow-xl border-2 border-[#F59E0B]/30">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-bold text-[#1F2937]">
+              {adjustTarget?.sign === 1 ? "Credit Merchant Wallet?" : "Debit Merchant Wallet?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs sm:text-sm text-[#4B5563]">
+              {adjustTarget?.sign === 1
+                ? `Add ${npr(Math.round((adjustTarget?.amount || 0) * 100))} to ${merchant.business_name || "this merchant"}'s wallet?`
+                : `Deduct ${npr(Math.round((adjustTarget?.amount || 0) * 100))} from ${merchant.business_name || "this merchant"}'s wallet?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="rounded-xl border border-[#F59E0B]/20 bg-[#FEF7E0]/50 p-3 space-y-2 text-xs my-1">
+            <div className="flex justify-between items-center">
+              <span className="text-[#92400E] font-semibold">Adjustment:</span>
+              <span className={`font-bold text-sm ${adjustTarget?.sign === 1 ? "text-emerald-700" : "text-red-700"}`}>
+                {adjustTarget?.sign === 1 ? "+" : "-"}{npr(Math.round((adjustTarget?.amount || 0) * 100))}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[#92400E] font-semibold">Current Balance:</span>
+              <span className="font-semibold text-[#1F2937]">{npr(merchant.wallet_balance_paisa)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[#92400E] font-semibold">New Balance:</span>
+              <span className="font-bold text-[#1F2937]">
+                {npr(merchant.wallet_balance_paisa + (adjustTarget?.sign || 1) * Math.round((adjustTarget?.amount || 0) * 100))}
+              </span>
+            </div>
+            {adjustTarget?.note && (
+              <div className="pt-1.5 border-t border-[#F59E0B]/20">
+                <span className="text-[#92400E] font-semibold block text-[11px]">Reason:</span>
+                <p className="text-[#4B5563] text-xs break-words">{adjustTarget.note}</p>
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="adjust-code" className="text-xs font-semibold text-[#1F2937]">Authenticator code</Label>
+            <Input
+              id="adjust-code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              placeholder="123456"
+              value={adjustCode}
+              onChange={(e) => setAdjustCode(e.target.value.replace(/D/g, ""))}
+              onKeyDown={(e) => { if (e.key === "Enter" && adjustCode.length === 6 && !busy) confirmAdjust() }}
+              className={`${inputCls} h-11 bg-white text-center tracking-[0.4em] text-lg`}
+              disabled={busy}
+              autoFocus
+            />
+            <p className="text-[11px] text-[#6B7280]">Enter the 6-digit code from your admin authenticator app. Needed every time money is moved.</p>
+          </div>
+
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel
+              disabled={busy}
+              onClick={() => setAdjustTarget(null)}
+              className="rounded-xl border border-gray-300 bg-white hover:bg-gray-50 text-xs sm:text-sm font-semibold h-10"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              disabled={busy || adjustCode.length !== 6}
+              onClick={confirmAdjust}
+              className={`rounded-xl text-white font-semibold text-xs sm:text-sm h-10 shadow-sm ${
+                adjustTarget?.sign === 1
+                  ? "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-red-600 hover:bg-red-700"
+              }`}
+            >
+              {busy ? "Processing…" : adjustTarget?.sign === 1 ? "Confirm Credit" : "Confirm Debit"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="space-y-2">
         <h4 className="text-sm font-bold text-[#1F2937]">Top-up history</h4>

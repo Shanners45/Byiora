@@ -31,7 +31,9 @@ import {
 } from "@/app/actions/merchant-admin"
 import type { TopupSettings } from "@/lib/merchant/reports"
 import { listSupportBySellerAction } from "@/app/actions/merchant-support"
-import { amberCard, FillOrderButton, InviteDialog, inputCls, KYC_STYLE, npr, pill, STATUS_STYLE, tabCls, TopupCard } from "./shared"
+import { SupportTab } from "./support-tab"
+import { NotificationsTab } from "./notifications-tab"
+import { amberCard, FillOrderButton, InviteDialog, inputCls, KYC_STYLE, npr, pill, STATUS_STYLE, tabCls, TopupCard, formatAmountInput } from "./shared"
 import { Pager, usePaged } from "@/components/merchant/pager"
 
 function TopupSettingsCard({ refreshKey }: { refreshKey: number }) {
@@ -43,7 +45,10 @@ function TopupSettingsCard({ refreshKey }: { refreshKey: number }) {
     getTopupSettingsAction().then((r) => {
       if (!r) return
       setS(r)
-      setLimits({ min: String(r.fonepay_topup_min_rupees), max: String(r.fonepay_topup_max_rupees) })
+      setLimits({
+        min: formatAmountInput(String(r.fonepay_topup_min_rupees), false),
+        max: formatAmountInput(String(r.fonepay_topup_max_rupees), false),
+      })
     })
   }, [refreshKey])
 
@@ -54,6 +59,14 @@ function TopupSettingsCard({ refreshKey }: { refreshKey: number }) {
     if (!res.success) return toast.error(res.error)
     setS((cur) => (cur ? { ...cur, ...patch } : cur))
     toast.success("Saved. Merchants see the change immediately.")
+  }
+
+  const handleSaveLimits = () => {
+    const minVal = Number(limits.min.replace(/,/g, ""))
+    const maxVal = Number(limits.max.replace(/,/g, ""))
+    if (minVal <= 0 || maxVal <= 0) return toast.error("Enter valid limit amounts.")
+    if (minVal > maxVal) return toast.error("Min cannot exceed Max.")
+    save({ fonepay_topup_min_rupees: minVal, fonepay_topup_max_rupees: maxVal })
   }
 
   if (!s) return null
@@ -76,9 +89,27 @@ function TopupSettingsCard({ refreshKey }: { refreshKey: number }) {
             <Switch checked={s.fonepay_topup_enabled} disabled={busy} onCheckedChange={(on) => save({ fonepay_topup_enabled: on })} aria-label="Fonepay wallet top-up" />
           </div>
           <div className="flex items-end gap-2">
-            <label className="flex-1 space-y-1"><span className="text-[11px] font-semibold text-[#6B7280]">Min (Rs.)</span><Input type="number" min={10} value={limits.min} onChange={(e) => setLimits({ ...limits, min: e.target.value })} className={`${inputCls} h-9`} /></label>
-            <label className="flex-1 space-y-1"><span className="text-[11px] font-semibold text-[#6B7280]">Max per QR (Rs.)</span><Input type="number" min={10} value={limits.max} onChange={(e) => setLimits({ ...limits, max: e.target.value })} className={`${inputCls} h-9`} /></label>
-            <Button size="sm" variant="outline" disabled={busy} className="h-9 bg-white" onClick={() => save({ fonepay_topup_min_rupees: Number(limits.min), fonepay_topup_max_rupees: Number(limits.max) })}>Save</Button>
+            <label className="flex-1 space-y-1">
+              <span className="text-[11px] font-semibold text-[#6B7280]">Min (Rs.)</span>
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={limits.min}
+                onChange={(e) => setLimits({ ...limits, min: formatAmountInput(e.target.value, false) })}
+                className={`${inputCls} h-9`}
+              />
+            </label>
+            <label className="flex-1 space-y-1">
+              <span className="text-[11px] font-semibold text-[#6B7280]">Max per QR (Rs.)</span>
+              <Input
+                type="text"
+                inputMode="numeric"
+                value={limits.max}
+                onChange={(e) => setLimits({ ...limits, max: formatAmountInput(e.target.value, false) })}
+                className={`${inputCls} h-9`}
+              />
+            </label>
+            <Button size="sm" variant="outline" disabled={busy} className="h-9 bg-white" onClick={handleSaveLimits}>Save</Button>
           </div>
         </div>
         <div className="rounded-xl border border-[#F59E0B]/20 bg-white p-4">
@@ -250,6 +281,13 @@ export default function MerchantsPage() {
   const [pending, setPending] = useState<(AdminOrderRow & { merchantId: string; businessName: string })[]>([])
   const [q, setQ] = useState("")
   const [tick, setTick] = useState(0)
+  const [tab, setTab] = useState("all")
+  // Deep links: ?tab=support|notifications|…, ?ticket=<id> opens Support, ?to=<merchant> opens Notifications.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    const t = p.get("tab") || (p.get("ticket") ? "support" : p.get("to") ? "notifications" : null)
+    if (t) setTab(t)
+  }, [])
 
   const load = useCallback(async () => {
     const [res, tq, sup, po] = await Promise.all([listMerchantsAction(), listPendingTopupsAction(), listSupportBySellerAction(1, "open"), listPendingMerchantOrdersAction()])
@@ -329,7 +367,7 @@ export default function MerchantsPage() {
         ))}
       </div>
 
-      <Tabs defaultValue="all" className="space-y-5 sm:space-y-6 w-full min-w-0">
+      <Tabs value={tab} onValueChange={setTab} className="space-y-5 sm:space-y-6 w-full min-w-0">
         <div className="w-full overflow-x-auto pb-1 -mb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <TabsList className="inline-flex w-auto justify-start bg-[#FEF7E0]/70 border-2 border-[#F59E0B]/30 p-1 rounded-xl shadow-xs gap-1">
             <TabsTrigger value="all" className={tabCls}><Store className="h-3.5 w-3.5 sm:h-4 sm:w-4" />All Merchants ({rows.length})</TabsTrigger>
@@ -347,13 +385,11 @@ export default function MerchantsPage() {
             </TabsTrigger>
             <TabsTrigger value="catalog" className={tabCls}><Package className="h-3.5 w-3.5 sm:h-4 sm:w-4" />Products for Merchants</TabsTrigger>
             <TabsTrigger value="revenue" className={tabCls}><TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4" />Revenue</TabsTrigger>
-            <Link href="/admin/dashboard/merchants/support" className={tabCls}>
+            <TabsTrigger value="support" className={tabCls}>
               <Headset className="h-3.5 w-3.5 sm:h-4 sm:w-4" />Support
               {openTickets ? <span className="ml-1 rounded-full bg-red-600 text-white text-[11px] font-bold px-1.5 leading-none py-0.5">{openTickets}</span> : null}
-            </Link>
-            <Link href="/admin/dashboard/merchants/notifications" className={tabCls}>
-              <Bell className="h-3.5 w-3.5 sm:h-4 sm:w-4" />Notifications
-            </Link>
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className={tabCls}><Bell className="h-3.5 w-3.5 sm:h-4 sm:w-4" />Notifications</TabsTrigger>
           </TabsList>
         </div>
 
@@ -416,6 +452,8 @@ export default function MerchantsPage() {
 
         <TabsContent value="catalog"><GlobalCatalog refreshKey={tick} /></TabsContent>
         <TabsContent value="revenue"><RevenueReport load={loadAllRevenue} refreshKey={tick} showDiscount csvName="all-merchants-revenue" /></TabsContent>
+        <TabsContent value="support"><SupportTab /></TabsContent>
+        <TabsContent value="notifications"><NotificationsTab /></TabsContent>
       </Tabs>
     </div>
   )

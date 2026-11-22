@@ -193,12 +193,12 @@ export function PricingEditor({ merchantId, refreshKey }: { merchantId: string; 
       )}
 
       <div className="rounded-xl border border-[#F59E0B]/20 bg-white overflow-hidden">
-        <div className="grid grid-cols-[28px_1fr_90px_110px_28px] sm:grid-cols-[28px_1fr_120px_130px_28px] items-center gap-2 px-3 py-2.5 bg-[#FEF7E0]/60 border-b border-[#F59E0B]/20 text-[11px] font-bold uppercase tracking-wider text-[#1F2937]">
+        <div className="grid grid-cols-[28px_1fr] sm:grid-cols-[28px_1fr_120px_130px_28px] items-center gap-2 px-3 py-2.5 bg-[#FEF7E0]/60 border-b border-[#F59E0B]/20 text-[11px] font-bold uppercase tracking-wider text-[#1F2937]">
           <input type="checkbox" aria-label="Select all shown" checked={allShownSelected} onChange={(e) => setSelected(e.target.checked ? new Set(shown.map((p) => p.id)) : new Set())} className="h-4 w-4 accent-[#7E3AF2]" />
           <span>Product ({shown.length})</span>
-          <span>Visible</span>
-          <span>Product discount</span>
-          <span />
+          <span className="hidden sm:block">Visible</span>
+          <span className="hidden sm:block">Product discount</span>
+          <span className="hidden sm:block" />
         </div>
         {shown.length === 0 && <p className="text-center text-sm text-[#4B5563] py-10">No products match.</p>}
         <div className="divide-y divide-gray-100">
@@ -208,11 +208,11 @@ export function PricingEditor({ merchantId, refreshKey }: { merchantId: string; 
             const dirtyCount = [ruleKey(p.id, ""), ...p.lines.map((l) => ruleKey(p.id, l.label))].filter((k) => drafts.has(k)).length
             return (
               <div key={p.id}>
-                <div className={`grid grid-cols-[28px_1fr_90px_110px_28px] sm:grid-cols-[28px_1fr_120px_130px_28px] items-center gap-2 px-3 py-2.5 ${dirtyCount ? "bg-purple-50/50" : ""}`}>
+                <div className={`grid grid-cols-[28px_1fr_28px] sm:grid-cols-[28px_1fr_120px_130px_28px] items-center gap-x-2 gap-y-2.5 px-3 py-3 sm:py-2.5 ${dirtyCount ? "bg-purple-50/50" : ""}`}>
                   <input type="checkbox" aria-label={`Select ${p.name}`} checked={selected.has(p.id)} onChange={(e) => setSelected((s) => { const n = new Set(s); e.target.checked ? n.add(p.id) : n.delete(p.id); return n })} className="h-4 w-4 accent-[#7E3AF2]" />
-                  <button type="button" onClick={() => setOpen((s) => { const n = new Set(s); isOpen ? n.delete(p.id) : n.add(p.id); return n })} className="flex items-center gap-2.5 min-w-0 text-left">
+                  <button type="button" onClick={() => setOpen((s) => { const n = new Set(s); isOpen ? n.delete(p.id) : n.add(p.id); return n })} className="flex items-center gap-3 min-w-0 text-left">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    {p.logo ? <img src={p.logo} alt="" width={32} height={32} className="h-8 w-8 rounded-md object-contain bg-[#F9FAFB] border border-gray-100 shrink-0" loading="lazy" /> : <div className="h-8 w-8 rounded-md bg-purple-50 shrink-0" />}
+                    {p.logo ? <img src={p.logo} alt="" width={32} height={32} className="h-10 w-10 sm:h-9 sm:w-9 rounded-lg object-contain p-1 bg-[#F9FAFB] border border-gray-100 shrink-0" loading="lazy" /> : <div className="h-10 w-10 sm:h-9 sm:w-9 rounded-lg bg-purple-50 shrink-0" />}
                     <span className="min-w-0">
                       <span className="block text-sm font-semibold text-[#1F2937] truncate">{p.name}</span>
                       <span className="block text-[11px] text-[#6B7280] capitalize truncate">
@@ -222,8 +222,14 @@ export function PricingEditor({ merchantId, refreshKey }: { merchantId: string; 
                       </span>
                     </span>
                   </button>
-                  <Switch checked={productVisible(p)} onCheckedChange={(on) => setProductVisible(p.id, on)} aria-label={`Show ${p.name} to this merchant`} />
-                  <Input value={pd.discount} onChange={(e) => change(ruleKey(p.id, ""), { discount: e.target.value })} placeholder={`${book.discountPercent}% default`} type="number" min={0} max={90} step="0.01" className={`${inputCls} h-8 text-sm bg-white rounded-lg placeholder:text-gray-400`} aria-label={`${p.name} discount percent`} />
+                  {/* Phones: visibility and discount on their own line under the name; wider screens: their own columns. */}
+                  <div className="order-last col-start-2 col-span-2 flex items-center gap-3 sm:order-none sm:contents">
+                  <label className="flex items-center gap-2 shrink-0">
+                    <Switch checked={productVisible(p)} onCheckedChange={(on) => setProductVisible(p.id, on)} aria-label={`Show ${p.name} to this merchant`} />
+                    <span className="text-xs font-semibold text-[#4B5563] sm:hidden">Visible</span>
+                  </label>
+                  <Input value={pd.discount} onChange={(e) => change(ruleKey(p.id, ""), { discount: e.target.value })} placeholder={`${book.discountPercent}% default`} type="number" min={0} max={90} step="0.01" className={`${inputCls} h-9 sm:h-8 flex-1 min-w-0 text-sm bg-white rounded-lg placeholder:text-gray-400`} aria-label={`${p.name} discount percent`} />
+                  </div>
                   <button type="button" aria-label={isOpen ? "Collapse" : "Expand"} onClick={() => setOpen((s) => { const n = new Set(s); isOpen ? n.delete(p.id) : n.add(p.id); return n })} className="text-[#6B7280]">
                     {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </button>

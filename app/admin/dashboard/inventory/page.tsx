@@ -6,7 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Search, Plus, RefreshCw, KeyRound, AlertCircle, ChevronDown, ChevronRight, CheckCircle2, Eye, EyeOff, Trash2, Flame, Copy, Check } from "lucide-react"
+import { Search, Plus, RefreshCw, KeyRound, AlertCircle, ChevronDown, ChevronRight, CheckCircle2, Eye, EyeOff, Trash2, Flame, Copy, Check, Store } from "lucide-react"
+import { Pager } from "@/components/merchant/pager"
 import { getInventoryProductsAction, getProductStockAction, addInventoryCodesAction, getDenominationCodesAction, deleteInventoryCodeAction, deleteInventoryCodeByValueAction, revealAdminCodeAction } from "@/app/actions/inventory"
 import Image from "next/image"
 import {
@@ -53,6 +54,12 @@ export default function InventoryPage() {
   const [manageDenom, setManageDenom] = useState("")
   const [manageCodes, setManageCodes] = useState<any[]>([])
   const [loadingManageCodes, setLoadingManageCodes] = useState(false)
+  // One page of codes at a time, optionally filtered by status.
+  const [codesPage, setCodesPage] = useState(1)
+  const [codesStatus, setCodesStatus] = useState<"all" | "AVAILABLE" | "DELIVERED">("all")
+  const [codesTotal, setCodesTotal] = useState(0)
+  const [codesPageSize, setCodesPageSize] = useState(20)
+  const [codesCounts, setCodesCounts] = useState({ AVAILABLE: 0, DELIVERED: 0 })
   const [revealedCodes, setRevealedCodes] = useState<Record<string, string>>({})
   const [revealingCodeId, setRevealingCodeId] = useState<string | null>(null)
   const [deletingCodeId, setDeletingCodeId] = useState<string | null>(null)
@@ -149,16 +156,24 @@ export default function InventoryPage() {
     setBurnInput("")
     setRevealedCodes({})
     setCodeToDelete(null)
+    setCodesPage(1)
+    setCodesStatus("all")
+    setManageCodes([])
     setIsManageOpen(true)
-    await loadCodesForDenom(productId, denomLabel)
+    await loadCodesForDenom(productId, denomLabel, 1, "all")
   }
 
-  const loadCodesForDenom = async (productId: string, denomLabel: string) => {
+  const loadCodesForDenom = async (productId: string, denomLabel: string, page = codesPage, status = codesStatus) => {
     setLoadingManageCodes(true)
     try {
-      const res = await getDenominationCodesAction(productId, denomLabel)
+      const res = await getDenominationCodesAction(productId, denomLabel, page, status)
       if (res.success) {
         setManageCodes(res.codes || [])
+        setCodesTotal(res.total || 0)
+        setCodesPageSize(res.pageSize || 20)
+        if (res.counts) setCodesCounts(res.counts)
+        setCodesPage(page)
+        setCodesStatus(status)
       } else {
         toast.error(res.error || "Failed to load codes")
       }
@@ -200,7 +215,7 @@ export default function InventoryPage() {
       const res = await deleteInventoryCodeAction(inventoryId)
       if (res.success) {
         toast.success("Code deleted from inventory")
-        setManageCodes(prev => prev.filter(c => c.id !== inventoryId))
+        await loadCodesForDenom(manageProductId, manageDenom)
         loadStockForProduct(manageProductId)
         setCodeToDelete(null)
       } else {
@@ -538,6 +553,19 @@ export default function InventoryPage() {
 
           {/* Codes List */}
           <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="flex flex-wrap gap-1 mb-3 rounded-xl bg-[#FEF7E0]/70 border border-[#F59E0B]/30 p-1 w-fit">
+              {([["all", "All", codesCounts.AVAILABLE + codesCounts.DELIVERED], ["AVAILABLE", "Available", codesCounts.AVAILABLE], ["DELIVERED", "Delivered", codesCounts.DELIVERED]] as const).map(([value, label, n]) => (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={loadingManageCodes}
+                  onClick={() => loadCodesForDenom(manageProductId, manageDenom, 1, value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold ${codesStatus === value ? "bg-[#F59E0B] text-white shadow-sm" : "text-[#92400E] hover:text-[#B45309]"}`}
+                >
+                  {label} ({n})
+                </button>
+              ))}
+            </div>
             {loadingManageCodes ? (
               <div className="flex items-center justify-center py-12">
                 <div className="animate-spin rounded-full h-8 w-8 border-2 border-t-[#7E3AF2] border-gray-200" />
@@ -545,7 +573,7 @@ export default function InventoryPage() {
             ) : manageCodes.length === 0 ? (
               <div className="text-center py-12 text-gray-500 text-sm">
                 <KeyRound className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                No codes in stock for this denomination yet.
+                {codesStatus === "all" ? "No codes in stock for this denomination yet." : `No ${codesStatus === "AVAILABLE" ? "available" : "delivered"} codes.`}
               </div>
             ) : (
               <div className="rounded-md border border-[#F59E0B]/20 overflow-hidden">
@@ -594,6 +622,7 @@ export default function InventoryPage() {
                             ) : "—"}
                           </TableCell>
                           <TableCell>
+                            <div className="flex flex-col items-start gap-1">
                             <Badge
                               variant="outline"
                               className={
@@ -605,10 +634,15 @@ export default function InventoryPage() {
                               {code.status}
                             </Badge>
                             {code.merchant && (
-                              <div className="text-[11px] font-semibold text-[#7E3AF2] mt-1">
-                                {code.merchant.kind === "delivered" ? `Merchant · ${code.merchant.name}` : `Only for ${code.merchant.name}`}
-                              </div>
+                              <span
+                                className={`inline-flex max-w-[170px] items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10.5px] font-medium leading-tight ${code.merchant.kind === "delivered" ? "border-purple-200 bg-purple-50 text-purple-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}
+                                title={`${code.merchant.kind === "delivered" ? "Sold to merchant" : "Reserved for merchant"}: ${code.merchant.name}`}
+                              >
+                                <Store className="h-3 w-3 shrink-0" />
+                                <span className="truncate">{code.merchant.kind === "delivered" ? code.merchant.name : `Only for ${code.merchant.name}`}</span>
+                              </span>
                             )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
@@ -655,6 +689,7 @@ export default function InventoryPage() {
                 </Table>
               </div>
             )}
+            {!loadingManageCodes && <Pager page={codesPage} total={codesTotal} pageSize={codesPageSize} onPage={(p) => loadCodesForDenom(manageProductId, manageDenom, p)} />}
           </div>
 
           <DialogFooter className="px-6 py-3 border-t border-gray-100 bg-gray-50">

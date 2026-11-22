@@ -2,6 +2,7 @@
 
 import { z } from "zod"
 import { getAdminSessionAction } from "./admin-utils"
+import { verifyAdminStepUp } from "@/lib/admin-step-up"
 import { rateLimit } from "@/lib/rate-limit"
 import { audit, merchantDb, tempPassword, type Merchant } from "@/lib/merchant/server"
 import { fillPendingFromStock, loadPriceBook, type PriceBookLine } from "@/lib/merchant/trade"
@@ -382,13 +383,16 @@ export async function reviewTopupAction(topupId: string, decision: "approved" | 
 }
 
 /** Manual credit (positive) or debit (negative), e.g. a bank deposit you received directly. */
-export async function adjustMerchantWalletAction(merchantId: string, amountRupees: number, note: string): Promise<{ success: boolean; error?: string; balancePaisa?: number }> {
+export async function adjustMerchantWalletAction(merchantId: string, amountRupees: number, note: string, code: string): Promise<{ success: boolean; error?: string; balancePaisa?: number }> {
   const admin = await superAdmin()
   if (!admin) return { success: false, error: "Unauthorized" }
   const amount = Math.round(Number(amountRupees) * 100)
   const cleanNote = String(note || "").trim().slice(0, 300)
   if (!Number.isFinite(amount) || amount === 0 || Math.abs(amount) > 1_000_000_000) return { success: false, error: "Enter a non-zero amount." }
   if (cleanNote.length < 3) return { success: false, error: "Add a note explaining the adjustment." }
+  // Moving money needs a fresh authenticator code every time, even on a trusted device.
+  const stepUp = await verifyAdminStepUp(admin.id, code)
+  if (stepUp) return { success: false, error: stepUp }
   const { data, error } = await merchantDb().rpc("merchant_wallet_apply", { p_merchant_id: merchantId, p_amount: amount, p_kind: "adjustment", p_reference: null, p_note: cleanNote, p_actor: admin.id })
   if (error) return { success: false, error: /check|credit/i.test(error.message) ? "That would take the balance below the merchant's credit limit." : "Could not adjust the wallet." }
   await audit({ actorType: "admin", actorId: admin.id, merchantId, action: "wallet.adjusted", details: { amountPaisa: amount, note: cleanNote } })

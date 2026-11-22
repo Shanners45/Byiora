@@ -12,6 +12,7 @@ import { incrementFailureStrike } from "@/lib/security/strike-counter"
 import { rateLimit } from "@/lib/rate-limit"
 import { verifyCheckoutCapability } from "@/lib/crypto/checkout"
 import { publicSiteUrl } from "@/lib/site-url"
+import { SAFETY_NET_CHECKS } from "@/lib/payment-checks"
 
 // Rate limit for polling (30 req/min)
 let ratelimit: Ratelimit | null = null
@@ -435,26 +436,26 @@ export async function getOrGenerateQRAction(transactionId: string, capability?: 
     if (process.env.QSTASH_TOKEN && process.env.QSTASH_URL) {
       const siteUrl = publicSiteUrl()
 
-      // 7a. Background payment polling (retries every 15s, up to 10 times)
-      // Runs for all dynamic QR payments (NepalPay & Fonepay) as a reliable polling fallback
+      // 7a. Safety-net bank checks. The Fonepay WebSocket normally confirms within seconds, so these
+      // start late and stay few: one check each at 1 min, 2.5 min and 4 min. A check stops without
+      // calling the bank once the order is already completed, so a working WebSocket costs no bank calls.
       if (paymentCategory !== "static" && proxyData.validationTraceId) {
         try {
           const webhookUrl = `${siteUrl}/api/webhooks/qstash`
-          await fetch(`${process.env.QSTASH_URL}/v2/publish/${webhookUrl}`, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${process.env.QSTASH_TOKEN}`,
-              "Content-Type": "application/json",
-              "Upstash-Retries": "10",
-              "Upstash-Delay": "15s",
-            },
-            body: JSON.stringify({
-              transactionId,
-              validationTraceId: proxyData.validationTraceId,
-              provider: paymentCategory
+          const body = JSON.stringify({ transactionId, validationTraceId: proxyData.validationTraceId, provider: paymentCategory })
+          await Promise.all(SAFETY_NET_CHECKS.map((delay) =>
+            fetch(`${process.env.QSTASH_URL}/v2/publish/${webhookUrl}`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${process.env.QSTASH_TOKEN}`,
+                "Content-Type": "application/json",
+                "Upstash-Retries": "0",
+                "Upstash-Delay": delay,
+              },
+              body,
             })
-          })
-          console.log(`[QSTASH] Scheduled background polling for ${transactionId} (${paymentCategory})`)
+          ))
+          console.log(`[QSTASH] Scheduled safety-net checks for ${transactionId} (${paymentCategory}) at ${SAFETY_NET_CHECKS.join(", ")}`)
         } catch (e) {
           console.error("Failed to schedule QStash polling:", e)
         }

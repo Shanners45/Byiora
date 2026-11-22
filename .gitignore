@@ -33,3 +33,34 @@ next-env.d.ts
 
 # SEO audit reports (claude-seo plugin output)
 /byiora.com.np-audit/
+
+# AI agent / editor tooling (local only)
+/.claude/
+/.agents/
+/skills/
+skills-lock.json
+/.cursor/
+/.vscode/
+/.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# local logs and test output
+*.log
+/coverage/
+
+# promo video (Remotion) build output, deps and screen recordings
+/promo-video/node_modules/
+/promo-video/out/
+/promo-video/public/*.webm
+/promo-video/.recording-tmp/
+/promo-video/.agents/
+/promo-video/.claude/
+/promo-video/skills-lock.json
+/promo-video/public/music.wav
+/promo-video/public/thumb-screen*.png
+/promo-video/public/music-merchant.wav
+/promo-video/public/merchant/*.webm

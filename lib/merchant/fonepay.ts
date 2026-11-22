@@ -5,6 +5,7 @@ import { audit, merchantDb } from "@/lib/merchant/server"
 import { sendMerchantEmail, MERCHANT_PORTAL_URL } from "@/lib/email/resend"
 import { checkLowBalance, emitWebhook } from "@/lib/merchant/events"
 import { publicSiteUrl } from "@/lib/site-url"
+import { SAFETY_NET_CHECKS } from "@/lib/payment-checks"
 
 // Fonepay dynamic-QR wallet top-ups, through the same payment proxy and bank
 // verification as customer checkout. Top-up references start with "WT-" so the
@@ -111,7 +112,7 @@ export async function settleFonepayTopup(reference: string): Promise<TopupSettle
   if (!result.paid) {
     // Not paid within the QR's 5 minutes: failed, like customer payments.
     if (t.status === "awaiting_payment" && t.expires_at && Date.now() >= new Date(t.expires_at).getTime()) {
-      await db.from("merchant_topups").update({ status: "failed", admin_note: null }).eq("id", t.id).eq("status", "awaiting_payment")
+      await db.from("merchant_topups").update({ status: "failed", admin_note: "Not paid within 5 minutes" }).eq("id", t.id).eq("status", "awaiting_payment")
       return "failed"
     }
     return t.status as TopupSettlement
@@ -142,8 +143,9 @@ export async function settleFonepayTopup(reference: string): Promise<TopupSettle
 }
 
 /**
- * Background bank polling via QStash (every 15 s, up to 10 times), same as checkout,
- * plus one final check just after the 5-minute window that marks it failed if unpaid.
+ * Safety-net bank checks via QStash, same timing as checkout (1 min, 2.5 min, 4 min): the Fonepay
+ * WebSocket normally confirms first. Plus one final check just after the 5-minute window that
+ * marks it failed if unpaid.
  */
 export async function scheduleTopupPolling(reference: string, validationTraceId: string) {
   if (!process.env.QSTASH_TOKEN || !process.env.QSTASH_URL) return
@@ -154,5 +156,8 @@ export async function scheduleTopupPolling(reference: string, validationTraceId:
       headers: { Authorization: `Bearer ${process.env.QSTASH_TOKEN}`, "Content-Type": "application/json", ...headers },
       body: JSON.stringify({ transactionId: reference, validationTraceId, provider: "fonepay" }),
     }).catch((e) => console.error("[fonepay topup] QStash schedule failed:", e?.message))
-  await Promise.all([publish({ "Upstash-Retries": "10", "Upstash-Delay": "15s" }), publish({ "Upstash-Retries": "3", "Upstash-Delay": "315s" })])
+  await Promise.all([
+    ...SAFETY_NET_CHECKS.map((delay) => publish({ "Upstash-Retries": "0", "Upstash-Delay": delay })),
+    publish({ "Upstash-Retries": "3", "Upstash-Delay": "315s" }),
+  ])
 }

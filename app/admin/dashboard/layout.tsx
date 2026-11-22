@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
 import { LayoutDashboard, ShoppingBag, Package, Settings, Users, LogOut, Menu, X, Bell, ImageIcon, DollarSign, KeyRound, UserCheck, Mail, Ticket, Store } from "lucide-react"
@@ -25,8 +25,28 @@ export default function AdminDashboardLayout({
   const [loadError, setLoadError] = useState(false)
   // Highlight the clicked item immediately; the route catches up behind it.
   const [pendingHref, setPendingHref] = useState<string | null>(null)
+  const [isSidebarScrolling, setIsSidebarScrolling] = useState(false)
+  const sidebarScrollTimerRef = useRef<NodeJS.Timeout | null>(null)
   const router = useRouter()
   const pathname = usePathname()
+
+  const handleSidebarScroll = () => {
+    setIsSidebarScrolling(true)
+    if (sidebarScrollTimerRef.current) {
+      clearTimeout(sidebarScrollTimerRef.current)
+    }
+    sidebarScrollTimerRef.current = setTimeout(() => {
+      setIsSidebarScrolling(false)
+    }, 1000)
+  }
+
+  useEffect(() => {
+    return () => {
+      if (sidebarScrollTimerRef.current) {
+        clearTimeout(sidebarScrollTimerRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     // Auth check with proper loading state using SSR client
@@ -170,13 +190,13 @@ export default function AdminDashboardLayout({
   }
 
   return (
-    <div className="flex h-screen bg-[#F9FAFB]">
+    <div className="flex h-screen w-full overflow-hidden bg-[#F9FAFB] overscroll-none">
       {/* Sidebar */}
       <aside
         className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          } fixed inset-y-0 z-50 flex w-64 flex-col bg-[#7E3AF2] text-white border-r border-[#E5E7EB] pt-5 pb-4 transition-transform duration-300 lg:translate-x-0 lg:static lg:w-64`}
+          } fixed inset-y-0 z-50 flex w-64 flex-col bg-[#7E3AF2] text-white border-r border-[#E5E7EB] transition-transform duration-300 lg:translate-x-0 lg:static lg:h-screen lg:shrink-0`}
       >
-        <div className="flex items-center justify-between px-4 pb-4 border-b border-white/20">
+        <div className="h-16 flex items-center justify-between px-4 border-b border-white/20 shrink-0">
           <div className="flex items-center gap-4">
             <div className="h-8 relative flex items-center">
               <Image
@@ -200,8 +220,13 @@ export default function AdminDashboardLayout({
             <X className="h-5 w-5" />
           </Button>
         </div>
-        <div className="mt-4 flex flex-1 flex-col">
-          <nav className="flex-1 space-y-1 px-2">
+        <div
+          onScroll={handleSidebarScroll}
+          className={`flex-1 overflow-y-auto py-3 px-2 space-y-1 admin-sidebar-scroll ${
+            isSidebarScrolling ? "is-scrolling" : ""
+          }`}
+        >
+          <nav className="space-y-1">
             {navItems.map((item) => (
               <Button
                 key={item.name}
@@ -228,7 +253,7 @@ export default function AdminDashboardLayout({
             ))}
           </nav>
         </div>
-        <div className="border-t border-white/20 p-4">
+        <div className="border-t border-white/20 p-4 shrink-0">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-white">{adminUser?.name}</p>
@@ -243,9 +268,9 @@ export default function AdminDashboardLayout({
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col h-screen overflow-hidden min-w-0">
         {/* Top header */}
-        <header className="bg-white border-b border-[#E5E7EB] shadow-sm">
+        <header className="bg-white border-b border-[#E5E7EB] shadow-sm shrink-0">
           <div className="flex h-16 items-center justify-between px-4">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>
               <Menu className="h-5 w-5 text-[#4B5563]" />
@@ -264,7 +289,7 @@ export default function AdminDashboardLayout({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto bg-[#F9FAFB] p-4 md:p-6"><AdminSessionProvider value={adminUser}>
+        <main className="flex-1 overflow-y-auto overscroll-contain bg-[#F9FAFB] p-4 md:p-6"><AdminSessionProvider value={adminUser}>
           {children}
         </AdminSessionProvider></main>
       </div>

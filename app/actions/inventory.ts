@@ -5,6 +5,9 @@ import { encryptInventoryCode, decryptInventoryCode, generateCodeHash } from "./
 import { verifyAdmin, getAdminSessionAction } from "./admin-utils"
 import { revalidatePath } from "next/cache"
 import { fillPendingFromStock } from "@/lib/merchant/trade"
+import { decryptInventoryCode as decryptForPreview } from "@/lib/crypto/inventory"
+
+const CODES_PAGE_SIZE = 20
 
 /**
  * Fetches products that can have inventory (digital-goods, games)
@@ -127,19 +130,26 @@ export async function addInventoryCodesAction(productId: string, denominationLab
 }
 
 /**
- * Fetches all codes for a specific denomination with masked previews
- * Sorted newest first so recently added codes appear at the top.
+ * One page (20) of codes for a denomination with masked previews, newest first.
+ * status: "AVAILABLE" | "DELIVERED" | "all". Totals per status come back for the filter tabs.
  */
-export async function getDenominationCodesAction(productId: string, denominationLabel: string) {
+export async function getDenominationCodesAction(productId: string, denominationLabel: string, page = 1, status: "all" | "AVAILABLE" | "DELIVERED" = "all") {
   if (!(await verifyAdmin())) return { error: "Unauthorized" }
 
   const supabase = createServiceRoleClient()
-  const { data, error } = await supabase
+  const from = (Math.max(1, Math.floor(page)) - 1) * CODES_PAGE_SIZE
+  let query = supabase
     .from("gift_card_inventory")
-    .select("id, status, created_at, encrypted_code, added_by, transaction_id, merchant_id")
+    .select("id, status, created_at, encrypted_code, added_by, transaction_id, merchant_id", { count: "exact" })
     .eq("product_id", productId)
     .eq("denomination_label", denominationLabel)
-    .order("created_at", { ascending: false })
+  if (status !== "all") query = query.eq("status", status)
+  const counted = (s: "AVAILABLE" | "DELIVERED") => supabase.from("gift_card_inventory").select("id", { count: "exact", head: true }).eq("product_id", productId).eq("denomination_label", denominationLabel).eq("status", s)
+  const [{ data, error, count }, { count: available }, { count: delivered }] = await Promise.all([
+    query.order("created_at", { ascending: false }).range(from, from + CODES_PAGE_SIZE - 1),
+    counted("AVAILABLE"),
+    counted("DELIVERED"),
+  ])
 
   if (error) return { error: error.message }
 
@@ -160,21 +170,12 @@ export async function getDenominationCodesAction(productId: string, denomination
     return null
   }
 
-  // Decrypt in memory to generate safe masked previews
-  const codesWithMask = await Promise.all(
-    (data || []).map(async (item: any) => {
+  // Masked previews for this page only. Uses the plain decryptor: the rate-limited one (50 a minute,
+  // kept for full reveals) turned every preview after the 50th into dots.
+  const codesWithMask = (data || []).map((item: any) => {
       let masked = "••••-••••"
-      try {
-        const decrypted = await decryptInventoryCode(item.encrypted_code)
-        if (decrypted.success && decrypted.decrypted) {
-          const raw = decrypted.decrypted.trim()
-          if (raw.length <= 8) {
-            masked = raw.slice(0, 2) + "••••" + raw.slice(-2)
-          } else {
-            masked = raw.slice(0, 4) + "-••••-••••-" + raw.slice(-4)
-          }
-        }
-      } catch (e) {}
+      const raw = decryptForPreview(item.encrypted_code)?.trim()
+      if (raw) masked = raw.length <= 8 ? raw.slice(0, 2) + "••••" + raw.slice(-2) : raw.slice(0, 4) + "-••••-••••-" + raw.slice(-4)
 
       return {
         id: item.id,
@@ -185,9 +186,8 @@ export async function getDenominationCodesAction(productId: string, denomination
         merchant: merchantFor(item),
       }
     })
-  )
 
-  return { success: true, codes: codesWithMask }
+  return { success: true, codes: codesWithMask, total: count || 0, pageSize: CODES_PAGE_SIZE, counts: { AVAILABLE: available || 0, DELIVERED: delivered || 0 } }
 }
 
 /**
