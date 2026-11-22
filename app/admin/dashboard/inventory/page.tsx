@@ -125,6 +125,7 @@ export default function InventoryPage() {
       const result = await addInventoryCodesAction(selectedProductId, selectedDenom, codesInput)
       if (result.success) {
         toast.success(`Successfully added ${result.added} codes`)
+        if (result.merchantOrdersFilled) toast.success(`${result.merchantOrdersFilled} waiting merchant order${result.merchantOrdersFilled === 1 ? "" : "s"} filled from these codes`)
         if (result.failed > 0) {
           toast.warning(`Failed to add ${result.failed} codes (Duplicates/Errors)`)
           console.warn("Failed codes details:", result.failedDetails)
@@ -603,6 +604,11 @@ export default function InventoryPage() {
                             >
                               {code.status}
                             </Badge>
+                            {code.merchant && (
+                              <div className="text-[11px] font-semibold text-[#7E3AF2] mt-1">
+                                {code.merchant.kind === "delivered" ? `Merchant · ${code.merchant.name}` : `Only for ${code.merchant.name}`}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">

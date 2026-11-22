@@ -164,15 +164,13 @@ export async function sendOrderPlacedEmail(input: {
   const customMsg = input.customMessage || "Thank you for your order! We've successfully received your request for <strong>" + productName + "</strong>. Your order is currently being verified and processed."
 
   const orderDate = input.orderDateIso
-    ? new Date(input.orderDateIso).toLocaleString("en-US", {
+    ? new Date(input.orderDateIso).toLocaleDateString("en-US", {
       timeZone: "Asia/Kathmandu",
       dateStyle: "medium",
-      timeStyle: "short",
     })
-    : new Date().toLocaleString("en-US", {
+    : new Date().toLocaleDateString("en-US", {
       timeZone: "Asia/Kathmandu",
       dateStyle: "medium",
-      timeStyle: "short",
     })
 
   const row = (label: string, value: string) => `
@@ -509,7 +507,7 @@ export async function sendReviewRequestEmail(input: { email: string; userName?: 
   const first = raw && !raw.includes("@") && raw.toLowerCase() !== email.split("@")[0] ? sanitizeHtml(raw.split(/\s+/)[0]) : null
 
   return await resend.emails.send({
-    from: "Byiora <support@byiora.com.np>",
+    from: "Byiora <help-657@byiora.com.np>",
     replyTo: "support@byiora.com.np",
     to: [email],
     subject: "How did we do? Rate your Byiora order",
@@ -611,3 +609,74 @@ export async function sendPasswordResetEmail(input: {
   })
 }
 
+
+const escapeEmailText = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!)
+
+export const MERCHANT_PORTAL_URL = process.env.MERCHANT_PORTAL_URL || "https://merchant.byiora.com.np"
+
+/** Branded merchant-portal email. All text is escaped here, so callers pass plain strings. */
+export async function sendMerchantEmail(input: {
+  to: string
+  subject: string
+  heading: string
+  paragraphs: string[]
+  box?: { label: string; value: string }[]
+  cta?: { label: string; url: string }
+}) {
+  const p = (t: string) => `<p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 14px 0;">${escapeEmailText(t)}</p>`
+  const box = input.box?.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;background:#F5F0FB;border:1px solid #E4D8F3;border-radius:8px;"><tr><td style="padding:16px 20px;">${input.box
+        .map((b) => `<p style="margin:0 0 4px 0;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:1px;">${escapeEmailText(b.label)}</p><p style="margin:0 0 12px 0;color:#1E1E1E;font-size:17px;font-family:Consolas,Menlo,monospace;word-break:break-all;">${escapeEmailText(b.value)}</p>`)
+        .join("")}</td></tr></table>`
+    : ""
+  const cta = input.cta
+    ? `<div style="text-align:center;margin:28px 0 8px 0;"><a href="${escapeEmailText(input.cta.url)}" style="display:inline-block;background:#5A3588;color:#ffffff;padding:13px 34px;text-decoration:none;border-radius:8px;font-weight:600;font-size:15px;">${escapeEmailText(input.cta.label)}</a></div>`
+    : ""
+  const html = `
+<div style="background-color:#f3f4f6;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;">
+    <div style="background:#5A3588;padding:28px 32px;text-align:center;">
+      <img src="https://www.byiora.com.np/logo-final.png" alt="BYIORA" style="height:40px;margin:0 auto;display:block;" />
+      <p style="color:#ffffff;margin:12px 0 0 0;font-size:12px;text-transform:uppercase;letter-spacing:1.5px;">Merchant Portal</p>
+    </div>
+    <div style="padding:32px;">
+      <h2 style="color:#1E1E1E;font-size:21px;margin:0 0 18px 0;">${escapeEmailText(input.heading)}</h2>
+      ${input.paragraphs.map(p).join("")}${box}${cta}
+    </div>
+    <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px;text-align:center;">
+      <p style="color:#9ca3af;font-size:12px;margin:0;">Questions? Reply to this email or write to support@byiora.com.np</p>
+    </div>
+  </div>
+</div>`
+  return await getResend().emails.send({
+    from: "Byiora Merchants <noreply@byiora.com.np>",
+    replyTo: "support@byiora.com.np",
+    to: [input.to],
+    subject: input.subject,
+    html,
+  })
+}
+
+/**
+ * Adds an end customer of a merchant (from an API order) to that merchant's own
+ * Resend segment, creating the segment on first use. Returns the segment id to store.
+ */
+export async function addContactToMerchantSegment(input: { segmentId: string | null; segmentName: string; email: string; name?: string | null }): Promise<string | null> {
+  const resend = getResend()
+  let segmentId = input.segmentId
+  if (!segmentId) {
+    const { data, error } = await resend.segments.create({ name: input.segmentName })
+    if (error || !data) {
+      console.error("[RESEND] merchant segment create failed:", error?.message)
+      return null
+    }
+    segmentId = data.id
+  }
+  const email = input.email.trim().toLowerCase()
+  const firstName = input.name?.trim().split(/\s+/)[0]
+  const { error } = await resend.contacts.create({ email, unsubscribed: false, ...(firstName ? { firstName: sanitizeHtml(firstName).slice(0, 60) } : {}), segments: [{ id: segmentId }] })
+  // Existing contact: just add the segment membership.
+  if (error) await resend.contacts.segments.add({ email, segmentId })
+  return segmentId
+}

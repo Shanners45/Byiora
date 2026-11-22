@@ -70,6 +70,12 @@ export async function loginWithPassword(
     return { error: error.message }
   }
 
+  // Merchant logins belong to the merchant portal, not the storefront.
+  if (data?.user?.app_metadata?.role === "merchant") {
+    await supabase.auth.signOut({ scope: "local" })
+    return { error: "This is a merchant account. Sign in at merchant.byiora.com.np instead." }
+  }
+
   // Record user's last login IP and device in public.users
   if (data?.user) {
     try {

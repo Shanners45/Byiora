@@ -36,7 +36,10 @@ function signTrust(userId: string, factorId: string, exp: number) {
 /** aal2 session, or a valid trusted-device cookie for this admin's verified authenticator. */
 async function isMfaSatisfied(): Promise<boolean> {
   const supabase = await createClient({ readOnly: true })
-  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  const { data: { session } } = await supabase.auth.getSession()
+  const { data: aal } = session?.access_token
+    ? await supabase.auth.mfa.getAuthenticatorAssuranceLevel(session.access_token)
+    : { data: null }
   if (aal?.currentLevel === "aal2") return true
 
   const [exp, sig] = ((await cookies()).get(TRUST_COOKIE)?.value || "").split(".")
@@ -60,7 +63,10 @@ export async function getAdminSessionAction(): Promise<AdminSessionResult> {
 /** After a successful 2FA code: remember this browser for TRUST_DAYS. */
 export async function trustAdminDeviceAction(): Promise<{ success: boolean }> {
   const supabase = await createClient({ readOnly: true })
-  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  const { data: { session } } = await supabase.auth.getSession()
+  const { data: aal } = session?.access_token
+    ? await supabase.auth.mfa.getAuthenticatorAssuranceLevel(session.access_token)
+    : { data: null }
   // Only a fresh code login may mint trust, never an already-trusted session.
   if (aal?.currentLevel !== "aal2" || !(await loadAdminSession()).success) return { success: false }
   const { data: { user } } = await supabase.auth.getUser()
@@ -86,7 +92,10 @@ export async function getAdminMfaStageAction(): Promise<{ stage: "none" | "enrol
   if (!result.success) return { stage: "none" }
   if (!ADMIN_MFA_REQUIRED || (await isMfaSatisfied())) return { stage: "done" }
   const supabase = await createClient({ readOnly: true })
-  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  const { data: { session } } = await supabase.auth.getSession()
+  const { data: aal } = session?.access_token
+    ? await supabase.auth.mfa.getAuthenticatorAssuranceLevel(session.access_token)
+    : { data: null }
   return { stage: aal?.nextLevel === "aal2" ? "verify" : "enroll" }
 }
 

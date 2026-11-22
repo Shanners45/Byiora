@@ -5,6 +5,7 @@ import {
   checkMutationRateLimit,
   checkAdminDashRateLimit,
 } from "@/lib/upstash-rate-limit"
+import { MERCHANT_AUTH_COOKIE } from "@/lib/supabase/cookies"
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -47,9 +48,40 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Merchant API: API-key auth and per-merchant limits live in the route (lib/merchant/api.ts), no cookies involved.
+  // The merchant webhook relay is authenticated by QStash's signature in the route.
+  if (pathname.startsWith("/api/v1/") || pathname === "/api/webhooks/merchant-deliver") {
+    return NextResponse.next()
+  }
+
   // ── Admin subdomain detection ───────────────────────────────────────────
   const host = request.headers.get("host") || ""
   const isAdminHost = host === "admin.byiora.com.np" || host === "www.admin.byiora.com.np"
+  const isMerchantHost = host === "merchant.byiora.com.np"
+
+  // ── Merchant portal: merchant.byiora.com.np/* serves /merchant/* ─────────
+  if (pathname.startsWith("/merchant") || (isMerchantHost && !pathname.startsWith("/api") && !pathname.startsWith("/ingest"))) {
+    const target = pathname.startsWith("/merchant") ? pathname : pathname === "/" ? "/merchant/login" : `/merchant${pathname}`
+    if (target === "/merchant") {
+      url.pathname = isMerchantHost ? "/dashboard" : "/merchant/dashboard"
+      return NextResponse.redirect(url)
+    }
+    if (isMutation) {
+      const limit = await checkMutationRateLimit(`merchant:${ip}`)
+      if (!limit.success) return json429("Too many requests. Please slow down.")
+    }
+    const { supabaseResponse, user } = await refreshSupabaseSession(request, MERCHANT_AUTH_COOKIE)
+    // Coarse gate only; every merchant action re-checks status, 2FA and KYC on the server.
+    if (target.startsWith("/merchant/dashboard") && user?.app_metadata?.role !== "merchant") {
+      url.pathname = isMerchantHost ? "/login" : "/merchant/login"
+      return redirectWithCookies(url, supabaseResponse)
+    }
+    if (target === pathname) return supabaseResponse
+    url.pathname = target
+    const rewrite = NextResponse.rewrite(url)
+    supabaseResponse.cookies.getAll().forEach((c) => rewrite.cookies.set(c.name, c.value, c))
+    return rewrite
+  }
 
   // ┌──────────────────────────────────────────────────────────────────────────
   // │ QUOTA SAVER: Let all public GET browsing pass WITHOUT touching Upstash.
@@ -195,13 +227,14 @@ export async function updateSession(request: NextRequest) {
 // ── Supabase Session Refresher ──────────────────────────────────────────────
 // Extracted to avoid duplicating the cookie-handling boilerplate.
 
-async function refreshSupabaseSession(request: NextRequest): Promise<{ supabaseResponse: NextResponse; user: any }> {
+async function refreshSupabaseSession(request: NextRequest, cookieName?: string): Promise<{ supabaseResponse: NextResponse; user: any }> {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      ...(cookieName ? { cookieOptions: { name: cookieName } } : {}),
       cookies: {
         getAll() {
           return request.cookies.getAll()

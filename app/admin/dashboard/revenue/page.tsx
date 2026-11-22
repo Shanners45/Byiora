@@ -97,8 +97,9 @@ export default function RevenuePage() {
     return sum + getRefundAmount(t)
   }, 0), [refundedTransactions])
 
-  // Net revenue = Gross Revenue - Refunds
-  const totalRevenue = useMemo(() => Math.max(0, grossRevenue - totalRefunded), [grossRevenue, totalRefunded])
+  // A refund changes the order's status from Completed to Refunded, so refunded money is already
+  // outside grossRevenue. Subtracting it again counted every refund twice.
+  const totalRevenue = grossRevenue
 
   // Get available years from transactions
   const availableYears = useMemo(() => {
@@ -246,7 +247,10 @@ export default function RevenuePage() {
 
       {loading ? (
         <div className="flex justify-center p-20">
-          <div className="animate-spin rounded-full h-10 w-10 border-4 border-t-[#F59E0B] border-gray-200"></div>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-10 w-10 border-4 border-t-[#F59E0B] border-gray-200 mx-auto mb-4"></div>
+            <p className="text-[#4B5563]">Loading revenue...</p>
+          </div>
         </div>
       ) : (
         <>

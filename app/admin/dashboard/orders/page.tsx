@@ -510,13 +510,12 @@ export default function OrdersPage() {
     return `"${stringField.replace(/"/g, '""')}"`
   }
 
-  // Formats readable purchase date (in Asia/Kathmandu time zone) that displays cleanly without Excel numeric overflow (####)
+  // Formats readable purchase date (in local laptop time zone) that displays cleanly without Excel numeric overflow (####)
   const formatCSVDate = (value: string) => {
     if (!value) return "N/A"
     const d = new Date(value)
     if (isNaN(d.getTime())) return "N/A"
     return d.toLocaleString("en-US", {
-      timeZone: "Asia/Kathmandu",
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -708,7 +707,7 @@ export default function OrdersPage() {
                       <div className="flex flex-col gap-0.5">
                         <span className="font-mono text-sm text-[#4B5563]">{transaction.transaction_id}</span>
                         <span className="text-xs text-gray-400">{new Date(transaction.created_at).toLocaleDateString()}</span>
-                        <span className="text-xs text-gray-400">{new Date(transaction.created_at).toLocaleTimeString("en-US", { timeZone: "Asia/Kathmandu", hour: "2-digit", minute: "2-digit", hour12: true })} NPT</span>
+                        <span className="text-xs text-gray-400">{new Date(transaction.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true })}</span>
                       </div>
                     </TableCell>
                     <TableCell>

@@ -44,6 +44,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -333,13 +343,26 @@ export default function CustomersAndSecurityPage() {
   }
 
   const [reviewSendingFor, setReviewSendingFor] = useState<string | null>(null)
-  const handleRequestReview = async (cust: CustomerProfile) => {
-    if (!window.confirm(`Email ${cust.email} asking for a Trustpilot review?`)) return
+  const [reviewCustomer, setReviewCustomer] = useState<CustomerProfile | null>(null)
+
+  const handleRequestReview = (cust: CustomerProfile) => {
+    setReviewCustomer(cust)
+  }
+
+  const handleConfirmReviewRequest = async () => {
+    if (!reviewCustomer) return
+    const cust = reviewCustomer
     setReviewSendingFor(cust.email)
     try {
       const res = await sendReviewRequestAction(cust.email, cust.name || undefined)
-      if (res.success) toast.success(`Review request sent to ${cust.email}`)
-      else toast.error(res.error || "Could not send the review request.")
+      if (res.success) {
+        toast.success(`Review request sent to ${cust.email}`)
+        setReviewCustomer(null)
+      } else {
+        toast.error(res.error || "Could not send the review request.")
+      }
+    } catch {
+      toast.error("Could not send the review request.")
     } finally {
       setReviewSendingFor(null)
     }
@@ -2218,6 +2241,46 @@ export default function CustomersAndSecurityPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Trustpilot Review Confirmation Dialog */}
+      <AlertDialog open={!!reviewCustomer} onOpenChange={(open) => { if (!open && !reviewSendingFor) setReviewCustomer(null) }}>
+        <AlertDialogContent className="bg-white border-gray-200 shadow-xl rounded-2xl p-6 sm:max-w-md w-[calc(100%-2rem)] mx-auto z-[60]">
+          <AlertDialogHeader className="space-y-3">
+            <AlertDialogTitle className="text-2xl font-bold text-gray-900">
+              Request Trustpilot Review?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-500 text-base">
+              Email <span className="font-semibold text-gray-900">{reviewCustomer?.email}</span> asking for a Trustpilot review?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-6 gap-3 sm:space-x-0">
+            <AlertDialogCancel
+              disabled={!!reviewSendingFor}
+              onClick={() => setReviewCustomer(null)}
+              className="mt-0 h-12 sm:rounded-xl text-gray-700 bg-gray-100 hover:bg-gray-200 hover:text-gray-900 border-none font-semibold transition-colors"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!!reviewSendingFor}
+              onClick={(e) => {
+                e.preventDefault()
+                handleConfirmReviewRequest()
+              }}
+              className="h-12 sm:rounded-xl bg-[#7E3AF2] hover:bg-[#6C2BD9] text-white font-bold transition-all shadow-md flex items-center justify-center gap-2"
+            >
+              {reviewSendingFor ? (
+                <>
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  <span>Sending...</span>
+                </>
+              ) : (
+                "OK"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

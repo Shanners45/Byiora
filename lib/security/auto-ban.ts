@@ -25,6 +25,7 @@ type Rule = {
 export const AUTO_RULES = {
   login_failure: { windowSec: 3600, threshold: 10, on: ["email", "ip"], lockMinutes: 30, label: "10+ failed sign-ins in 1 hour" },
   admin_login_failure: { windowSec: 900, threshold: 5, on: ["email", "ip"], lockMinutes: 60, label: "5+ failed admin sign-ins in 15 minutes" },
+  merchant_login_failure: { windowSec: 900, threshold: 5, on: ["email", "ip"], lockMinutes: 60, label: "5+ failed merchant sign-ins in 15 minutes" },
   webhook_probe: { windowSec: 3600, threshold: 3, on: ["ip"], lockMinutes: 7 * 24 * 60, banHours: 168, label: "3+ forged payment-webhook calls in 1 hour" },
   partial_payment: { windowSec: 7 * 86400, threshold: 2, on: ["email"], banHours: 72, label: "2+ underpaid orders in 7 days" },
   signup_burst: { windowSec: 86400, threshold: 3, on: ["device_id"], banHours: 168, label: "3+ accounts created from one device in 24 hours" },

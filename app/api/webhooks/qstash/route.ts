@@ -4,6 +4,7 @@ import { recordAbuse, getLockMinutes } from "@/lib/security/auto-ban"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/lib/crypto/bank"
 import { fulfillOrderDirectly, handlePartialPayment, flagOrderForManualReview } from "@/lib/fulfillment"
+import { isWalletTopupRef, settleFonepayTopup } from "@/lib/merchant/fonepay"
 
 const BYPASS_SIGNATURE = process.env.NODE_ENV === "development"
 
@@ -14,6 +15,14 @@ async function handler(req: Request) {
 
     if (!transactionId || !validationTraceId) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    // Merchant wallet top-up: verified against the bank using the session stored on the top-up, not the body.
+    if (isWalletTopupRef(transactionId)) {
+      const status = await settleFonepayTopup(transactionId)
+      // 500 keeps QStash retrying while the QR can still be paid.
+      if (status === "awaiting_payment" || status === "error") return NextResponse.json({ error: "Not paid yet" }, { status: 500 })
+      return NextResponse.json({ success: true, status }, { status: 200 })
     }
 
     const supabase = createServiceRoleClient()

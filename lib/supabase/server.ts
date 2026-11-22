@@ -1,20 +1,23 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { Database } from '../supabase'
+import { MERCHANT_AUTH_COOKIE } from './cookies'
 
 /**
  * readOnly: never write auth cookies. Use it in Server Actions that only read
  * the session. Middleware already refreshes tokens, and a cookie write inside an
  * action makes Next re-render the page the action started on, which yanks the
  * user back there if they navigated away while it was in flight.
+ * merchant: use the merchant portal's own session cookie.
  */
-export async function createClient(options?: { readOnly?: boolean }) {
+export async function createClient(options?: { readOnly?: boolean; merchant?: boolean }) {
   const cookieStore = await cookies()
 
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      ...(options?.merchant ? { cookieOptions: { name: MERCHANT_AUTH_COOKIE } } : {}),
       cookies: {
         getAll() {
           return cookieStore.getAll()

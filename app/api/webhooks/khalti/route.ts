@@ -3,13 +3,14 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/lib/crypto/bank"
 import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
 import { rateLimit } from "@/lib/rate-limit"
+import { publicSiteUrl } from "@/lib/site-url"
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const pidx = searchParams.get("pidx")
   const purchase_order_id = searchParams.get("purchase_order_id")
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+  const siteUrl = publicSiteUrl()
 
   if (!pidx || !purchase_order_id) {
     return NextResponse.redirect(`${siteUrl}/?error=missing_params`)

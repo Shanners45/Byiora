@@ -52,8 +52,12 @@ export async function getCustomersOverviewAction(): Promise<{
     const supabase = createServiceRoleClient() as any
 
     // 0. Fetch admin accounts to exclude them from the customer directory
-    const { data: adminRows } = await supabase.from("admin_users").select("email")
-    const adminEmails = new Set((adminRows || []).map((a: any) => a.email?.toLowerCase().trim()).filter(Boolean))
+    // Staff and merchant (seller) logins are not customers.
+    const [{ data: adminRows }, { data: merchantRows }] = await Promise.all([
+      supabase.from("admin_users").select("email"),
+      supabase.from("merchants").select("email"),
+    ])
+    const adminEmails = new Set([...(adminRows || []), ...(merchantRows || [])].map((a: any) => a.email?.toLowerCase().trim()).filter(Boolean))
 
     // 1. Fetch registered users from public.users & Supabase Auth for last_sign_in_at
     const { data: registeredUsers, error: usersErr } = await supabase

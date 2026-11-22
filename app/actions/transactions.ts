@@ -56,6 +56,7 @@ export async function checkCheckoutSecurityAction(clientData?: { deviceId?: stri
  * Uses Service Role to bypass RLS and allow returning inserted data
  */
 import { transactionInputSchema } from "@/lib/validations/checkout"
+import { publicSiteUrl } from "@/lib/site-url"
 
 export async function addTransactionAction(transactionData: TransactionData): Promise<{ success: boolean; transactionId?: string; checkoutToken?: string; error?: string; data?: any; paymentUrl?: string; isDuplicate?: boolean; isFreeOrder?: boolean }> {
   try {
@@ -572,7 +573,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         if (credsRes.data && credsRes.data.encrypted_username) {
           const secretKey = (await decryptBankCredentials(credsRes.data.encrypted_username))?.trim()
           if (secretKey) {
-            const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+            const siteUrl = publicSiteUrl()
             const isLive = secretKey.toLowerCase().startsWith("live_")
             const url = isLive
               ? "https://khalti.com/api/v2/epayment/initiate/"
@@ -723,7 +724,7 @@ export async function retryKhaltiPaymentAction(transactionId: string): Promise<{
       return { success: false, error: "Failed to decrypt Khalti credentials" }
     }
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+    const siteUrl = publicSiteUrl()
     const isLive = secretKey.toLowerCase().startsWith("live_")
     const url = isLive
       ? "https://khalti.com/api/v2/epayment/initiate/"

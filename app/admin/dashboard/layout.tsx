@@ -5,14 +5,13 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import Link from "next/link"
-import { LayoutDashboard, ShoppingBag, Package, Settings, Users, LogOut, Menu, X, Bell, ImageIcon, DollarSign, KeyRound, UserCheck, Mail, Ticket } from "lucide-react"
+import { LayoutDashboard, ShoppingBag, Package, Settings, Users, LogOut, Menu, X, Bell, ImageIcon, DollarSign, KeyRound, UserCheck, Mail, Ticket, Store } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
 import { AdminSessionProvider } from "@/lib/admin-session-context"
-import { BrandLoader } from "@/components/brand-loader"
 
 export default function AdminDashboardLayout({
   children,
@@ -90,7 +89,16 @@ export default function AdminDashboardLayout({
   }
 
   // Show loading while checking auth
-  if (isLoading) return <BrandLoader label="Loading dashboard" />
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4"></div>
+          <p className="text-[#4B5563]">Loading dashboard...</p>
+        </div>
+      </div>
+    )
+  }
 
   if (!adminUser && loadError) {
     return (
@@ -137,6 +145,7 @@ export default function AdminDashboardLayout({
     { name: "Admin Users", href: "/admin/dashboard/admin-users", icon: Users, roles: ["admin"] },
     { name: "Notifications", href: "/admin/dashboard/notifications", icon: Bell, roles: ["admin", "sub_admin"] },
     { name: "Broadcasts", href: "/admin/dashboard/broadcasts", icon: Mail, roles: ["admin"] },
+    { name: "Merchants", href: "/admin/dashboard/merchants", icon: Store, roles: ["admin"] },
     {
       name: "Settings",
       href: "/admin/dashboard/settings",
@@ -167,7 +176,7 @@ export default function AdminDashboardLayout({
         className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"
           } fixed inset-y-0 z-50 flex w-64 flex-col bg-[#7E3AF2] text-white border-r border-[#E5E7EB] pt-5 pb-4 transition-transform duration-300 lg:translate-x-0 lg:static lg:w-64`}
       >
-        <div className="flex items-center justify-between px-4">
+        <div className="flex items-center justify-between px-4 pb-4 border-b border-white/20">
           <div className="flex items-center gap-4">
             <div className="h-8 relative flex items-center">
               <Image
@@ -191,7 +200,7 @@ export default function AdminDashboardLayout({
             <X className="h-5 w-5" />
           </Button>
         </div>
-        <div className="mt-5 flex flex-1 flex-col">
+        <div className="mt-4 flex flex-1 flex-col">
           <nav className="flex-1 space-y-1 px-2">
             {navItems.map((item) => (
               <Button

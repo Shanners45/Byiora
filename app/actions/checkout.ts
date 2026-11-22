@@ -11,6 +11,7 @@ import * as Sentry from "@sentry/nextjs"
 import { incrementFailureStrike } from "@/lib/security/strike-counter"
 import { rateLimit } from "@/lib/rate-limit"
 import { verifyCheckoutCapability } from "@/lib/crypto/checkout"
+import { publicSiteUrl } from "@/lib/site-url"
 
 // Rate limit for polling (30 req/min)
 let ratelimit: Ratelimit | null = null
@@ -432,7 +433,7 @@ export async function getOrGenerateQRAction(transactionId: string, capability?: 
 
     // 7. Schedule QStash Webhook if available
     if (process.env.QSTASH_TOKEN && process.env.QSTASH_URL) {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
+      const siteUrl = publicSiteUrl()
 
       // 7a. Background payment polling (retries every 15s, up to 10 times)
       // Runs for all dynamic QR payments (NepalPay & Fonepay) as a reliable polling fallback

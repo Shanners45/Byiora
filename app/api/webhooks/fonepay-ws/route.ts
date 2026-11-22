@@ -3,6 +3,8 @@ import { recordAbuse, getLockMinutes } from "@/lib/security/auto-ban"
 import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { decryptBankCredentials } from "@/lib/crypto/bank"
 import { fulfillOrderDirectly, handlePartialPayment } from "@/lib/fulfillment"
+import { isWalletTopupRef, settleFonepayTopup } from "@/lib/merchant/fonepay"
+import { broadcast, merchantTopic } from "@/lib/realtime/broadcast"
 
 /**
  * Fonepay WebSocket Webhook
@@ -32,6 +34,17 @@ export async function POST(req: Request) {
     }
 
     const supabase = createServiceRoleClient()
+
+    // Merchant wallet top-ups (WT-...) never touch customer orders. Every event is re-checked with the bank.
+    if (isWalletTopupRef(transactionId)) {
+      if (event === "QR_SCANNED" || event === "SCANNED") {
+        const { data: t } = await (supabase as any).from("merchant_topups").select("merchant_id").eq("reference", transactionId).maybeSingle()
+        if (t) await broadcast([{ topic: merchantTopic(t.merchant_id), event: "topup.scanned", payload: { reference: transactionId } }])
+        return NextResponse.json({ success: true, message: "Scan noted" }, { status: 200 })
+      }
+      const status = await settleFonepayTopup(transactionId)
+      return NextResponse.json({ success: true, status }, { status: 200 })
+    }
 
     // Determine if this is an intermediate QR scan event vs a completed payment event
     let isScanEvent = event === "QR_SCANNED" || event === "SCANNED"

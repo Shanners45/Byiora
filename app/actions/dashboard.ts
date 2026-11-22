@@ -55,7 +55,7 @@ export async function getDashboardStatsAction() {
     const verifiedUsersCount = (authUsersRes?.data?.users || []).filter((u: any) => {
       const email = u.email?.toLowerCase().trim()
       if (!email) return false
-      if (adminEmails.has(email)) return false
+      if (adminEmails.has(email) || u.app_metadata?.role === "merchant") return false
       return !!u.email_confirmed_at
     }).length
 

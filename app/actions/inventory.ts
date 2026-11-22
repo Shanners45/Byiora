@@ -4,6 +4,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role"
 import { encryptInventoryCode, decryptInventoryCode, generateCodeHash } from "./inventory-encryption"
 import { verifyAdmin, getAdminSessionAction } from "./admin-utils"
 import { revalidatePath } from "next/cache"
+import { fillPendingFromStock } from "@/lib/merchant/trade"
 
 /**
  * Fetches products that can have inventory (digital-goods, games)
@@ -41,7 +42,7 @@ export async function getProductStockAction(productId: string) {
   
   const { data, error } = await supabase
     .from("gift_card_inventory")
-    .select("denomination_label, status")
+    .select("denomination_label, status, merchant_id")
     .eq("product_id", productId)
 
   if (error) return { error: error.message }
@@ -53,7 +54,8 @@ export async function getProductStockAction(productId: string) {
     if (!stats[item.denomination_label]) {
       stats[item.denomination_label] = { available: 0, delivered: 0 }
     }
-    if (item.status === "AVAILABLE") stats[item.denomination_label].available++
+    // A merchant's private codes can't be sold on the storefront, so they don't count as available here.
+    if (item.status === "AVAILABLE" && !item.merchant_id) stats[item.denomination_label].available++
     if (item.status === "DELIVERED") stats[item.denomination_label].delivered++
   })
 
@@ -111,9 +113,13 @@ export async function addInventoryCodesAction(productId: string, denominationLab
     }
   }
 
+  // Merchant orders that were waiting for this amount get their codes now.
+  const merchantOrdersFilled = successCodes.length ? await fillPendingFromStock(productId, denominationLabel).catch(() => 0) : 0
+
   revalidatePath("/admin/dashboard/inventory")
   return { 
     success: true, 
+    merchantOrdersFilled,
     added: successCodes.length, 
     failed: failedCodes.length, 
     failedDetails: failedCodes 
@@ -130,12 +136,29 @@ export async function getDenominationCodesAction(productId: string, denomination
   const supabase = createServiceRoleClient()
   const { data, error } = await supabase
     .from("gift_card_inventory")
-    .select("id, status, created_at, encrypted_code, added_by")
+    .select("id, status, created_at, encrypted_code, added_by, transaction_id, merchant_id")
     .eq("product_id", productId)
     .eq("denomination_label", denominationLabel)
     .order("created_at", { ascending: false })
 
   if (error) return { error: error.message }
+
+  // Which merchant got a code (orders are tagged MO-<order id>), or owns it as their private stock.
+  const orderIds = [...new Set((data || []).map((r: any) => String(r.transaction_id || "")).filter((t) => t.startsWith("MO-")).map((t) => t.slice(3)))]
+  const { data: mOrders } = orderIds.length ? await (supabase.from("merchant_orders") as any).select("id, merchant_id").in("id", orderIds) : { data: [] }
+  const merchantOfOrder = new Map<string, string>((mOrders || []).map((o: any) => [o.id, o.merchant_id]))
+  const merchantIds = [...new Set([...(data || []).map((r: any) => r.merchant_id).filter(Boolean), ...merchantOfOrder.values()])]
+  const { data: ms } = merchantIds.length ? await (supabase.from("merchants") as any).select("id, business_name").in("id", merchantIds) : { data: [] }
+  const nameOf = new Map<string, string>((ms || []).map((m: any) => [m.id, m.business_name]))
+  const merchantFor = (item: any): { name: string; kind: "delivered" | "reserved" } | null => {
+    const t = String(item.transaction_id || "")
+    if (item.status === "DELIVERED" && t.startsWith("MO-")) {
+      const id = merchantOfOrder.get(t.slice(3))
+      return { name: (id && nameOf.get(id)) || "Merchant", kind: "delivered" }
+    }
+    if (item.merchant_id && item.status === "AVAILABLE") return { name: nameOf.get(item.merchant_id) || "Merchant", kind: "reserved" }
+    return null
+  }
 
   // Decrypt in memory to generate safe masked previews
   const codesWithMask = await Promise.all(
@@ -158,7 +181,8 @@ export async function getDenominationCodesAction(productId: string, denomination
         status: item.status,
         createdAt: item.created_at,
         addedBy: item.added_by,
-        maskedCode: masked
+        maskedCode: masked,
+        merchant: merchantFor(item),
       }
     })
   )

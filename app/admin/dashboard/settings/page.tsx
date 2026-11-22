@@ -52,7 +52,7 @@ export default function AdminSettingsPage() {
   const [newMethod, setNewMethod] = useState({
     name: "",
     qr_url: "",
-    instructions: "Scan the QR code with your app. In remarks, please enter your name.",
+    instructions: "Scan the QR code with your app.",
     logo_url: "",
   } as any)
 
@@ -370,7 +370,7 @@ export default function AdminSettingsPage() {
       name: "",
       logo_url: "",
       qr_url: "",
-      instructions: "Scan the QR code with your app. In remarks, please enter your name.",
+      instructions: "Scan the QR code with your app.",
       category: "static"
     })
     setShowAddForm(false)

@@ -580,13 +580,16 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
               <h1 className="text-2xl font-bold text-brand-charcoal mb-2">{giftCard.name}</h1>
               {(() => {
                 const facts = productFacts(product)
+
                 return (
                   <>
-                    <ul className="mt-3 space-y-1.5 text-sm text-brand-charcoal">
-                      {facts.region && <li><span className="font-semibold">Region:</span> {facts.region}</li>}
-                      <li><span className="font-semibold">Delivery:</span> {facts.delivery}</li>
-                      <li><span className="font-semibold">Payment:</span> eSewa, Khalti, Fonepay QR or mobile banking (NPR)</li>
+                    {/* Preserved in DOM for SEO crawlers and search engine indexing */}
+                    <ul className="sr-only">
+                      {facts.region && <li>Region: {facts.region}</li>}
+                      <li>Delivery: {facts.delivery}</li>
+                      <li>Payment: eSewa, Khalti, Fonepay QR or mobile banking (NPR)</li>
                     </ul>
+
                     {facts.soldOut && (
                       <p className="mt-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
                         All packs are out of stock right now.{" "}

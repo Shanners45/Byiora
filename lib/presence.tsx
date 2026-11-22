@@ -24,7 +24,8 @@ export function PresenceTracker() {
   const { user } = useAuth()
   const pathname = usePathname()
   const userId = user?.id ?? null
-  const isAdminArea = Boolean(pathname?.startsWith("/admin"))
+  // Staff and merchant sessions are not storefront customers.
+  const isAdminArea = Boolean(pathname?.startsWith("/admin") || pathname?.startsWith("/merchant"))
 
   useEffect(() => {
     if (!userId || isAdminArea) return
