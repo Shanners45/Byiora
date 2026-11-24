@@ -181,12 +181,14 @@ export default function AdminDashboardLayout({
     }
   }
 
+  // Phones: the page scrolls normally (no fixed-height scroll box, which mobile Chrome sizes wrongly as its
+  // address bar shows and hides). Laptops: fixed sidebar with the content scrolling beside it.
   return (
-    <div className="flex h-dvh w-full overflow-hidden bg-[#F9FAFB] overscroll-none">
+    <div className="flex min-h-dvh w-full bg-[#F9FAFB] lg:h-screen lg:overflow-hidden lg:overscroll-none">
       {/* Sidebar */}
       <aside
         className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          } fixed inset-y-0 z-50 flex w-64 flex-col bg-[#7E3AF2] text-white border-r border-[#E5E7EB] transition-transform duration-300 lg:translate-x-0 lg:static lg:h-dvh lg:shrink-0`}
+          } fixed inset-y-0 z-50 flex w-64 flex-col bg-[#7E3AF2] text-white border-r border-[#E5E7EB] transition-transform duration-300 lg:translate-x-0 lg:static lg:h-screen lg:shrink-0`}
       >
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/20 shrink-0">
           <div className="flex items-center gap-4">
@@ -260,8 +262,7 @@ export default function AdminDashboardLayout({
       </aside>
 
       {/* Main content */}
-      {/* Phones scroll this whole column so the header scrolls away; desktop keeps it pinned. */}
-      <div className="flex flex-1 flex-col h-dvh overflow-y-auto overscroll-contain lg:overflow-hidden min-w-0">
+      <div className="flex min-w-0 flex-1 flex-col lg:h-screen lg:overflow-hidden">
         {/* Top header */}
         <header className="bg-white border-b border-[#E5E7EB] shadow-sm shrink-0">
           <div className="flex h-16 items-center justify-between px-4">
