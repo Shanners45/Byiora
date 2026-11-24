@@ -194,39 +194,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, message: "Queued for cron verification" }, { status: 200 })
     }
 
-    // Fonepay's own real-time confirmation. Each QR gets its own WebSocket from Fonepay's receivePayment API,
-    // and only our proxy (holding the internal secret) can call this route. When that socket reports
-    // paymentSuccess for at least the order amount, the payment is proven even if the settlement report
-    // hasn't matched it: some payer bank apps alter the QR remarks, so the report row never carries our
-    // bill ID and the order used to expire while the money had arrived.
-    if (!bankVerified && event === "PAID" && fonepayData) {
-      let ws = fonepayData.transactionStatus
-      if (typeof ws === "string") {
-        try { ws = JSON.parse(ws) } catch {}
-      }
-      const wsPaid = ws?.paymentSuccess === true && ws?.success === true
-      const wsAmount = Math.round(parseFloat(String(ws?.amount ?? "").replace(/,/g, "")))
-      const expectedAmount = Math.round(parseFloat(String(txn.price).replace(/,/g, "")))
-      if (wsPaid && Number.isFinite(wsAmount) && Number.isFinite(expectedAmount)) {
-        if (wsAmount >= expectedAmount) {
-          bankVerified = true
-          resolvedBankTxnId = String(ws.traceId || ws.productNumber || "").trim() || null
-          console.log(`[FONEPAY-WS] Payment confirmed by Fonepay's WebSocket for ${transactionId} (settlement report not matched yet)`)
-        } else if (wsAmount > 0) {
-          console.error(`[FONEPAY-WS FRAUD ALERT] WS amount mismatch for ${transactionId}: Expected Rs. ${expectedAmount}, received Rs. ${wsAmount}`)
-          await handlePartialPayment({
-            transactionId,
-            expectedAmount,
-            paidAmount: wsAmount,
-            productName: txn.product_name,
-            userEmail: txn.user_email,
-            source: "Fonepay WS",
-          })
-          return NextResponse.json({ error: "Amount mismatch" }, { status: 400 })
-        }
-      }
-    }
-
     // If bank API was reachable but payment not confirmed, don't fulfill
     if (!bankVerified) {
       console.log(`[FONEPAY-WS] WS event received but bank did not confirm payment for ${transactionId}`)

@@ -1098,6 +1098,21 @@ async function handleFonepayVerifyTransaction(body, res) {
                 return;
             } else {
                 console.log(`⏳ [VERIFY] No match found yet for ${remarks || nqrTxnId || 'N/A'}`);
+                // Diagnostics: rows with this exact amount show how the payer's bank app filled the tracking
+                // fields (so a remarks format we don't recognise can be fixed). Bill IDs are ours; remarks are cut short.
+                if (expectedAmount > 0) {
+                    const sameAmount = resultArr.filter(txn => Math.round(parseFloat(String(txn.transactionAmount || txn.amount || "0").replace(/,/g, ''))) === expectedAmount);
+                    if (sameAmount.length) {
+                        console.log(`🔎 [VERIFY] ${sameAmount.length} report row(s) at Rs ${expectedAmount} for ${remarks || 'N/A'}: ` +
+                            JSON.stringify(sameAmount.slice(0, 5).map(t => ({
+                                billId: t.billId ?? null,
+                                remarks1: t.remarks1 ? String(t.remarks1).slice(0, 25) : null,
+                                status: t.paymentStatus || t.status || null,
+                                at: t.dateTransmissionDateTime || t.transmissionDateTime || t.paymentDate || null,
+                                keys: Object.keys(t).length,
+                            }))));
+                    }
+                }
             }
         }
 
