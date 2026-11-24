@@ -153,6 +153,9 @@ export async function fulfillOrderDirectly({
       } else if (claimData && (claimData as any).length > 0 && (claimData as any)[0].encrypted_code) {
         deliveredCode = (claimData as any)[0].encrypted_code
         decryptedCode = decryptInventoryCode(deliveredCode as string)
+        // That may have been the last code for this pack: tell staff on Discord so it gets restocked.
+        const { alertIfSoldOut } = await import("@/lib/inventory-alerts")
+        await alertIfSoldOut({ productId: txn.product_id, label: txn.amount, productName: txn.product_name, soldVia: `Storefront order ${transactionId}` })
 
         if (decryptedCode) {
           await supabase.from("transactions").update({

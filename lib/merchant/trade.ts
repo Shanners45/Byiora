@@ -5,6 +5,7 @@ import { merchantPrice, resolvePrice, ruleKey, MERCHANT_CATEGORIES, isMerchantCa
 import { afterLiveOrder, emitWebhook, orderPayload } from "@/lib/merchant/events"
 import { audit } from "@/lib/merchant/server"
 import { alertStaff } from "@/lib/merchant/alerts"
+import { alertIfSoldOut } from "@/lib/inventory-alerts"
 
 export { merchantPrice, type PriceRule }
 
@@ -239,6 +240,8 @@ export async function placeOrder(
         { name: "Quantity", value: String(input.quantity), inline: true },
         { name: "Fill it", value: "Admin → Merchants → Pending orders", inline: false },
       ], 0xf59e0b)
+    } else {
+      await alertIfSoldOut({ productId: product.id, label: denom.label, productName: product.name, soldVia: `Merchant ${merchant.business_name}`, merchantOrderId: row.order_id })
     }
     await afterLiveOrder(merchant, row.order_id)
   }
@@ -261,6 +264,7 @@ export async function fillPendingFromStock(productId: string, label: string, onl
     if (error || err) continue // out of stock for this one (a smaller or other-merchant order may still fit)
     filled++
     await audit({ actorType: "system", merchantId: o.merchant_id, action: "order.fulfilled", details: { orderId: o.id, from: "stock_added" } })
+    await alertIfSoldOut({ productId, label, soldVia: `Merchant backorder ${o.id}`, merchantOrderId: o.id })
     const { data: done } = await db.from("merchant_orders").select("*").eq("id", o.id).single()
     if (done) await emitWebhook(o.merchant_id, "order.completed", await orderPayload(done))
   }

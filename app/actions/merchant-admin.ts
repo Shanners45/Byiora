@@ -496,6 +496,13 @@ export async function fulfilMerchantOrderAction(orderId: string, codesRaw: strin
   if (err) return { success: false, error: "Could not fill the order." }
 
   await audit({ actorType: "admin", actorId: admin.id, merchantId: o.merchant_id, action: "order.fulfilled", details: { orderId, from: payload ? "typed" : "stock" } })
+  if (!payload) {
+    const { data: row } = await db.from("merchant_orders").select("product_id").eq("id", orderId).maybeSingle()
+    if (row?.product_id) {
+      const { alertIfSoldOut } = await import("@/lib/inventory-alerts")
+      await alertIfSoldOut({ productId: row.product_id, label: o.denomination_label, productName: o.product_name, soldVia: `Merchant order ${orderId} (filled from stock by admin)`, merchantOrderId: orderId })
+    }
+  }
   const { data: done } = await db.from("merchant_orders").select("*").eq("id", orderId).single()
   if (done) await emitWebhook(o.merchant_id, "order.completed", await orderPayload(done))
   return { success: true }
