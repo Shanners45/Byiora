@@ -119,12 +119,6 @@ export async function fulfillOrderDirectly({
         userId: txn.user_id,
         ip: (txn.guest_user_data as any)?.ip,
       }).catch(() => {})
-
-      // Industry Standard: Reclaim promo code usage if this was a recovered order
-      if (txn.promo_code) {
-        const { reclaimPromoCodeOnRecovery } = await import("@/lib/promo/internal")
-        reclaimPromoCodeOnRecovery(transactionId).catch(() => {})
-      }
     }
 
     // 4. Fulfillment: Claim inventory gift card code if applicable

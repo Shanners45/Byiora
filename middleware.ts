@@ -12,9 +12,10 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization)
      * - monitoring-tunnel (Sentry telemetry)
+     * - ingest (PostHog analytics, proxied by a rewrite; many calls per visitor, no session needed)
      * - favicon.ico (browser icon)
      * - Static assets (svg, png, jpg, jpeg, gif, webp, ico, txt)
      */
-    "/((?!_next/static|_next/image|monitoring-tunnel|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt)$).*)",
+    "/((?!_next/static|_next/image|monitoring-tunnel|ingest|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt)$).*)",
   ],
 }

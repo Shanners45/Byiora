@@ -51,7 +51,7 @@ function NewTicketDialog({ open, onOpenChange, initialOrder, onCreated }: { open
           </label>
           <label className="block space-y-1.5">
             <span className={labelCls}>Subject *</span>
-            <Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} required maxLength={150} placeholder="e.g. Code shows as already redeemed" className={inputCls} />
+            <Input value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} required maxLength={150} placeholder="e.g. Order BYI-… code shows an error" className={inputCls} />
           </label>
           <label className="block space-y-1.5">
             <span className={labelCls}>Order ID or reference</span>

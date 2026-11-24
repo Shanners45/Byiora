@@ -89,10 +89,7 @@ export async function submitAllSiteUrlsToIndexNow(): Promise<{
 }> {
   const staticUrls = [
     BASE_URL,
-    `${BASE_URL}/category/topup`,
-    `${BASE_URL}/category/digital-goods`,
-    `${BASE_URL}/category/games`,
-    `${BASE_URL}/category/direct-login`,
+    `${BASE_URL}/about`,
     `${BASE_URL}/contact`,
     `${BASE_URL}/terms-and-conditions`,
     `${BASE_URL}/privacy-policy`,

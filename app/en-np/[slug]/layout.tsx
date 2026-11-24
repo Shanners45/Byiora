@@ -6,6 +6,14 @@ import { brandOf } from "@/lib/product-categories"
 
 const BASE_URL = "https://www.byiora.com.np"
 
+// Product pages are cached at the edge (ISR). Saving a product in admin refreshes its page at once
+// (revalidatePath in app/actions/products.ts); this is the safety net for anything else.
+export const revalidate = 300
+// No pages are pre-built: each is rendered on its first visit, then served from the cache.
+export async function generateStaticParams() {
+  return []
+}
+
 interface Props {
   params: Promise<{ slug: string }>
   children: React.ReactNode
@@ -33,6 +41,27 @@ function productTitle(name: string, category?: string): string {
   return `Buy ${clean}${currency ? ` ${currency}` : ""} Top-Up in Nepal`
 }
 
+/**
+ * One-sentence product summary for the meta description and schema. Built from the product's own data
+ * (pack count, in-stock price, delivery method) so each page differs and never promises what it can't do:
+ * no "instant" for team-activated products, no "from Rs. X" when everything is out of stock.
+ */
+function productSummary(p: { name: string; category?: string; denominations?: any[] }): string {
+  const denoms: any[] = p.denominations || []
+  const priceOf = (d: any) => parseFloat(String(d.price).replace(/,/g, ""))
+  const inStock = denoms.filter((d) => d.in_stock !== false).map(priceOf).filter((n) => Number.isFinite(n) && n > 0)
+  const delivery =
+    p.category === "topup" ? "sent to your player ID after payment"
+      : p.category === "direct-login" ? "activated on your account by our team"
+        : "code emailed to you after payment"
+  if (denoms.length > 0 && inStock.length === 0) {
+    return `${p.name} in Nepal, paid in NPR with eSewa, Khalti or Fonepay QR. Currently out of stock: message us on WhatsApp to hear when it's back.`
+  }
+  const options = denoms.length > 1 ? `${denoms.length} options from ` : ""
+  const price = inStock.length ? `: ${options}Rs. ${Math.min(...inStock).toLocaleString("en-IN")}` : ""
+  return `${p.name} in Nepal${price}. Pay in NPR with eSewa, Khalti or Fonepay QR; ${delivery}.`
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
 
@@ -46,19 +75,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       }
     }
 
-    const categoryLabel = typedProduct.category === "topup" ? "Top-Up" : "Gift Card"
     // The root layout's "%s | Byiora" template adds the brand.
     const title = productTitle(typedProduct.name, typedProduct.category)
 
     // Product descriptions hold redemption steps, not a summary, so the meta
-    // description is built from structured fields instead.
-    const prices = (typedProduct.denominations || [])
-      .map((d: any) => parseFloat(String(d.price).replace(/,/g, "")))
-      .filter((n: number) => Number.isFinite(n) && n > 0)
-    const priceInfo = prices.length ? ` From Rs. ${Math.min(...prices).toLocaleString("en-IN")}.` : ""
-    // Avoid "Amazon Gift Card Gift Card" when the name already says it.
-    const label = typedProduct.name.toLowerCase().includes(categoryLabel.toLowerCase()) ? "" : ` ${categoryLabel}`
-    const description = `Buy ${typedProduct.name}${label} in Nepal.${priceInfo} Pay with eSewa, Khalti or Fonepay QR and get instant digital delivery from Byiora.`
+    // description is built from structured fields: what's on offer, price, how it's delivered.
+    const description = productSummary(typedProduct)
 
     const productUrl = `${BASE_URL}/en-np/${slug}`
     const imageUrl = typedProduct.logo || `${BASE_URL}/byiora-logo-full.png`
@@ -109,7 +131,7 @@ async function ProductJsonLd({ slug }: { slug: string }) {
 
     const productUrl = `${BASE_URL}/en-np/${slug}`
     // DB descriptions are redemption steps; schema wants a product summary.
-    const cleanDesc = `Buy ${typedProduct.name} in Nepal with instant digital delivery by email. Pay in NPR with eSewa, Khalti or Fonepay QR.`
+    const cleanDesc = productSummary(typedProduct)
     const denoms: any[] = typedProduct.denominations || []
     const prices = denoms.map((d) => parseFloat(String(d.price).replace(/,/g, ""))).filter((n) => Number.isFinite(n) && n > 0)
     const anyInStock = denoms.some((d) => d.in_stock !== false)
@@ -186,12 +208,6 @@ async function ProductJsonLd({ slug }: { slug: string }) {
         {
           "@type": "ListItem",
           position: 2,
-          name: typedProduct.category === "topup" ? "Game Top-ups" : "Digital Gift Cards",
-          item: `${BASE_URL}/category/${typedProduct.category || "digital-goods"}`,
-        },
-        {
-          "@type": "ListItem",
-          position: 3,
           name: typedProduct.name,
           item: productUrl,
         },

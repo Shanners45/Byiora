@@ -7,6 +7,8 @@ export const metadata: Metadata = {
     index: false,
     follow: false,
   },
+  // Don't inherit the storefront homepage canonical.
+  alternates: { canonical: null },
 }
 
 export default function AdminLayout({

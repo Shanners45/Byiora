@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRealtimePings } from "@/lib/realtime/use-pings"
 import { posthog } from "@/lib/analytics/posthog"
 import { MerchantNotificationPanel } from "@/components/merchant/notification-panel"
+import { BrandLoader } from "@/components/brand-loader"
 
 const NAV = [
   { name: "Overview", href: "/merchant/dashboard", icon: LayoutDashboard, gated: false },
@@ -97,22 +98,15 @@ export default function MerchantDashboardLayout({ children }: { children: React.
     window.location.href = "/merchant/login"
   }
 
-  if (!state) {
-    return (
-      <div className="text-center py-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4"></div>
-        <p className="text-[#4B5563]">Loading dashboard...</p>
-      </div>
-    )
-  }
+  if (!state) return <BrandLoader label="Loading dashboard" />
 
   const isActive = (href: string) => (href === "/merchant/dashboard" ? pathname === href : pathname.startsWith(href))
 
   return (
     <MerchantStateContext.Provider value={{ state, refresh, tick }}>
-      <div className="flex h-screen w-full overflow-hidden bg-[#F9FAFB] overscroll-none">
+      <div className="flex h-dvh w-full overflow-hidden bg-[#F9FAFB] overscroll-none">
         <aside
-          className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 z-50 flex w-64 flex-col bg-white border-r border-[#E5E7EB] transition-transform duration-300 lg:translate-x-0 lg:static lg:h-screen lg:shrink-0`}
+          className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"} fixed inset-y-0 z-50 flex w-64 flex-col bg-white border-r border-[#E5E7EB] transition-transform duration-300 lg:translate-x-0 lg:static lg:h-dvh lg:shrink-0`}
         >
           <div className="h-16 flex items-center justify-between px-4 border-b border-[#E5E7EB]">
             <div className="flex items-center gap-3">
@@ -155,7 +149,7 @@ export default function MerchantDashboardLayout({ children }: { children: React.
           </div>
         </aside>
 
-        <div className="flex flex-1 flex-col h-screen overflow-hidden min-w-0">
+        <div className="flex flex-1 flex-col h-dvh overflow-hidden min-w-0">
           <header className="bg-white border-b border-[#E5E7EB] shadow-sm shrink-0">
             <div className="flex h-16 items-center justify-between gap-3 px-4">
               <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)} aria-label="Open menu">

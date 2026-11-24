@@ -314,14 +314,14 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     const random = crypto.randomUUID().split("-")[0].toUpperCase().substring(0, 5)
     const transactionId = `BYI-${yy}${mm}${dd}-${random}`
 
-    // ── PROMO CODE: Server-side application ──
+    // ── PROMO CODE: price it here; the database reserves the use when the order row is inserted ──
     let promoDiscountAmount = 0
     let promoOriginalPrice: number | null = null
     let appliedPromoCode: string | null = null
 
     if (transactionData.promoCode && transactionData.promoCode.trim()) {
-      const { applyPromoCodeServerSide } = await import("@/lib/promo/internal")
-      const promoResult = await applyPromoCodeServerSide({
+      const { quotePromoCode } = await import("@/lib/promo/internal")
+      const promoResult = await quotePromoCode({
         code: transactionData.promoCode,
         productId: productId,
         productCategory: verifiedCategory || "",
@@ -329,20 +329,21 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         email: transactionData.email,
         userId: sessionUserId,
         deviceId: deviceId,
-        ip: ip,
-        transactionId: transactionId,
         verifiedPrice: numericPrice,
       })
 
-      if (promoResult.success) {
-        promoDiscountAmount = promoResult.discountAmount
-        promoOriginalPrice = promoResult.originalPrice
-        appliedPromoCode = transactionData.promoCode.trim().toUpperCase()
-        // Update verifiedPrice to the discounted price
-        verifiedPrice = String(promoResult.finalPrice)
+      // The customer asked for a discount: never silently charge full price instead.
+      if (!promoResult.success) {
+        return { success: false, error: `${promoResult.error || "This promo code can't be used."} Remove it to continue at the regular price.` }
       }
-      // If promo fails, silently proceed with original price (don't block the order)
+      promoDiscountAmount = promoResult.discountAmount
+      promoOriginalPrice = promoResult.originalPrice
+      appliedPromoCode = transactionData.promoCode.trim().toUpperCase()
+      verifiedPrice = String(promoResult.finalPrice)
     }
+
+    // Nothing is reserved until the order row exists, so refusing before that needs no clean-up.
+    const refuse = (error: string) => ({ success: false, error })
 
     // Look up the payment method category from the database
     const isFreeOrder = parseFloat(verifiedPrice) <= 0
@@ -352,25 +353,16 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     if (isFreeOrder) {
       // SECURITY GUARD 1: 100% Free orders CANNOT be placed anonymously via guest checkout
       if (!sessionUserId) {
-        return {
-          success: false,
-          error: "Free promotional orders require you to be signed in to your Byiora account.",
-        }
+        return refuse("Please sign in to your Byiora account to claim this free order.")
       }
 
       // SECURITY GUARD 2: Free orders must complete Turnstile bot verification
       if (!transactionData.turnstileToken) {
-        return {
-          success: false,
-          error: "Bot protection verification required to claim promotional discounts.",
-        }
+        return refuse("Please complete the security check, then tap Claim Free Order again.")
       }
       const isCaptchaValid = await verifyTurnstileToken(transactionData.turnstileToken, ip)
       if (!isCaptchaValid) {
-        return {
-          success: false,
-          error: "Bot verification failed. Please try again.",
-        }
+        return refuse("The security check expired or failed. Please complete it again.")
       }
 
       paymentCategory = "free"
@@ -385,10 +377,10 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
       // SECURITY: Reject disabled payment methods server-side (prevents API bypass attacks)
       if (!pmData) {
-        return { success: false, error: "Selected payment method is not available." }
+        return refuse("Selected payment method is not available.")
       }
       if (!(pmData as any).is_enabled) {
-        return { success: false, error: "Selected payment method is currently unavailable. Please choose a different payment method." }
+        return refuse("Selected payment method is currently unavailable. Please choose a different payment method.")
       }
       if ((pmData as any).category) {
         paymentCategory = (pmData as any).category
@@ -469,7 +461,9 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
 
     if (error) {
       console.error("Error adding transaction:", error)
-      return { success: false, error: error.message || error.code || "Failed to add transaction" }
+      // The order insert also redeems the promo (database trigger); its refusals have customer wording.
+      const { promoRedemptionError } = await import("@/lib/promo/internal")
+      return refuse(promoRedemptionError(error.message) || error.message || error.code || "Failed to add transaction")
     }
 
     // Send Discord Webhook Notification ONLY for static (manual) QR payments.
@@ -533,22 +527,8 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       }
     }
 
-    // Insert in-app notification server-side for registered user (avoids client RLS violation)
-    if (actualUserId) {
-      Promise.resolve(
-        serviceSupabase
-          .from("notifications")
-          .insert({
-            title: "Order Confirmed! 🎉",
-            message: `Your order for ${transactionData.product} (${transactionData.amount}) has been confirmed. You can track its status in your transaction history.`,
-            type: "success",
-            user_id: actualUserId,
-            is_read: false,
-          })
-      ).catch((err) => {
-        console.error("Failed to insert order notification:", err)
-      })
-    }
+    // No in-app notification here: the order isn't confirmed yet and may still be cancelled.
+    // Customers are notified once it's actually paid (lib/fulfillment.ts) or completed by an admin (app/actions/orders.ts).
 
     // Sync customer email to Resend audience for broadcasts (both static & dynamic QR, with anti-spam check)
     if (transactionData.email) {

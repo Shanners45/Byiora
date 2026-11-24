@@ -28,8 +28,10 @@ function escapeXml(unsafe: string): string {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
-    const currency = (searchParams.get("currency") || "NPR").toUpperCase()
-    const targetCountry = (searchParams.get("country") || "NP").toUpperCase()
+    // Prices are stored in NPR: never relabel them as another currency.
+    const currency = "NPR"
+    const countryParam = (searchParams.get("country") || "NP").toUpperCase()
+    const targetCountry = /^[A-Z]{2}$/.test(countryParam) ? countryParam : "NP"
     const siteUrl = "https://www.byiora.com.np"
 
     const supabase = await createClient()
@@ -47,7 +49,13 @@ export async function GET(req: Request) {
 
     for (const p of products || []) {
       const denoms = Array.isArray(p.denominations) ? p.denominations : []
-      const productDescription = `Buy ${p.name} in Nepal with instant digital delivery by email. Pay in NPR with eSewa, Khalti or Fonepay QR at Byiora.`
+      const delivery =
+        p.category === "topup" ? "sent to your player ID after payment"
+          : p.category === "direct-login" ? "activated on your account by our team"
+            : "code emailed to you after payment"
+      const productDescription = `${p.name} in Nepal. Pay in NPR with eSewa, Khalti or Fonepay QR at Byiora; ${delivery}.`
+      // Game keys are video game software; everything else (gift cards, top-ups, subscriptions) is a gift card/voucher.
+      const googleCategory = p.category === "games" ? "1279" : "53"
       const brand = brandOf(p.name)
       const productLink = `${siteUrl}/en-np/${p.slug}`
       const imageLink = p.logo || `${siteUrl}/icon.png`
@@ -64,7 +72,8 @@ export async function GET(req: Request) {
       <g:price>0.00 ${currency}</g:price>
       <g:brand>${escapeXml(brand)}</g:brand>
       <g:condition>new</g:condition>
-      <g:google_product_category>53</g:google_product_category>
+      <g:google_product_category>${googleCategory}</g:google_product_category>
+      <g:product_type>${escapeXml(p.category || "digital-goods")}</g:product_type>
       <g:identifier_exists>no</g:identifier_exists>
       <g:shipping>
         <g:country>${targetCountry}</g:country>
@@ -79,7 +88,13 @@ export async function GET(req: Request) {
           const parsedPrice = parseFloat(rawPrice) || 0
           const formattedPrice = `${parsedPrice.toFixed(2)} ${currency}`
           const isItemInStock = denom.in_stock !== false && p.is_active !== false
-          const itemTitle = `${p.name} - ${denom.label}`
+          // Packs priced in ₹ or $ are region-locked cards; say so, since the price shown is NPR.
+          const label = String(denom.label || "")
+          const regionTag = /\bIND\b|india/i.test(label + p.name) ? ""
+            : /₹|\bINR\b/i.test(label) ? " (India region)"
+              : /\$|\bUSD\b/i.test(label) ? " (US region)"
+                : ""
+          const itemTitle = `${p.name} - ${label}${regionTag}`
           const itemId = `${p.id}-${idx + 1}`
 
           items.push(`    <item>
@@ -93,7 +108,8 @@ export async function GET(req: Request) {
       <g:price>${formattedPrice}</g:price>
       <g:brand>${escapeXml(brand)}</g:brand>
       <g:condition>new</g:condition>
-      <g:google_product_category>53</g:google_product_category>
+      <g:google_product_category>${googleCategory}</g:google_product_category>
+      <g:product_type>${escapeXml(p.category || "digital-goods")}</g:product_type>
       <g:identifier_exists>no</g:identifier_exists>
       <g:shipping>
         <g:country>${targetCountry}</g:country>

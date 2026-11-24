@@ -20,6 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { createProductAction } from "@/app/actions/products"
 import { RichTextEditor } from "@/components/rich-text-editor"
 import { decodeHtmlEntities, stripHtmlTags } from "@/lib/sanitize"
+import { toWebpFile } from "@/lib/image-webp"
 
 export default function AddProductPage() {
   const supabase = createClient()
@@ -106,14 +107,16 @@ export default function AddProductPage() {
     setIsUploading(true)
 
     try {
-      const fileExt = file.name.split(".").pop()
+      // Resized WebP: much lighter on mobile data than the original PNG/JPEG.
+      const uploadFile = await toWebpFile(file, 800)
+      const fileExt = uploadFile.name.split(".").pop()?.toLowerCase() || "webp"
       const fileName = `product-${Date.now()}.${fileExt}`
       const filePath = `${fileName}`
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("product-images")
-        .upload(filePath, file, {
-          cacheControl: "3600",
+        .upload(filePath, uploadFile, {
+          cacheControl: "31536000",
           upsert: false,
         })
 
@@ -146,9 +149,11 @@ export default function AddProductPage() {
     if (file.size > 2 * 1024 * 1024) { toast.error("Image size must be less than 2MB"); return }
     setIsUploadingIcon(true)
     try {
-      const fileExt = file.name.split(".").pop()
+      // Resized WebP: much lighter on mobile data than the original PNG/JPEG.
+      const uploadFile = await toWebpFile(file, 256)
+      const fileExt = uploadFile.name.split(".").pop()?.toLowerCase() || "webp"
       const fileName = `denom-icon-${Date.now()}.${fileExt}`
-      const { error: uploadError } = await supabase.storage.from("product-images").upload(fileName, file, { cacheControl: "3600", upsert: false })
+      const { error: uploadError } = await supabase.storage.from("product-images").upload(fileName, uploadFile, { cacheControl: "31536000", upsert: false })
       if (uploadError) { toast.error(`Failed to upload: ${uploadError.message}`); return }
       const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(fileName)
       if (urlData?.publicUrl) { setDenomIconUrl(urlData.publicUrl); toast.success("Denomination icon uploaded!") }
@@ -162,9 +167,11 @@ export default function AddProductPage() {
     if (file.size > 2 * 1024 * 1024) { toast.error("Image size must be less than 2MB"); return }
     setIsUploadingCatIcon(true)
     try {
-      const fileExt = file.name.split(".").pop()
+      // Resized WebP: much lighter on mobile data than the original PNG/JPEG.
+      const uploadFile = await toWebpFile(file, 256)
+      const fileExt = uploadFile.name.split(".").pop()?.toLowerCase() || "webp"
       const fileName = `cat-icon-${Date.now()}.${fileExt}`
-      const { error: uploadError } = await supabase.storage.from("product-images").upload(fileName, file, { cacheControl: "3600", upsert: false })
+      const { error: uploadError } = await supabase.storage.from("product-images").upload(fileName, uploadFile, { cacheControl: "31536000", upsert: false })
       if (uploadError) { toast.error(`Failed to upload: ${uploadError.message}`); return }
       const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(fileName)
       if (urlData?.publicUrl) { setNewDenomCatIconUrl(urlData.publicUrl); toast.success("Category Icon uploaded!") }
@@ -178,9 +185,11 @@ export default function AddProductPage() {
     if (file.size > 2 * 1024 * 1024) { toast.error("Image size must be less than 2MB"); return }
     setIsUploadingGuide(true)
     try {
-      const fileExt = file.name.split(".").pop()
+      // Resized WebP: much lighter on mobile data than the original PNG/JPEG.
+      const uploadFile = await toWebpFile(file, 1200)
+      const fileExt = uploadFile.name.split(".").pop()?.toLowerCase() || "webp"
       const fileName = `uid-guide-${Date.now()}.${fileExt}`
-      const { error: uploadError } = await supabase.storage.from("product-images").upload(fileName, file, { cacheControl: "3600", upsert: false })
+      const { error: uploadError } = await supabase.storage.from("product-images").upload(fileName, uploadFile, { cacheControl: "31536000", upsert: false })
       if (uploadError) { toast.error(`Failed to upload: ${uploadError.message}`); return }
       const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(fileName)
       if (urlData?.publicUrl) { setUidGuideImage(urlData.publicUrl); toast.success("Guide image uploaded!") }

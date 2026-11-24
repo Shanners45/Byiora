@@ -22,6 +22,15 @@ declare global {
   }
 }
 
+/**
+ * The token to submit: what the widget currently holds in its hidden field, else the last one we were handed.
+ * Phones can fire expired/error callbacks (app switch, flaky network) that clear our copy while the box still shows a tick.
+ */
+export function currentTurnstileToken(form: HTMLFormElement, fallback: string): string {
+  const live = new FormData(form).get("cf-turnstile-response")
+  return (typeof live === "string" && live) || fallback
+}
+
 interface TurnstileWidgetProps {
   onToken: (token: string) => void
 }
@@ -60,10 +69,14 @@ export function TurnstileWidget({ onToken }: TurnstileWidgetProps) {
 
   // Handle re-mounts if the script is already loaded and cleanup on unmount
   useEffect(() => {
-    if (typeof window !== "undefined" && window.turnstile) {
-      renderWidget()
-    }
+    // The shared <Script> fires onLoad only once, so a widget that mounts while it is still loading waits for it here.
+    let poll: ReturnType<typeof setInterval> | undefined
+    if (window.turnstile) renderWidget()
+    else poll = setInterval(() => {
+      if (window.turnstile) { clearInterval(poll); if (!widgetIdRef.current) renderWidget() }
+    }, 200)
     return () => {
+      clearInterval(poll)
       if (widgetIdRef.current && typeof window !== "undefined" && window.turnstile) {
         try {
           window.turnstile.remove(widgetIdRef.current)
@@ -81,8 +94,8 @@ export function TurnstileWidget({ onToken }: TurnstileWidgetProps) {
     <div className="w-full min-h-[65px] flex justify-center items-center overflow-hidden">
       <Script
         src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-        strategy="lazyOnload"
-        onLoad={renderWidget}
+        strategy="afterInteractive"
+        onLoad={() => { if (!widgetIdRef.current) renderWidget() }}
       />
       <div
         ref={ref}

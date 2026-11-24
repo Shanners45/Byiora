@@ -48,6 +48,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // Product slugs are lowercase: send old/mixed-case links (e.g. /en-np/Steam-Gift-Card) to the real page.
+  if (pathname.startsWith("/en-np/") && pathname !== pathname.toLowerCase()) {
+    url.pathname = pathname.toLowerCase()
+    return NextResponse.redirect(url, 301)
+  }
+
   // Merchant API: API-key auth and per-merchant limits live in the route (lib/merchant/api.ts), no cookies involved.
   // The merchant webhook relay is authenticated by QStash's signature in the route.
   if (pathname.startsWith("/api/v1/") || pathname === "/api/webhooks/merchant-deliver") {
@@ -60,7 +66,7 @@ export async function updateSession(request: NextRequest) {
   const isMerchantHost = host === "merchant.byiora.com.np"
 
   // ── Merchant portal: merchant.byiora.com.np/* serves /merchant/* ─────────
-  if (pathname.startsWith("/merchant") || (isMerchantHost && !pathname.startsWith("/api") && !pathname.startsWith("/ingest"))) {
+  if (pathname.startsWith("/merchant") || (isMerchantHost && !pathname.startsWith("/api") && !pathname.startsWith("/ingest") && pathname !== "/manifest.json")) {
     const target = pathname.startsWith("/merchant") ? pathname : pathname === "/" ? "/merchant/login" : `/merchant${pathname}`
     if (target === "/merchant") {
       url.pathname = isMerchantHost ? "/dashboard" : "/merchant/dashboard"
@@ -213,6 +219,12 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url, 308)
   }
 
+  // Public API reads (e.g. the checkout status poll every few seconds) refresh their own session
+  // where they need one; skipping it here saves a Supabase round trip per request.
+  if (isApiRoute && !isMutation) {
+    return NextResponse.next()
+  }
+
   // ── Default: refresh Supabase session and continue ─────────────────────
   // Skip session refresh for Server Actions to prevent cookie clobbering
   // and unnecessary getUser() rate limits from frequent polling actions.
@@ -229,6 +241,13 @@ export async function updateSession(request: NextRequest) {
 
 async function refreshSupabaseSession(request: NextRequest, cookieName?: string): Promise<{ supabaseResponse: NextResponse; user: any }> {
   let supabaseResponse = NextResponse.next({ request })
+
+  // Visitors who aren't signed in have no session to refresh: skip the Supabase call entirely.
+  // Most storefront traffic is anonymous, so this is the biggest Vercel CPU saving.
+  const hasSession = request.cookies.getAll().some((c) =>
+    cookieName ? c.name.startsWith(cookieName) : c.name.startsWith("sb-") && c.name.includes("-auth-token") && !c.name.startsWith(MERCHANT_AUTH_COOKIE),
+  )
+  if (!hasSession) return { supabaseResponse, user: null }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

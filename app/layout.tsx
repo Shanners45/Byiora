@@ -178,9 +178,19 @@ export default function RootLayout({
             // in dev, remove any worker and cache left over from earlier runs.
             __html: process.env.NODE_ENV === "production" ? `
               if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function() {});
-                });
+                if (location.hostname.indexOf('merchant.') === 0) {
+                  // The storefront's offline cache must not run on the merchant portal.
+                  navigator.serviceWorker.getRegistrations().then(function(rs) { rs.forEach(function(r) { r.unregister(); }); });
+                } else {
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js').catch(function() {});
+                  });
+                  // Lost connection: reload so the worker shows the offline page (it reloads back here once online).
+                  // Not on checkout or admin, where a reload could interrupt a payment or unsaved work.
+                  window.addEventListener('offline', function() {
+                    if (navigator.serviceWorker.controller && !/^\\/(checkout|admin)(\\/|$)/.test(location.pathname)) location.reload();
+                  });
+                }
               }
             ` : `
               if ('serviceWorker' in navigator) {

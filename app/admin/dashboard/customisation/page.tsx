@@ -13,6 +13,7 @@ import { Upload, Trash2, ImageIcon, Plus, ChevronUp, ChevronDown, Check, X, Laye
 import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { revalidateHomepageAction } from "@/app/actions/customisation"
+import { toWebpFile } from "@/lib/image-webp"
 
 interface Banner {
   id: string
@@ -246,9 +247,11 @@ export default function CustomisationPage() {
     if (!file) return
     setIsUploadingBanner(bannerId)
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg"
+      // Resized WebP: much lighter on mobile data than the original PNG/JPEG.
+      const uploadFile = await toWebpFile(file, 1920)
+      const ext = uploadFile.name.split(".").pop()?.toLowerCase() || "webp"
       const filePath = `banners/banner-${bannerId}-${Date.now()}.${ext}`
-      const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, file, { cacheControl: "3600", upsert: true })
+      const { error: uploadError } = await supabase.storage.from("product-images").upload(filePath, uploadFile, { cacheControl: "31536000", upsert: true })
       if (uploadError) throw new Error()
       const { data } = supabase.storage.from("product-images").getPublicUrl(filePath)
       onSuccess(data.publicUrl)

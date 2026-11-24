@@ -143,7 +143,24 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
  * Brand = the issuer named in the product title ("Steam Gift Card" -> "Steam").
  * shortcut: derived from the name, add a brand column if a name ever misleads it.
  */
+// Products whose name doesn't start with the issuing brand.
+const BRAND_OVERRIDES: [RegExp, string][] = [
+  [/\b(windows|office)\b/i, "Microsoft"],
+  [/\bdiscord\b/i, "Discord"],
+  [/\bgrand theft auto|\bgta\b|\bred dead\b/i, "Rockstar Games"],
+  [/\bxbox\b/i, "Xbox"],
+  [/\bvalorant\b/i, "Riot Games"],
+  [/\bfree\s*fire\b/i, "Garena"],
+  [/\bchatgpt\b/i, "OpenAI"],
+  [/\bclaude\b/i, "Anthropic"],
+  [/\bbgmi\b/i, "Krafton"],
+  [/\bapp store\b/i, "Apple"],
+  [/\bea sports\b/i, "EA Sports"],
+]
+
 export function brandOf(name: string): string {
+  const override = BRAND_OVERRIDES.find(([re]) => re.test(String(name || "")))
+  if (override) return override[1]
   const brand = String(name || "")
     .replace(/\([^)]*\)/g, " ")
     .replace(/\b(e-?gift\s*card|gift\s*card|giftcard|top-?up|topup|recharge|subscription|official|key|codes?|global|digital|pc|console|uc|diamonds?|inr|usd|npr)\b/gi, " ")

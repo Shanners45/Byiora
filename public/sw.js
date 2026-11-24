@@ -1,7 +1,7 @@
 // Byiora Service Worker v2
 // Provides offline caching, runtime image caching, and offline fallback
 
-const CACHE_VERSION = 'byiora-v3'
+const CACHE_VERSION = 'byiora-v4'
 const OFFLINE_URL = '/offline.html'
 
 // Assets to pre-cache on install (app shell)
@@ -12,32 +12,6 @@ const PRECACHE_ASSETS = [
   '/byiora-logo-full.png',
   '/manifest.json',
 ]
-
-// Routes that must never be cached or replayed from cache: they render account,
-// payment, or bearer-token content.
-const SENSITIVE_PATH_PREFIXES = [
-  '/admin',
-  '/checkout',
-  '/transactions',
-  '/verify-guest',
-  '/reset-password',
-  '/forgot-password',
-  '/sign-up',
-  '/en-np/sign-up',
-  '/en-np/reset-password',
-  '/en-np/forgot-password',
-]
-
-function isSensitivePath(pathname) {
-  return SENSITIVE_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(prefix + '/')
-  )
-}
-
-function isCacheableResponse(response) {
-  const cacheControl = response.headers.get('Cache-Control') || ''
-  return !/no-store|private/i.test(cacheControl)
-}
 
 // Install: pre-cache the offline page and essential assets
 self.addEventListener('install', (event) => {
@@ -68,8 +42,8 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
-  // Skip non-GET requests
-  if (request.method !== 'GET') return
+  // Skip non-GET requests and browser-extension URLs (the Cache API rejects them)
+  if (request.method !== 'GET' || !url.protocol.startsWith('http')) return
 
   // Skip Supabase auth/API, Sentry, analytics, and other external API calls
   if (
@@ -83,29 +57,10 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // For navigation requests (HTML pages): network-first with offline fallback
+  // Pages: always from the network. If that fails we're offline: show the offline page
+  // (it reloads itself when the connection returns) rather than a stale copy that can't load its data.
   if (request.mode === 'navigate') {
-    const sensitive = isSensitivePath(url.pathname)
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          // Never persist authenticated, payment, or token-bearing HTML.
-          if (response.ok && !sensitive && isCacheableResponse(response)) {
-            const clone = response.clone()
-            caches.open(CACHE_VERSION).then((cache) => {
-              cache.put(request, clone)
-            })
-          }
-          return response
-        })
-        .catch(() => {
-          if (sensitive) return caches.match(OFFLINE_URL)
-          // Try cache first, then offline fallback
-          return caches.match(request).then((cached) => {
-            return cached || caches.match(OFFLINE_URL)
-          })
-        })
-    )
+    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)))
     return
   }
 

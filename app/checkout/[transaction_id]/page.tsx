@@ -216,82 +216,74 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
     }
   }, [isExpired, qrData, transaction_id, isCancelled, isNewlyExpired])
 
-  // Background Polling replaced by Supabase Realtime
-  useEffect(() => {
-    if (!qrData || isCompleted || isExpired || error || qrData.isStatic || isCancelled) return
-
-    const supabase = createClient()
-    const channel = supabase
-      .channel(`checkout-${transaction_id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'transactions',
-        filter: `transaction_id=eq.${transaction_id}`
-      }, (payload) => {
-        const newStatus = payload.new.status
-        const remarks = payload.new.failure_remarks
-        if (newStatus === 'Completed' || newStatus === 'Paid') {
-          setIsCompleted(true)
-        } else if (newStatus === 'Processing' || remarks === 'QR Scanned') {
-          if (!qrScannedAt.current) qrScannedAt.current = Date.now()
-          setIsQrScanned(true)
-        } else if (newStatus === 'Cancelled') {
-          setIsCancelled(true)
-          setOverlayType("cancelled")
-        } else if (newStatus === 'Payment Failed') {
-          setIsNewlyExpired(true)
-          setIsExpired(true)
-        }
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [qrData, isCompleted, isExpired, error, transaction_id, isCancelled])
-
-  // Fast 1.5-second polling backup for real-time QR scan detection & completion
+  // Live status without polling: the database pushes every status change of this order on a
+  // Realtime channel only this page knows (checkout:<key>, key from the status endpoint).
+  // The page reads the status once on open, whenever the push arrives, when the channel
+  // (re)connects and when the customer returns to the tab. No timer: "I have paid" covers the rest.
   useEffect(() => {
     if (!qrData || isCompleted || isExpired || error || isCancelled) return
 
     let isMounted = true
-    const checkStatus = async () => {
-      if (!isMounted) return
+    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null
+    const supabase = createClient()
+
+    const checkStatus = async (): Promise<string | null> => {
+      if (!isMounted || document.visibilityState === "hidden") return null
       try {
         const res = await fetch(`/api/transaction-status?id=${encodeURIComponent(transaction_id)}&ct=${encodeURIComponent(getCheckoutCapability() || "")}`, { cache: "no-store" })
-        if (res.ok) {
-          const data = await res.json()
-          if (data.status === "Completed" || data.status === "Paid") {
-            if (isMounted) setIsCompleted(true)
-            return
-          }
-          if (data.status === "Processing" || data.failure_remarks === "QR Scanned") {
-            if (isMounted) {
-              if (!qrScannedAt.current) qrScannedAt.current = Date.now()
-              setIsQrScanned(true)
-            }
-          }
-          if (data.status === "Cancelled") {
-            if (isMounted) {
-              setIsCancelled(true)
-              setOverlayType("cancelled")
-            }
-            return
-          }
-          if (data.status === "Failed" || data.status === "Payment Failed") {
-            if (isMounted) setIsExpired(true)
-            return
-          }
+        if (!res.ok || !isMounted) return null
+        const data = await res.json()
+        if (data.status === "Completed" || data.status === "Paid") {
+          setIsCompleted(true)
+        } else if (data.status === "Cancelled") {
+          setIsCancelled(true)
+          setOverlayType("cancelled")
+        } else if (data.status === "Failed" || data.status === "Payment Failed") {
+          setIsExpired(true)
+        } else if (data.status === "Processing" || data.failure_remarks === "QR Scanned") {
+          if (!qrScannedAt.current) qrScannedAt.current = Date.now()
+          setIsQrScanned(true)
         }
-      } catch (e) {}
+        return typeof data.rk === "string" ? data.rk : null
+      } catch {
+        return null
+      }
     }
 
-    // Execute immediately on mount/update then start 1.5s interval
-    checkStatus()
-    const interval = setInterval(checkStatus, 1500)
+    // At most one re-check every 2 s, however many pushes arrive; a cue during the wait is
+    // folded into one trailing check, so a real update is never dropped.
+    let lastCheck = 0
+    let queued: ReturnType<typeof setTimeout> | null = null
+    const cue = () => {
+      if (queued) return
+      queued = setTimeout(() => {
+        queued = null
+        lastCheck = Date.now()
+        checkStatus()
+      }, Math.max(0, 2000 - (Date.now() - lastCheck)))
+    }
+
+    const onVisible = () => cue()
+    document.addEventListener("visibilitychange", onVisible)
+
+    lastCheck = Date.now()
+    checkStatus().then((key) => {
+      if (!isMounted || !key) return
+      channel = supabase
+        // Private, listen-only channel: browsers can't send on it (see the checkout_realtime migration).
+        .channel(`checkout:${key}`, { config: { private: true } })
+        .on("broadcast", { event: "status" }, cue)
+        .subscribe((state) => {
+          // Catch anything that changed while the channel was connecting or reconnecting.
+          if (state === "SUBSCRIBED") cue()
+        })
+    })
 
     return () => {
       isMounted = false
-      clearInterval(interval)
+      if (queued) clearTimeout(queued)
+      document.removeEventListener("visibilitychange", onVisible)
+      if (channel) supabase.removeChannel(channel)
     }
   }, [qrData, isCompleted, isExpired, error, transaction_id, isCancelled])
 

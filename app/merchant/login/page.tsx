@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { TurnstileWidget } from "@/components/turnstile-widget"
+import { TurnstileWidget, currentTurnstileToken } from "@/components/turnstile-widget"
 import { createClient } from "@/lib/supabase/client"
 import {
   getMerchantStateAction,
@@ -99,9 +99,10 @@ export default function MerchantLogin() {
 
   const signIn = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!captchaToken) return toast.error("Complete the captcha first.")
+    const token = currentTurnstileToken(e.currentTarget as HTMLFormElement, captchaToken)
+    if (!token) return toast.error("Complete the captcha first.")
     run(async () => {
-      const r = await loginMerchantAction(email, password, captchaToken)
+      const r = await loginMerchantAction(email, password, token)
       if (!r.success) return void toast.error(r.error)
       setPassword("")
       goTo(r.stage)
@@ -154,9 +155,10 @@ export default function MerchantLogin() {
 
   const requestReset = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!captchaToken) return toast.error("Complete the captcha first.")
+    const token = currentTurnstileToken(e.currentTarget as HTMLFormElement, captchaToken)
+    if (!token) return toast.error("Complete the captcha first.")
     run(async () => {
-      const r = await requestMerchantPasswordResetAction(email, captchaToken)
+      const r = await requestMerchantPasswordResetAction(email, token)
       if (!r.success) return void toast.error(r.error)
       toast.success(r.message)
       setCode("")

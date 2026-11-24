@@ -168,10 +168,6 @@ export async function GET(request: Request) {
         .eq("transaction_id", purchase_order_id)
         .in("status", ["Payment Pending", "Processing"])
 
-      // Industry Standard: Release promo code hold on verification expiry/cancel
-      const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
-      releasePromoCodeOnFailure(purchase_order_id).catch(() => {})
-
       return NextResponse.redirect(failRedirect)
 
     } else if (verifyData.status === "Pending" || verifyData.status === "Initiated") {

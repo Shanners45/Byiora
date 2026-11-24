@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     const supabase = createServiceRoleClient()
     const { data, error } = await supabase
       .from("transactions")
-      .select("status, failure_remarks, transaction_id, user_id")
+      .select("status, failure_remarks, transaction_id, user_id, realtime_key")
       .eq("transaction_id", id)
       .single()
 
@@ -53,7 +53,9 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       status: (data as any).status,
-      failure_remarks: (data as any).failure_remarks
+      failure_remarks: (data as any).failure_remarks,
+      // Secret channel for live status pushes to this checkout page (see the checkout_realtime migration).
+      rk: (data as any).realtime_key,
     })
   } catch (e: any) {
     return NextResponse.json({ error: "Unexpected error" }, { status: 500 })

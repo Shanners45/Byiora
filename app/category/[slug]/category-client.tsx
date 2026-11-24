@@ -38,7 +38,7 @@ const CATEGORY_INTROS: Record<string, string[]> = {
   "digital-goods": [
     "Buy digital gift cards in Nepal and pay in rupees with eSewa, Khalti or any Fonepay QR, with no international card needed. Byiora stocks cards for gaming, shopping and apps, including Steam, Google Play, App Store, PlayStation, Xbox Game Pass, Nintendo eShop, Amazon, Roblox, Valorant and Discord Nitro, plus software keys such as Windows, Microsoft Office and Norton 360.",
     "Each card works only in the region shown on its product page. Many of our codes are India (INR) region, so check that your account uses the same country before you buy: region mismatches are not refundable. Prices are in NPR, and the card's face value is listed next to each price.",
-    "After payment is confirmed, your code is emailed to you and saved in your order history. Every product page has step-by-step redemption instructions. If a code shows as invalid or already used, report it within 24 hours with your order ID and a screenshot, as set out in our Refund Policy.",
+    "After payment is confirmed, your code is emailed to you and saved in your order history. Every product page has step-by-step instructions for adding the code to your account. If a code shows an error, contact us within 24 hours with your order ID and a screenshot and our team will look into it, as set out in our Refund Policy.",
   ],
   topup: [
     "Top up your favourite games in Nepal without sharing your password. Byiora credits in-game currency straight to your account using your Player ID (UID), plus a server or zone ID for some games. Available top-ups include PUBG Mobile UC, Free Fire diamonds, Genshin Impact, Clash of Clans and EA SPORTS FC Mobile.",
@@ -48,7 +48,7 @@ const CATEGORY_INTROS: Record<string, string[]> = {
   games: [
     "Buy official PC game keys in Nepal and pay in rupees through eSewa, Khalti or Fonepay QR. Our catalogue includes Grand Theft Auto V, Minecraft and Red Dead Redemption 2, all as GLOBAL keys.",
     "Every key activates on a specific platform or launcher, which is stated on its product page. Check the platform and make sure your PC meets the game's minimum requirements before you buy, because keys bought for the wrong platform or an incompatible device cannot be refunded.",
-    "After payment is confirmed, your key is emailed to you and saved in your order history together with activation steps. If a key is rejected as invalid or already redeemed, send us your order ID and a screenshot of the error within 24 hours.",
+    "After payment is confirmed, your key is emailed to you and saved in your order history together with activation steps. If a key shows an activation error, send us your order ID and a screenshot of the error within 24 hours and our team will look into it.",
   ],
   "direct-login": [
     "Some subscriptions cannot be bought with a code or a player ID, so Byiora activates them directly on your account. This category covers ChatGPT, Claude, Netflix and Prime Video plans, paid in Nepali rupees with eSewa, Khalti or Fonepay QR.",

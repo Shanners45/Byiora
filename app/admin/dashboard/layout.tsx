@@ -12,6 +12,7 @@ import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
 import { getAdminSessionAction, type AdminSession } from "@/app/actions/admin-utils"
 import { AdminSessionProvider } from "@/lib/admin-session-context"
+import { BrandLoader } from "@/components/brand-loader"
 
 export default function AdminDashboardLayout({
   children,
@@ -109,16 +110,7 @@ export default function AdminDashboardLayout({
   }
 
   // Show loading while checking auth
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-4 border-t-[#7E3AF2] border-gray-200 mx-auto mb-4"></div>
-          <p className="text-[#4B5563]">Loading dashboard...</p>
-        </div>
-      </div>
-    )
-  }
+  if (isLoading) return <BrandLoader label="Loading dashboard" />
 
   if (!adminUser && loadError) {
     return (
@@ -190,11 +182,11 @@ export default function AdminDashboardLayout({
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[#F9FAFB] overscroll-none">
+    <div className="flex h-dvh w-full overflow-hidden bg-[#F9FAFB] overscroll-none">
       {/* Sidebar */}
       <aside
         className={`${sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          } fixed inset-y-0 z-50 flex w-64 flex-col bg-[#7E3AF2] text-white border-r border-[#E5E7EB] transition-transform duration-300 lg:translate-x-0 lg:static lg:h-screen lg:shrink-0`}
+          } fixed inset-y-0 z-50 flex w-64 flex-col bg-[#7E3AF2] text-white border-r border-[#E5E7EB] transition-transform duration-300 lg:translate-x-0 lg:static lg:h-dvh lg:shrink-0`}
       >
         <div className="h-16 flex items-center justify-between px-4 border-b border-white/20 shrink-0">
           <div className="flex items-center gap-4">
@@ -268,7 +260,8 @@ export default function AdminDashboardLayout({
       </aside>
 
       {/* Main content */}
-      <div className="flex flex-1 flex-col h-screen overflow-hidden min-w-0">
+      {/* Phones scroll this whole column so the header scrolls away; desktop keeps it pinned. */}
+      <div className="flex flex-1 flex-col h-dvh overflow-y-auto overscroll-contain lg:overflow-hidden min-w-0">
         {/* Top header */}
         <header className="bg-white border-b border-[#E5E7EB] shadow-sm shrink-0">
           <div className="flex h-16 items-center justify-between px-4">
@@ -289,7 +282,7 @@ export default function AdminDashboardLayout({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto overscroll-contain bg-[#F9FAFB] p-4 md:p-6"><AdminSessionProvider value={adminUser}>
+        <main className="flex-1 lg:overflow-y-auto lg:overscroll-contain bg-[#F9FAFB] p-4 md:p-6"><AdminSessionProvider value={adminUser}>
           {children}
         </AdminSessionProvider></main>
       </div>

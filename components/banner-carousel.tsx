@@ -95,17 +95,22 @@ export function BannerCarousel({ banners }: BannerCarouselProps) {
           >
             <ChevronRight className="h-6 w-6" />
           </Button>
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
+          <div className="absolute bottom-1 left-1/2 transform -translate-x-1/2 flex">
             {banners.map((_, index) => (
+              // The visible dot stays small; the padding gives thumbs a ~24x24 px target.
               <button
                 key={index}
                 onClick={() => setCurrentSlide(index)}
                 aria-label={`Go to banner ${index + 1}`}
                 aria-current={index === currentSlide}
-                className={`h-2 rounded-full transition-all ${
-                  index === currentSlide ? "bg-white w-8" : "bg-white/50 w-2"
-                }`}
-              />
+                className="flex h-6 items-center px-1"
+              >
+                <span
+                  className={`block h-2 rounded-full transition-all ${
+                    index === currentSlide ? "bg-white w-8" : "bg-white/50 w-2"
+                  }`}
+                />
+              </button>
             ))}
           </div>
         </>

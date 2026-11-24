@@ -55,8 +55,7 @@ export function PostHogProvider() {
   // Fire $pageview on route change
   useEffect(() => {
     if (typeof window === "undefined") return
-    if (!posthog.__loaded) return
-
+    // Queued until the SDK has loaded, so the first page view is no longer dropped.
     posthog.capture("$pageview", { $current_url: sanitizeAnalyticsUrl(window.location.href) })
   }, [pathname, searchParams])
 

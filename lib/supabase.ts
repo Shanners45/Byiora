@@ -535,6 +535,10 @@ export interface Database {
           ip_address: string | null
           device_id: string | null
           used_at: string
+          status: "reserved" | "consumed" | "released"
+          reserved_until: string | null
+          consumed_at: string | null
+          released_at: string | null
         }
         Insert: {
           id?: string

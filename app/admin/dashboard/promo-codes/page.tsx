@@ -966,7 +966,7 @@ export default function PromoCodesPage() {
         <DialogContent className="w-[calc(100vw-2rem)] max-w-lg max-h-[85vh] overflow-y-auto bg-white border border-gray-200 shadow-2xl rounded-2xl p-4 sm:p-6" aria-describedby={undefined}>
           <DialogHeader className="pb-3 border-b border-gray-100">
             <DialogTitle className="text-lg sm:text-xl font-bold text-gray-900">Usage History: {selectedCodeForUsage?.code}</DialogTitle>
-            <p className="text-xs text-gray-500">All customer redemptions for this promotional voucher</p>
+            <p className="text-xs text-gray-500">Every order that used this code. Released uses don't count toward the limit.</p>
           </DialogHeader>
           {usageLoading ? (
             <div className="py-10 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-[#F59E0B]" /></div>
@@ -979,6 +979,11 @@ export default function PromoCodesPage() {
                   <div>
                     <p className="font-semibold text-gray-900">{u.user_email}</p>
                     <p className="text-xs text-gray-500">{u.transaction_id} • {formatDate(u.used_at)}</p>
+                    <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      u.status === "consumed" ? "bg-emerald-100 text-emerald-700" : u.status === "reserved" ? "bg-amber-100 text-amber-700" : "bg-gray-200 text-gray-600"
+                    }`}>
+                      {u.status === "consumed" ? "Used" : u.status === "reserved" ? "Awaiting payment" : "Released (doesn't count)"}
+                    </span>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-gray-400 line-through">Rs. {u.original_price}</p>

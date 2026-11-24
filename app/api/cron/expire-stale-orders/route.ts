@@ -226,10 +226,6 @@ export async function GET(req: Request) {
         continue
       }
 
-      // Industry Standard: Release promo code hold on cron expiration
-      const { releasePromoCodeOnFailure } = await import("@/lib/promo/internal")
-      releasePromoCodeOnFailure(txn.transaction_id).catch(() => {})
-
       // Increment failure strike for user/IP on expiration
       incrementFailureStrike({
         email: txn.user_email,

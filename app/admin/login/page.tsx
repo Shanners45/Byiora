@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
 import Image from "next/image"
-import { TurnstileWidget } from "@/components/turnstile-widget"
+import { TurnstileWidget, currentTurnstileToken } from "@/components/turnstile-widget"
 import { loginAdminWithPassword } from "@/app/actions/admin-auth"
 import { getAdminMfaStageAction, trustAdminDeviceAction } from "@/app/actions/admin-utils"
 import { createClient } from "@/lib/supabase/client"
@@ -160,13 +160,14 @@ export default function AdminLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!captchaToken) {
+    const token = currentTurnstileToken(e.currentTarget as HTMLFormElement, captchaToken)
+    if (!token) {
       toast.error("Complete captcha verification first.")
       return
     }
     setIsLoading(true)
     try {
-      const result = await loginAdminWithPassword(email, password, captchaToken)
+      const result = await loginAdminWithPassword(email, password, token)
       if (result.error) {
         toast.error(result.error || "Invalid credentials")
         setIsLoading(false)

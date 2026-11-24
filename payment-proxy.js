@@ -212,7 +212,8 @@ function startFonepayWebSocket(websocketUrl, transactionId, validationTraceId) {
                     try { txStatus = JSON.parse(txStatus); } catch (e) {}
                 }
 
-                const isPaid = (txStatus && txStatus.success === true && (txStatus.message === "SUCCESS" || txStatus.message === "PAID" || txStatus.status === "SUCCESS")) || msg.status === "SUCCESS" || msg.event === "PAID" || msg.event === "SUCCESS";
+                // Fonepay's payment message carries transactionStatus.paymentSuccess === true ("Request Complete").
+                const isPaid = (txStatus && (txStatus.paymentSuccess === true || (txStatus.success === true && (txStatus.message === "SUCCESS" || txStatus.message === "PAID" || txStatus.status === "SUCCESS")))) || msg.paymentSuccess === true || msg.status === "SUCCESS" || msg.event === "PAID" || msg.event === "SUCCESS";
 
                 const isQrScanned = !isPaid && (
                     (txStatus && (txStatus.qrVerified === true || txStatus.message === "VERIFIED" || txStatus.status === "VERIFIED" || txStatus.isScanned === true)) ||
@@ -222,6 +223,9 @@ function startFonepayWebSocket(websocketUrl, transactionId, validationTraceId) {
                     msg.event === "VERIFIED" ||
                     msg.status === "VERIFIED"
                 );
+
+                // Shape only (field names + flags), no amounts or customer data: lets us confirm Fonepay's format.
+                console.log(`[WS] Message for ${transactionId}: keys=${Object.keys(msg || {}).join(",")} status=${txStatus && typeof txStatus === 'object' ? JSON.stringify({ keys: Object.keys(txStatus), message: txStatus.message, success: txStatus.success, paymentSuccess: txStatus.paymentSuccess, qrVerified: txStatus.qrVerified }) : typeof txStatus}`);
 
                 const webhookUrl = `${CALLBACK_SITE_URL}/api/webhooks/fonepay-ws`;
                 const secret = INTERNAL_SECRET || process.env.INTERNAL_API_SECRET;

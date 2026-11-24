@@ -53,7 +53,7 @@ export async function POST(req: Request) {
       if (typeof innerStatus === "string") {
         try { innerStatus = JSON.parse(innerStatus) } catch (e) {}
       }
-      const isPaid = (innerStatus?.success === true && (innerStatus?.message === "SUCCESS" || innerStatus?.message === "PAID" || innerStatus?.status === "SUCCESS")) || fonepayData.status === "SUCCESS" || fonepayData.event === "PAID" || fonepayData.event === "SUCCESS"
+      const isPaid = innerStatus?.paymentSuccess === true || (innerStatus?.success === true && (innerStatus?.message === "SUCCESS" || innerStatus?.message === "PAID" || innerStatus?.status === "SUCCESS")) || fonepayData.paymentSuccess === true || fonepayData.status === "SUCCESS" || fonepayData.event === "PAID" || fonepayData.event === "SUCCESS"
       const hasScanFlag = innerStatus?.qrVerified === true || innerStatus?.message === "VERIFIED" || innerStatus?.status === "VERIFIED" || innerStatus?.isScanned === true || fonepayData.event === "QR_SCANNED" || fonepayData.event === "SCANNED" || fonepayData.status === "VERIFIED" || fonepayData.qrVerified === true
       if (hasScanFlag && !isPaid) {
         isScanEvent = true

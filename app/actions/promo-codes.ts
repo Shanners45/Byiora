@@ -5,7 +5,7 @@ import { headers } from "next/headers"
 import { rateLimit } from "@/lib/rate-limit"
 import { customAlphabet } from "nanoid"
 import { promoValidationInputSchema, createPromoCodeSchema } from "@/lib/validations/promo-code"
-import { getEffectiveUsageCount } from "@/lib/promo/internal"
+import { countLiveUses } from "@/lib/promo/internal"
 
 // Cryptographically secure code generator — no ambiguous characters (0/O, 1/I/L)
 const generateRandomCode = customAlphabet("ABCDEFGHJKMNPQRSTUVWXYZ23456789", 8)
@@ -51,6 +51,8 @@ export interface PromoUsageRecord {
   ip_address: string | null
   device_id: string | null
   used_at: string
+  /** reserved = awaiting payment, consumed = paid, released = order failed/cancelled (doesn't count). */
+  status: "reserved" | "consumed" | "released"
 }
 
 export interface PromoValidationResult {
@@ -175,36 +177,22 @@ export async function validatePromoCodeAction({
       return { valid: false, message: "Invalid or expired promo code." }
     }
 
-    // ── CHECK 5: Global usage limit ──
+    // ── CHECK 5: Global usage limit (usage_count is kept exact by the database from live uses) ──
     if (promo.usage_limit !== null && promo.usage_count >= promo.usage_limit) {
       return { valid: false, message: "This promo code has reached its usage limit." }
     }
 
-    // ── CHECK 6: Per-user usage (by email) ──
+    // ── CHECK 6-7: Per-customer limit by account, email and device (prevents email cycling) ──
     if (promo.per_user_limit && promo.per_user_limit > 0) {
-      const { data: emailUsages } = await supabase
-        .from("promo_code_usage")
-        .select("id, transaction_id")
-        .eq("promo_code_id", promo.id)
-        .ilike("user_email", cleanEmail)
-
-      const activeEmailUsageCount = await getEffectiveUsageCount(supabase, emailUsages || [])
-      if (activeEmailUsageCount >= promo.per_user_limit) {
-        return { valid: false, message: "You've already used this promo code." }
-      }
-    }
-
-    // ── CHECK 7: Per-user usage (by device — prevents email cycling) ──
-    if (deviceId && promo.per_user_limit && promo.per_user_limit > 0) {
-      const { data: deviceUsages } = await supabase
-        .from("promo_code_usage")
-        .select("id, transaction_id")
-        .eq("promo_code_id", promo.id)
-        .eq("device_id", deviceId)
-
-      const activeDeviceUsageCount = await getEffectiveUsageCount(supabase, deviceUsages || [])
-      if (activeDeviceUsageCount >= promo.per_user_limit) {
-        return { valid: false, message: "You've already used this promo code." }
+      const identities = [
+        userId ? { column: "user_id" as const, value: userId } : null,
+        { column: "user_email" as const, value: cleanEmail },
+        deviceId ? { column: "device_id" as const, value: deviceId } : null,
+      ].filter((m): m is NonNullable<typeof m> => m !== null)
+      for (const match of identities) {
+        if ((await countLiveUses(supabase, promo.id, match)) >= promo.per_user_limit) {
+          return { valid: false, message: "You've already used this promo code." }
+        }
       }
     }
 
@@ -316,7 +304,7 @@ export async function validatePromoCodeAction({
     // ── CHECK 16: 100% Free promos strictly require an authenticated registered account ──
     const isFullDiscountPreview = promo.discount_type === "percentage" ? parseFloat(promo.discount_value) >= 100 : parseFloat(promo.discount_value) >= actualPrice
     if (isFullDiscountPreview && !userId) {
-      return { valid: false, message: "100% discount codes require signing in to your account." }
+      return { valid: false, message: "Please sign in to use this promo code." }
     }
 
     // ── Calculate discount ──

@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, HelpCircle, QrCode, Download, Loader2, CheckCircle2, Tag, ChevronDown, ChevronUp } from "lucide-react"
+import { ArrowLeft, HelpCircle, QrCode, Download, Loader2, CheckCircle2, Tag, ChevronDown, ChevronUp, ShoppingCart } from "lucide-react"
 import { TurnstileWidget } from "@/components/turnstile-widget"
 import { checkCheckoutSecurityAction } from "@/app/actions/transactions"
 import { validatePromoCodeAction, getPromoVisibilityAction } from "@/app/actions/promo-codes"
@@ -28,6 +28,8 @@ import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
 import { ProductSkeleton } from "@/components/product-skeleton"
 import { FaqAccordion } from "@/components/faq-accordion"
+import { GiftCard } from "@/components/gift-card"
+import type { RelatedProduct } from "./get-product"
 import { sanitizeHtml } from "@/lib/sanitize"
 import { encryptCheckoutData } from "@/app/actions/checkout-encryption"
 interface PaymentMethod {
@@ -50,14 +52,25 @@ import { getOrCreateDeviceId, initDeviceFingerprint } from "@/lib/security/devic
  */
 function productFacts(product: any): { region: string | null; delivery: string; soldOut: boolean } {
   const denoms: any[] = product?.denominations || []
-  const text = [product?.name || "", ...denoms.map((d) => d?.label || "")].join(" ")
-  const region = /\bglobal\b/i.test(text)
+  const name = product?.name || ""
+  const labels: string[] = denoms.map((d) => d?.label || "")
+  const isIndia = (s: string) => /₹|\bINR\b|\(IN\)|\bInd(ia|ian)?\b/i.test(s)
+  const isUsd = (s: string) => /\bUSD\b|\$/.test(s)
+  // Decide per pack, not on the whole page: a product can mix regions (Amazon sells ₹ and $ cards,
+  // some Valorant packs are India-only while the rest also work in Nepal).
+  const indiaPacks = labels.filter(isIndia).length
+  const usdPacks = labels.filter(isUsd).length
+  const region = /\bglobal\b/i.test(name)
     ? "Global"
-    : /₹|\bINR\b|\(IN\)|\bInd(ia|ian)?\b/i.test(text)
+    : isIndia(name) || (labels.length > 0 && indiaPacks === labels.length)
       ? "India (INR). Works only with Indian-region accounts"
-      : /\bUSD\b|\$/i.test(text)
-        ? "US (USD)"
-        : null
+      : indiaPacks > 0 && usdPacks > 0
+        ? "India (₹) and US ($) cards. Pick the one that matches your account's country"
+        : indiaPacks > 0
+          ? "Packs marked India / IND work only on Indian-region accounts"
+          : isUsd(name) || usdPacks > 0
+            ? "US (USD)"
+            : null
   const delivery =
     product?.category === "topup"
       ? "Credited to your Player ID after payment"
@@ -68,11 +81,47 @@ function productFacts(product: any): { region: string | null; delivery: string; 
   return { region, delivery, soldOut }
 }
 
-export default function ProductDetailPage({ initialProduct = null }: { initialProduct?: Product | null }) {
+export default function ProductDetailPage({
+  initialProduct = null,
+  related = [],
+}: {
+  initialProduct?: Product | null
+  related?: RelatedProduct[]
+}) {
   const params = useParams()
   const router = useRouter()
   const { addTransaction, user } = useAuth()
   const [selectedDenomination, setSelectedDenomination] = useState("")
+  const [showUidGuide, setShowUidGuide] = useState(false)
+  // Floating pill bar: shown while the real buy button is off-screen.
+  const buyButtonRef = useRef<HTMLDivElement | null>(null)
+  const [buyButtonInView, setBuyButtonInView] = useState(true)
+  // Sentinel at the end of the purchase area: once it scrolls into view the customer is looking at
+  // related products or the footer, so the pill steps aside instead of covering them.
+  const [pastPurchaseArea, setPastPurchaseArea] = useState(false)
+  // Callback refs attach each observer the moment its element mounts (the purchase area can render
+  // after the first commit), and disconnect it when the element goes away.
+  const buyObserver = useRef<IntersectionObserver | null>(null)
+  const setBuyButtonEl = useCallback((node: HTMLDivElement | null) => {
+    buyButtonRef.current = node
+    buyObserver.current?.disconnect()
+    buyObserver.current = null
+    if (!node || typeof IntersectionObserver === "undefined") return
+    buyObserver.current = new IntersectionObserver(([entry]) => setBuyButtonInView(entry.isIntersecting), { threshold: 0.1 })
+    buyObserver.current.observe(node)
+  }, [])
+  const endObserver = useRef<IntersectionObserver | null>(null)
+  const setPillEndEl = useCallback((node: HTMLDivElement | null) => {
+    endObserver.current?.disconnect()
+    endObserver.current = null
+    if (!node || typeof IntersectionObserver === "undefined") return
+    // Root stretched far upwards: "intersecting" means the sentinel is anywhere above the bottom of the
+    // screen, so a jump straight to the footer is caught too.
+    endObserver.current = new IntersectionObserver(([entry]) => setPastPurchaseArea(entry.isIntersecting), {
+      rootMargin: "100000px 0px 0px 0px",
+    })
+    endObserver.current.observe(node)
+  }, [])
   const [selectedPayment, setSelectedPayment] = useState("")
   const [email, setEmail] = useState(user?.email || "")
 
@@ -218,6 +267,8 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
   const isEmailValid = Boolean(email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
 
   const isFreeOrder = Boolean(appliedPromo && appliedPromo.finalPrice === 0)
+  // Free (100% promo) orders always need the security check, as the server requires; flagged IPs need it for every order.
+  const needsCaptcha = requiresTurnstile || isFreeOrder
 
   const areAllFieldsFilled = Boolean(
     selectedDenomination &&
@@ -327,8 +378,8 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
       return
     }
 
-    if (requiresTurnstile && !turnstileToken) {
-      toast.error("Please complete the security verification challenge before proceeding.")
+    if (needsCaptcha && !turnstileToken) {
+      toast.error("Please complete the security check above, then try again.")
       return
     }
 
@@ -351,7 +402,7 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
         email: email,
         productId: product?.id || productSlug,
         productCategory: product?.category || (isTopupProduct ? "topup" : isDirectLoginProduct ? "direct-login" : "digital-goods"),
-        turnstileToken: requiresTurnstile ? turnstileToken : undefined,
+        turnstileToken: needsCaptcha ? turnstileToken : undefined,
         promoCode: appliedPromo?.code || undefined,
         guestData: {
           ...(isTopupProduct && !topupHasCheckout ? { userId, server: selectedServer } : {}),
@@ -481,70 +532,9 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
     }
   }
 
-  const productJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Product",
-    name: product.name,
-    description: product.description,
-    image: product.logo,
-    sku: product.id,
-    brand: {
-      "@type": "Brand",
-      name: "Byiora",
-    },
-    offers: giftCard.denominations.map((denom: any) => ({
-      "@type": "Offer",
-      name: `${product.name} - ${denom.label}`,
-      url: `https://www.byiora.com.np/en-np/${productSlug}`,
-      priceCurrency: "NPR",
-      price: parseFloat(String(denom.price).replace(/,/g, "")) || 0,
-      availability: "https://schema.org/InStock",
-      itemCondition: "https://schema.org/NewCondition",
-      hasMerchantReturnPolicy: {
-        "@type": "MerchantReturnPolicy",
-        applicableCountry: "NP",
-        returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
-        merchantReturnLink: "https://www.byiora.com.np/refund-policy",
-      },
-      shippingDetails: {
-        "@type": "OfferShippingDetails",
-        shippingDestination: {
-          "@type": "DefinedRegion",
-          addressCountry: "NP",
-        },
-        deliveryTime: {
-          "@type": "ShippingDeliveryTime",
-          handlingTime: {
-            "@type": "QuantitativeValue",
-            minValue: 0,
-            maxValue: 0,
-            unitCode: "DAY",
-          },
-          transitTime: {
-            "@type": "QuantitativeValue",
-            minValue: 0,
-            maxValue: 0,
-            unitCode: "DAY",
-          },
-        },
-        shippingRate: {
-          "@type": "MonetaryAmount",
-          value: 0,
-          currency: "NPR",
-        },
-      },
-    })),
-  }
-
   return (
     <div className="min-h-screen bg-brand-purple">
-      {/* Product JSON-LD Schema */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(productJsonLd).replace(/</g, "\\u003c"),
-        }}
-      />
+      {/* Product JSON-LD is server-rendered once in layout.tsx; a second copy here contradicted it. */}
       <Header />
 
       <div className="container mx-auto px-4 py-8">
@@ -685,17 +675,25 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
                         )}
 
                         {product.uid_guide_image && (
-                          <div className="relative group/uid cursor-help flex-shrink-0">
+                          <div
+                            className="relative group/uid cursor-help flex-shrink-0"
+                            // The guide image is large and only shown on hover/tap: fetch it then, not with the page.
+                            onMouseEnter={() => setShowUidGuide(true)}
+                            onTouchStart={() => setShowUidGuide(true)}
+                            onFocus={() => setShowUidGuide(true)}
+                          >
                             <HelpCircle className="h-5 w-5 text-[#00BCD4] hover:text-[#00BCD4]/80 transition-colors" />
                             <div className="absolute bottom-full right-0 mb-3 w-[280px] md:w-[400px] max-w-[calc(100vw-40px)] p-2 bg-white rounded-xl shadow-2xl border border-gray-100 opacity-0 group-hover/uid:opacity-100 pointer-events-none transition-all duration-200 transform translate-y-2 group-hover/uid:translate-y-0 z-[100]">
                               <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-gray-50 border border-gray-100">
-                                <Image
-                                  src={product.uid_guide_image}
-                                  alt="ID Guide"
-                                  fill
-                                  className="object-contain"
-                                  unoptimized
-                                />
+                                {showUidGuide && (
+                                  <Image
+                                    src={product.uid_guide_image}
+                                    alt="Where to find your player ID"
+                                    fill
+                                    className="object-contain"
+                                    unoptimized
+                                  />
+                                )}
                               </div>
                               <div className="absolute -bottom-2 right-2 w-4 h-4 bg-white border-r border-b border-gray-100 rotate-45" />
                             </div>
@@ -1141,13 +1139,14 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
                 </div>
               )}
 
-              {/* Cloudflare Turnstile Security Verification for Flagged IPs */}
-              {requiresTurnstile && areAllFieldsFilled && (
+              {/* Cloudflare Turnstile: flagged IPs and free (100% promo) orders */}
+              {needsCaptcha && areAllFieldsFilled && (
                 <div className="mt-4 flex justify-center items-center">
                   <TurnstileWidget onToken={(token) => setTurnstileToken(token)} />
                 </div>
               )}
 
+              <div ref={setBuyButtonEl}>
               <Button
                 onClick={() => {
                   const isFreeOrder = appliedPromo && appliedPromo.finalPrice === 0
@@ -1162,7 +1161,7 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
                     setShowQRDialog(true)
                   }
                 }}
-                disabled={isProcessing || !areAllFieldsFilled || (requiresTurnstile && !turnstileToken)}
+                disabled={isProcessing || !areAllFieldsFilled || (needsCaptcha && !turnstileToken)}
                 className="w-full mt-6 bg-[#00BCD4] hover:bg-[#00BCD4]/90 text-white py-3 text-lg font-semibold flex items-center justify-center gap-2"
               >
                 {isProcessing ? (
@@ -1176,6 +1175,7 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
                   "Proceed to Payment"
                 )}
               </Button>
+              </div>
 
               <div className="mt-4 text-xs text-brand-light-gray leading-relaxed">
                 By clicking "Proceed to Payment", I acknowledge that the purchase of this virtual item will be a license for its use, subject to the publisher providing this service and to their end user license agreement that I accepted.
@@ -1184,7 +1184,7 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
                 <br />
                 (i) I acknowledge that I have read, understand and agree to Byiora's <Link href="/terms-and-conditions" className="text-brand-sky-blue hover:underline">Terms & Conditions</Link> and <Link href="/privacy-policy" className="text-brand-sky-blue hover:underline">Privacy Policy</Link>, and
                 <br />
-                (ii) I understand and agree that all sales are final and non-refundable. For more details, please view our <Link href="/refund-policy" className="text-brand-sky-blue hover:underline">Refund Policy</Link>.
+                (ii) I understand that digital goods can't be returned once delivered, and that refunds or replacements are only given in the cases listed in our <Link href="/refund-policy" className="text-brand-sky-blue hover:underline">Refund Policy</Link>.
               </div>
             </div>
           </div>
@@ -1407,6 +1407,57 @@ export default function ProductDetailPage({ initialProduct = null }: { initialPr
           animation: promoBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
       `}} />
+
+      {/* Mobile-only "Proceed to Payment" pill, shown once a pack is picked. It only scrolls to the real
+          payment button, so every check (email, payment method, captcha) still runs there. Hidden while that
+          button is on screen and once the customer has scrolled past the purchase area. */}
+      <div ref={setPillEndEl} aria-hidden="true" />
+      {giftCard && selectedDenomination && (() => {
+        const hidden = buyButtonInView || pastPurchaseArea
+        const denom = giftCard.denominations?.find((d: any) => d.label === selectedDenomination)
+        const price = appliedPromo ? appliedPromo.finalPrice : parseFloat(String(denom?.price ?? "").replace(/,/g, ""))
+        return (
+          <div
+            className={`md:hidden fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 transition-all duration-200 ${
+              hidden ? "pointer-events-none translate-y-6 opacity-0" : "translate-y-0 opacity-100"
+            }`}
+            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+            aria-hidden={hidden}
+          >
+            <button
+              type="button"
+              tabIndex={hidden ? -1 : 0}
+              onClick={() => buyButtonRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
+              className="flex h-14 w-full max-w-md items-center gap-3 rounded-full bg-[#5B3FE4] px-5 text-white shadow-[0_8px_24px_rgba(91,63,228,0.35)] transition hover:bg-[#4F35D6] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#5B3FE4]/40"
+            >
+              <ShoppingCart className="h-6 w-6 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-center text-base font-semibold">Proceed to Payment</span>
+              {Number.isFinite(price) && (
+                <span className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-sm font-bold">Rs. {price.toLocaleString("en-IN")}</span>
+              )}
+            </button>
+          </div>
+        )
+      })()}
+
+      {/* Related products: server-rendered links so out-of-stock pages aren't dead ends. */}
+      {related.length > 0 && (
+        <section className="container mx-auto px-4 pb-12" aria-labelledby="related-products-heading">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-1 h-8 rounded-full bg-brand-sky-blue flex-shrink-0" />
+            <h2 id="related-products-heading" className="text-2xl md:text-3xl font-bold text-white uppercase tracking-wide">
+              You might also like
+            </h2>
+          </div>
+          <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-4 md:gap-6">
+            {related.map((p) => (
+              <Link key={p.id} href={`/en-np/${p.slug}`} className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300">
+                <GiftCard id={p.id} name={p.name} logo={p.logo} slug={p.slug} ribbon_text={p.ribbon_text} isOutOfStock={p.isOutOfStock} />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       <Footer />
     </div>

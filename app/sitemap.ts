@@ -20,17 +20,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     url: `${BASE_URL}/en-np/${p.slug}`,
     lastModified: p.updated_at ? new Date(p.updated_at) : LEGAL_UPDATED,
   }))
-  // Home and category listings change when products change.
+  // The home listing changes when products change. Category pages are not promoted (owner's call), so not listed.
   const catalogUpdated = new Date(
     Math.max(LEGAL_UPDATED.getTime(), ...products.map((p) => (p.updated_at ? new Date(p.updated_at).getTime() : 0)))
   )
 
   return [
     { url: BASE_URL, lastModified: catalogUpdated },
-    ...["topup", "digital-goods", "games", "direct-login"].map((c) => ({
-      url: `${BASE_URL}/category/${c}`,
-      lastModified: catalogUpdated,
-    })),
     ...["about", "contact", "terms-and-conditions", "privacy-policy", "refund-policy"].map((p) => ({
       url: `${BASE_URL}/${p}`,
       lastModified: LEGAL_UPDATED,

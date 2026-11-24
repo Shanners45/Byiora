@@ -26,6 +26,15 @@ try {
 
 const nextConfig = {
   allowedDevOrigins: ["192.168.1.70", "localhost"],
+  // Don't advertise the framework in every response (X-Powered-By: Next.js).
+  poweredByHeader: false,
+  // Strip Sentry's debug-logging code from the browser bundle. Sentry's own `webpack.treeshake`
+  // option below doesn't apply to Turbopack builds; this compile-time flag does the same job.
+  compiler: {
+    define: {
+      __SENTRY_DEBUG__: "false",
+    },
+  },
   // Dev logs print Server Action arguments verbatim, which leaks passwords,
   // OTPs and captcha tokens into terminal history.
   logging: { serverFunctions: false },
