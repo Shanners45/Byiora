@@ -377,21 +377,30 @@ export async function flagOrderForManualReview({
   provider,
   bankTxnId,
   paidAmount,
+  reason = "stripped_remarks",
 }: {
   transactionId: string
   provider: string
   bankTxnId?: string | null
   paidAmount?: string | number | null
+  /** stripped_remarks: auto-check found an amount/time-only match. paid_before_order: a manual claim's reference
+   *  points to a payment made before this order was created. */
+  reason?: "stripped_remarks" | "paid_before_order"
 }) {
   try {
     const supabase = createServiceRoleClient()
-    const remarks = `Manual review required: a ${provider} payment with stripped remarks may match this order (bank ref ${bankTxnId || "unknown"}, amount Rs. ${paidAmount ?? "unknown"}). Not auto-fulfilled.`
+    const why =
+      reason === "paid_before_order"
+        ? `the customer's reference matches a ${provider} payment made before this order was created`
+        : `a ${provider} payment with stripped remarks may match this order`
+    const remarks = `Manual review required: ${why} (bank ref ${bankTxnId || "unknown"}, amount Rs. ${paidAmount ?? "unknown"}). Not auto-fulfilled.`
 
     await supabase
       .from("transactions")
       .update({ failure_remarks: remarks, updated_at: new Date().toISOString() } as any)
       .eq("transaction_id", transactionId)
-      .in("status", ["Payment Pending", "Processing"])
+      // Manual claims usually arrive after the QR expired, so failed orders are flagged too.
+      .in("status", ["Payment Pending", "Processing", "Payment Failed"])
       .is("bank_txn_id", null)
 
     if (process.env.DISCORD_WEBHOOK_URL) {
@@ -402,7 +411,10 @@ export async function flagOrderForManualReview({
           embeds: [{
             title: "🟡 PAYMENT NEEDS MANUAL RECONCILIATION",
             color: 0xFFB300,
-            description: "A bank payment with stripped remarks could not be matched to an order ID. The order was **not** auto-fulfilled. Verify in the bank dashboard and fulfil manually if it is genuine.",
+            description:
+              reason === "paid_before_order"
+                ? "A customer's manual claim gave a bank reference for a payment made **before** this order was created. The order was **not** auto-fulfilled. Check in the Fonepay dashboard which order that payment was for, and fulfil manually only if it is genuinely this one."
+                : "A bank payment with stripped remarks could not be matched to an order ID. The order was **not** auto-fulfilled. Verify in the bank dashboard and fulfil manually if it is genuine.",
             fields: [
               { name: "Order ID", value: transactionId, inline: true },
               { name: "Provider", value: provider.toUpperCase(), inline: true },

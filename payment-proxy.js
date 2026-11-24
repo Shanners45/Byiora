@@ -61,6 +61,21 @@ function parseJwt(token) {
  * Get date string (YYYY-MM-DD) in Nepal Time (Asia/Kathmandu).
  * Supports offset in days and optional base date.
  */
+/**
+ * Parses a payment time from Fonepay's report into epoch ms. Times without a timezone are treated as Nepal
+ * time (Fonepay is a Nepali gateway and its portal shows NPT). Returns null when there is no usable time.
+ */
+function parseFonepayTime(value) {
+    if (value === undefined || value === null || value === '') return null;
+    if (typeof value === 'number') return value > 1e12 ? value : value * 1000;
+    let s = String(value).trim();
+    if (/^\d{13}$/.test(s)) return Number(s);
+    if (/^\d{10}$/.test(s)) return Number(s) * 1000;
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(s)) s = s.replace(' ', 'T') + '+05:45';
+    const ms = new Date(s).getTime();
+    return isNaN(ms) ? null : ms;
+}
+
 function getNepalDate(offsetDays = 0, baseDate = null) {
     const d = baseDate ? new Date(baseDate) : new Date();
     const targetMs = (isNaN(d.getTime()) ? Date.now() : d.getTime()) + (offsetDays * 24 * 60 * 60 * 1000);
@@ -961,6 +976,11 @@ async function handleFonepayVerifyTransaction(body, res) {
 
             const expectedAmount = (amount !== undefined && amount !== null) ? Math.round(parseFloat(String(amount).replace(/,/g, ''))) : 0;
 
+            // A manual claim's reference may point at a payment made before this order existed: that can't be
+            // this order's payment, so it is held for staff review instead of being accepted.
+            const orderCreatedMsForClaim = orderCreatedAt ? new Date(orderCreatedAt).getTime() : NaN;
+            let paidBeforeOrderTxn = null;
+
             // ====================================================================
             // TIER 1: EXACT MATCH (Standard Bill ID / Remarks OR Bank Txn ID / Phone)
             // ====================================================================
@@ -995,6 +1015,17 @@ async function handleFonepayVerifyTransaction(body, res) {
                     );
 
                     if (isBankRefMatch) {
+                        // The row carries this order's own bill ID: it is this QR's payment, whatever the time.
+                        if (isTrackingMatch) {
+                            console.log(`🎯 [FONEPAY] Bank Receipt Ref matched (with order bill ID): ${maskedRef}`);
+                            return true;
+                        }
+                        const paidMs = parseFonepayTime(txn.dateTransmissionDateTime || txn.transmissionDateTime || txn.paymentDate || txn.createdDate);
+                        if (paidMs !== null && !isNaN(orderCreatedMsForClaim) && paidMs < orderCreatedMsForClaim - 60 * 1000) {
+                            console.log(`🟠 [FONEPAY] Bank Receipt Ref ${maskedRef} is for a payment made before the order was created; holding for review`);
+                            paidBeforeOrderTxn = txn;
+                            return false;
+                        }
                         console.log(`🎯 [FONEPAY] Bank Receipt Ref matched: ${maskedRef}`);
                         return true;
                     }
@@ -1075,6 +1106,22 @@ async function handleFonepayVerifyTransaction(body, res) {
                         bankTxnId: reviewTxn.fonepayTransactionId || reviewTxn.retrievalReferenceNumber || reviewTxn.id,
                         paidAmount: reviewTxn.transactionAmount || reviewTxn.amount,
                         paymentDate: reviewTxn.dateTransmissionDateTime || reviewTxn.transmissionDateTime || reviewTxn.paymentDate
+                    }
+                }));
+                return;
+            }
+
+            if (!matchingTxn && paidBeforeOrderTxn) {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                    success: false,
+                    needsReview: true,
+                    reason: "paid_before_order",
+                    message: "The reference matches a payment made before this order was created; requires manual review",
+                    data: {
+                        bankTxnId: paidBeforeOrderTxn.fonepayTransactionId || paidBeforeOrderTxn.retrievalReferenceNumber || paidBeforeOrderTxn.id,
+                        paidAmount: paidBeforeOrderTxn.transactionAmount || paidBeforeOrderTxn.amount,
+                        paymentDate: paidBeforeOrderTxn.dateTransmissionDateTime || paidBeforeOrderTxn.transmissionDateTime || paidBeforeOrderTxn.paymentDate
                     }
                 }));
                 return;

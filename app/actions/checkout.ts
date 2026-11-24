@@ -793,6 +793,22 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
       }
     }
 
+    // A reference that matches a payment made BEFORE this order existed can't be this order's payment
+    // (or the report's time is unclear). Never auto-fulfil it: staff check it in admin.
+    if (proxyData.needsReview) {
+      await flagOrderForManualReview({
+        transactionId,
+        provider: paymentCategory,
+        bankTxnId: proxyData.data?.bankTxnId || proxyData.data?.txnId,
+        paidAmount: proxyData.data?.paidAmount,
+        reason: proxyData.reason === "paid_before_order" ? "paid_before_order" : "stripped_remarks",
+      })
+      return {
+        success: false,
+        error: "We found this payment but couldn't confirm it belongs to this order. Our team has been notified and will check it shortly.",
+      }
+    }
+
     if (proxyData.success && proxyData.data?.status === "SUCCESS") {
       // SECURITY: Validate paid amount matches order amount (anti-underpayment fraud)
       const rawPaidAmount = proxyData.data.paidAmount
@@ -825,6 +841,18 @@ export async function verifyPaymentByPhoneAction(transactionId: string, phoneNum
 
         if (existingClaims && existingClaims.length > 0) {
           console.error(`[FRAUD REPLAY BLOCKED] Bank transaction ${candidateBankTxnId} already claimed by ${existingClaims[0].transaction_id}`)
+          return { success: false, error: "This bank payment has already been claimed by another order." }
+        }
+
+        // The same payment may already have been credited to a merchant wallet top-up (same Fonepay account).
+        // The database also refuses this (transactions_bank_txn_used_once trigger); this gives a clear message.
+        const { data: topupClaims } = await (supabase as any)
+          .from("merchant_topups")
+          .select("id")
+          .eq("bank_txn_id", String(candidateBankTxnId))
+          .limit(1)
+        if (topupClaims && topupClaims.length > 0) {
+          console.error(`[FRAUD REPLAY BLOCKED] Bank transaction ${candidateBankTxnId} was already credited to a merchant top-up`)
           return { success: false, error: "This bank payment has already been claimed by another order." }
         }
       }
