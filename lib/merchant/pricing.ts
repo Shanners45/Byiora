@@ -4,7 +4,7 @@
 export const merchantPrice = (retailPaisa: number, discountPercent: number) =>
   Math.max(1, Math.round((retailPaisa * (100 - Number(discountPercent || 0))) / 100))
 
-export type PriceRule = { product_id: string; denomination_label: string; visible: boolean | null; discount_percent: number | null; fixed_price_paisa: number | null }
+export type PriceRule = { product_id: string; denomination_label: string; denomination_id?: string | null; visible: boolean | null; discount_percent: number | null; fixed_price_paisa: number | null }
 export type PriceSource = "fixed" | "amount_discount" | "product_discount" | "merchant_discount"
 export const ruleKey = (productId: string, label: string) => `${productId}\u0000${label}`
 
@@ -16,13 +16,14 @@ export const ruleKey = (productId: string, label: string) => `${productId}\u0000
 export function resolvePrice(
   m: { discount_percent: number; catalog_mode: "all" | "selected" },
   productId: string,
-  label: string,
+  /** The pack's permanent id (the "" key is the product-wide rule). */
+  denomKey: string,
   retailPaisa: number,
   globallyEnabled: boolean,
   rules: Map<string, PriceRule>,
 ): { visible: boolean; pricePaisa: number; source: PriceSource } {
   const pr = rules.get(ruleKey(productId, ""))
-  const dr = rules.get(ruleKey(productId, label))
+  const dr = rules.get(ruleKey(productId, denomKey))
   const productVisible = m.catalog_mode === "selected" ? pr?.visible === true : pr?.visible !== false
   const visible = globallyEnabled && productVisible && dr?.visible !== false
   if (dr?.fixed_price_paisa) return { visible, pricePaisa: Number(dr.fixed_price_paisa), source: "fixed" }

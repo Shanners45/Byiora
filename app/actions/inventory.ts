@@ -6,6 +6,13 @@ import { verifyAdmin, getAdminSessionAction } from "./admin-utils"
 import { revalidatePath } from "next/cache"
 import { fillPendingFromStock } from "@/lib/merchant/trade"
 import { decryptInventoryCode as decryptForPreview } from "@/lib/crypto/inventory"
+import { denomKey, findDenomination, type Denomination } from "@/lib/denominations"
+
+/** A product's pack, by permanent id (or by title when that title is unique in the product). */
+async function loadPack(productId: string, key: string): Promise<Denomination | undefined> {
+  const { data } = await (createServiceRoleClient().from("products") as any).select("denominations").eq("id", productId).maybeSingle()
+  return findDenomination<Denomination>(data?.denominations, key)
+}
 
 const CODES_PAGE_SIZE = 20
 
@@ -18,7 +25,7 @@ export async function getInventoryProductsAction() {
   const supabase = createServiceRoleClient()
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, slug, logo, category, denominations, checkout_fields, uid_instructions")
+    .select("id, name, slug, logo, category, denominations, denomination_categories, checkout_fields, uid_instructions")
     .in("category", ["digital-goods", "games"])
     .order("created_at", { ascending: false })
 
@@ -45,7 +52,7 @@ export async function getProductStockAction(productId: string) {
   
   const { data, error } = await supabase
     .from("gift_card_inventory")
-    .select("denomination_label, status, merchant_id")
+    .select("denomination_id, denomination_label, status, merchant_id")
     .eq("product_id", productId)
 
   if (error) return { error: error.message }
@@ -54,12 +61,13 @@ export async function getProductStockAction(productId: string) {
   const stats: Record<string, { available: number; delivered: number }> = {}
   
   data.forEach((item: any) => {
-    if (!stats[item.denomination_label]) {
-      stats[item.denomination_label] = { available: 0, delivered: 0 }
+    const key = item.denomination_id || item.denomination_label
+    if (!stats[key]) {
+      stats[key] = { available: 0, delivered: 0 }
     }
     // A merchant's private codes can't be sold on the storefront, so they don't count as available here.
-    if (item.status === "AVAILABLE" && !item.merchant_id) stats[item.denomination_label].available++
-    if (item.status === "DELIVERED") stats[item.denomination_label].delivered++
+    if (item.status === "AVAILABLE" && !item.merchant_id) stats[key].available++
+    if (item.status === "DELIVERED") stats[key].delivered++
   })
 
   return { success: true, stats }
@@ -68,8 +76,10 @@ export async function getProductStockAction(productId: string) {
 /**
  * Bulk adds multiple codes for a denomination
  */
-export async function addInventoryCodesAction(productId: string, denominationLabel: string, codesRaw: string) {
+export async function addInventoryCodesAction(productId: string, denominationKey: string, codesRaw: string) {
   if (!(await verifyAdmin())) return { error: "Unauthorized" }
+  const pack = await loadPack(productId, denominationKey)
+  if (!pack) return { error: "That pack no longer exists. Refresh the page and pick it again." }
   
   const adminSession = await getAdminSessionAction()
   const adminUserId = adminSession.success ? adminSession.data?.id : "unknown-admin"
@@ -95,7 +105,8 @@ export async function addInventoryCodesAction(productId: string, denominationLab
         .from("gift_card_inventory")
         .insert({
           product_id: productId,
-          denomination_label: denominationLabel,
+          denomination_label: pack.label,
+          denomination_id: pack.id || null,
           encrypted_code: encryptedBlob,
           code_hash: codeHash,
           added_by: adminUserId || "unknown-admin"
@@ -117,7 +128,7 @@ export async function addInventoryCodesAction(productId: string, denominationLab
   }
 
   // Merchant orders that were waiting for this amount get their codes now.
-  const merchantOrdersFilled = successCodes.length ? await fillPendingFromStock(productId, denominationLabel).catch(() => 0) : 0
+  const merchantOrdersFilled = successCodes.length ? await fillPendingFromStock(productId, denomKey(pack)).catch(() => 0) : 0
 
   revalidatePath("/admin/dashboard/inventory")
   return { 
@@ -133,8 +144,11 @@ export async function addInventoryCodesAction(productId: string, denominationLab
  * One page (20) of codes for a denomination with masked previews, newest first.
  * status: "AVAILABLE" | "DELIVERED" | "all". Totals per status come back for the filter tabs.
  */
-export async function getDenominationCodesAction(productId: string, denominationLabel: string, page = 1, status: "all" | "AVAILABLE" | "DELIVERED" = "all") {
+export async function getDenominationCodesAction(productId: string, denominationKey: string, page = 1, status: "all" | "AVAILABLE" | "DELIVERED" = "all") {
   if (!(await verifyAdmin())) return { error: "Unauthorized" }
+  const pack = await loadPack(productId, denominationKey)
+  // Codes are tied to the pack id; a pack without one (none since ids were added) matches by title.
+  const forPack = (q: any) => (pack?.id ? q.eq("denomination_id", pack.id) : q.eq("denomination_label", pack?.label ?? denominationKey))
 
   const supabase = createServiceRoleClient()
   const from = (Math.max(1, Math.floor(page)) - 1) * CODES_PAGE_SIZE
@@ -142,9 +156,9 @@ export async function getDenominationCodesAction(productId: string, denomination
     .from("gift_card_inventory")
     .select("id, status, created_at, encrypted_code, added_by, transaction_id, merchant_id", { count: "exact" })
     .eq("product_id", productId)
-    .eq("denomination_label", denominationLabel)
+  query = forPack(query)
   if (status !== "all") query = query.eq("status", status)
-  const counted = (s: "AVAILABLE" | "DELIVERED") => supabase.from("gift_card_inventory").select("id", { count: "exact", head: true }).eq("product_id", productId).eq("denomination_label", denominationLabel).eq("status", s)
+  const counted = (s: "AVAILABLE" | "DELIVERED") => forPack(supabase.from("gift_card_inventory").select("id", { count: "exact", head: true }).eq("product_id", productId)).eq("status", s)
   const [{ data, error, count }, { count: available }, { count: delivered }] = await Promise.all([
     query.order("created_at", { ascending: false }).range(from, from + CODES_PAGE_SIZE - 1),
     counted("AVAILABLE"),
@@ -240,7 +254,7 @@ export async function deleteInventoryCodeAction(inventoryId: string) {
  * Deletes an inventory code by exact matching value.
  * Used when an admin enters a typo and wants to burn/remove it immediately by pasting the code.
  */
-export async function deleteInventoryCodeByValueAction(productId: string, denominationLabel: string, rawCode: string) {
+export async function deleteInventoryCodeByValueAction(productId: string, denominationKey: string, rawCode: string) {
   if (!(await verifyAdmin())) return { error: "Unauthorized" }
 
   const trimmed = rawCode.trim()
@@ -251,13 +265,15 @@ export async function deleteInventoryCodeByValueAction(productId: string, denomi
 
   const codeHash = generateCodeHash(trimmed)
   const supabase = createServiceRoleClient()
+  const pack = await loadPack(productId, denominationKey)
+  if (!pack) return { error: "That pack no longer exists. Refresh the page and pick it again." }
 
   // Find the matching AVAILABLE code
   const { data, error: findErr } = await (supabase
     .from("gift_card_inventory") as any)
     .select("id, status")
     .eq("product_id", productId)
-    .eq("denomination_label", denominationLabel)
+    .eq(pack.id ? "denomination_id" : "denomination_label", pack.id || pack.label)
     .eq("code_hash", codeHash)
     .eq("status", "AVAILABLE")
     .maybeSingle()
@@ -277,7 +293,7 @@ export async function deleteInventoryCodeByValueAction(productId: string, denomi
 
   if (deleteErr) return { error: deleteErr.message }
 
-  console.log(`[AUDIT] Admin ${adminUserId} burned/deleted matching inventory code ID ${item.id} for product ${productId} (${denominationLabel})`)
+  console.log(`[AUDIT] Admin ${adminUserId} burned/deleted matching inventory code ID ${item.id} for product ${productId} (${pack.label})`)
 
   revalidatePath("/admin/dashboard/inventory")
   return { success: true }

@@ -949,7 +949,7 @@ export function InventoryTab({ merchant, refreshKey = 0, onChanged }: { merchant
   const paged = usePaged(inv?.rows || [])
 
   if (!inv) return <p className="text-sm text-[#4B5563] text-center py-8">Loading inventory...</p>
-  const labels = inv.products.find((p) => p.id === form.productId)?.labels || []
+  const packs = inv.products.find((p) => p.id === form.productId)?.packs || []
   const count = form.codes.split(/\r?\n/).map((c) => c.trim()).filter(Boolean).length
 
   const add = async () => {
@@ -1003,7 +1003,7 @@ export function InventoryTab({ merchant, refreshKey = 0, onChanged }: { merchant
           </select>
           <select value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} disabled={!form.productId} className={`h-10 border px-3 text-sm bg-white ${inputCls}`} aria-label="Amount">
             <option value="">Choose amount…</option>
-            {labels.map((l) => <option key={l} value={l}>{l}</option>)}
+            {packs.map((pk) => <option key={pk.id} value={pk.id}>{pk.title}</option>)}
           </select>
         </div>
         <Textarea value={form.codes} onChange={(e) => setForm({ ...form, codes: e.target.value })} rows={5} placeholder="One code per line" className={`${inputCls} font-mono text-sm`} aria-label="Codes" />
@@ -1018,7 +1018,7 @@ export function InventoryTab({ merchant, refreshKey = 0, onChanged }: { merchant
           <>
             <div className="rounded-lg border border-gray-200 bg-white divide-y divide-gray-100">
               {paged.pageItems.map((r) => (
-                <div key={`${r.productId}-${r.label}`} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
+                <div key={`${r.productId}-${r.denominationId ?? r.label}`} className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm">
                   <div className="min-w-0"><p className="font-semibold text-[#1F2937] truncate">{r.productName}</p><p className="text-xs text-[#6B7280]">{r.label}</p></div>
                   <div className="text-right shrink-0"><p className={`font-bold ${r.available ? "text-emerald-600" : "text-gray-400"}`}>{r.available} available</p><p className="text-xs text-[#6B7280]">{r.delivered} sold</p></div>
                 </div>

@@ -12,6 +12,8 @@ import { alertStaff } from "@/lib/merchant/alerts"
 export async function alertIfSoldOut(opts: {
   productId: string
   label: string
+  /** The pack's permanent id; counts that pack only (a title can repeat across categories). */
+  denominationId?: string | null
   productName?: string
   soldVia: string
   merchantOrderId?: string
@@ -28,13 +30,14 @@ export async function alertIfSoldOut(opts: {
       if (!fromShared) return
     }
 
-    const { count, error } = await db
+    let left = db
       .from("gift_card_inventory")
       .select("id", { count: "exact", head: true })
       .eq("product_id", opts.productId)
-      .eq("denomination_label", opts.label)
       .eq("status", "AVAILABLE")
       .is("merchant_id", null)
+    left = opts.denominationId ? left.eq("denomination_id", opts.denominationId) : left.eq("denomination_label", opts.label)
+    const { count, error } = await left
     if (error || count === null || count > 0) return
 
     let name = opts.productName
@@ -54,7 +57,7 @@ export async function alertIfSoldOut(opts: {
       ],
       0xdc2626,
       // At most one alert per pack per hour, in case two orders take the last codes at the same moment.
-      `sold-out:${opts.productId}:${opts.label}`,
+      `sold-out:${opts.productId}:${opts.denominationId || opts.label}`,
     )
   } catch (e: any) {
     console.error("[stock alert] failed:", e?.message)

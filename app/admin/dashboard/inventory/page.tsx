@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search, Plus, RefreshCw, KeyRound, AlertCircle, ChevronDown, ChevronRight, CheckCircle2, Eye, EyeOff, Trash2, Flame, Copy, Check, Store } from "lucide-react"
 import { Pager } from "@/components/merchant/pager"
+import { denomKey } from "@/lib/denominations"
 import { getInventoryProductsAction, getProductStockAction, addInventoryCodesAction, getDenominationCodesAction, deleteInventoryCodeAction, deleteInventoryCodeByValueAction, revealAdminCodeAction } from "@/app/actions/inventory"
 import Image from "next/image"
 import {
@@ -44,6 +45,7 @@ export default function InventoryPage() {
   const [isAddOpen, setIsAddOpen] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState("")
   const [selectedDenom, setSelectedDenom] = useState("")
+  const [selectedDenomTitle, setSelectedDenomTitle] = useState("")
   const [codesInput, setCodesInput] = useState("")
   const [addingCodes, setAddingCodes] = useState(false)
 
@@ -52,6 +54,7 @@ export default function InventoryPage() {
   const [manageProductId, setManageProductId] = useState("")
   const [manageProductName, setManageProductName] = useState("")
   const [manageDenom, setManageDenom] = useState("")
+  const [manageDenomTitle, setManageDenomTitle] = useState("")
   const [manageCodes, setManageCodes] = useState<any[]>([])
   const [loadingManageCodes, setLoadingManageCodes] = useState(false)
   // One page of codes at a time, optionally filtered by status.
@@ -114,9 +117,10 @@ export default function InventoryPage() {
     }
   }
 
-  const openAddDialog = (productId: string, denomLabel: string) => {
+  const openAddDialog = (productId: string, denomId: string, title: string) => {
     setSelectedProductId(productId)
-    setSelectedDenom(denomLabel)
+    setSelectedDenom(denomId)
+    setSelectedDenomTitle(title)
     setCodesInput("")
     setIsAddOpen(true)
   }
@@ -149,10 +153,11 @@ export default function InventoryPage() {
     }
   }
 
-  const openManageDialog = async (productId: string, productName: string, denomLabel: string) => {
+  const openManageDialog = async (productId: string, productName: string, denomId: string, title: string) => {
     setManageProductId(productId)
     setManageProductName(productName)
-    setManageDenom(denomLabel)
+    setManageDenom(denomId)
+    setManageDenomTitle(title)
     setBurnInput("")
     setRevealedCodes({})
     setCodeToDelete(null)
@@ -160,7 +165,7 @@ export default function InventoryPage() {
     setCodesStatus("all")
     setManageCodes([])
     setIsManageOpen(true)
-    await loadCodesForDenom(productId, denomLabel, 1, "all")
+    await loadCodesForDenom(productId, denomId, 1, "all")
   }
 
   const loadCodesForDenom = async (productId: string, denomLabel: string, page = codesPage, status = codesStatus) => {
@@ -375,11 +380,15 @@ export default function InventoryPage() {
                             {product.denominations?.length > 0 ? (
                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {product.denominations.map((denom: any) => {
-                                  const stats = productStocks[product.id]?.[denom.label] || { available: 0, delivered: 0 }
+                                  const key = denomKey(denom)
+                                  const stats = productStocks[product.id]?.[key] || { available: 0, delivered: 0 }
+                                  // Packs can share a title across categories (e.g. Nepal / India), so show the category too.
+                                  const category = (product.denomination_categories || []).find((c: any) => c.id === denom.categoryId)?.name
+                                  const title = category ? `${denom.label} · ${category}` : denom.label
                                   return (
-                                    <div key={denom.label} className="bg-white p-3 rounded-lg shadow-sm border border-[#F59E0B]/20 flex flex-col justify-between">
+                                    <div key={key} className="bg-white p-3 rounded-lg shadow-sm border border-[#F59E0B]/20 flex flex-col justify-between">
                                       <div className="flex justify-between items-start mb-2">
-                                        <div className="font-semibold text-[#1F2937]">{denom.label}</div>
+                                        <div className="font-semibold text-[#1F2937]">{title}</div>
                                         <Badge variant="outline" className={stats.available > 0 ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}>
                                           {stats.available} Available
                                         </Badge>
@@ -393,7 +402,7 @@ export default function InventoryPage() {
                                             className="h-7 px-2 text-[#4B5563] hover:text-[#1F2937] hover:bg-[#FEF7E0]/80 font-medium"
                                             onClick={(e) => {
                                               e.stopPropagation()
-                                              openManageDialog(product.id, product.name, denom.label)
+                                              openManageDialog(product.id, product.name, key, title)
                                             }}
                                             title="View, reveal, or delete codes"
                                           >
@@ -405,7 +414,7 @@ export default function InventoryPage() {
                                             className="h-7 px-2 text-[#92400E] hover:text-[#92400E] hover:bg-[#FEF7E0] font-medium"
                                             onClick={(e) => {
                                               e.stopPropagation()
-                                              openAddDialog(product.id, denom.label)
+                                              openAddDialog(product.id, key, title)
                                             }}
                                           >
                                             <Plus className="h-3 w-3 mr-1" /> Add Codes
@@ -465,7 +474,7 @@ export default function InventoryPage() {
           <DialogHeader>
             <DialogTitle className="text-[#1F2937]">Add Gift Card Codes</DialogTitle>
             <DialogDescription className="text-[#4B5563] font-medium">
-              Adding codes for <span className="font-bold text-[#1F2937]">{selectedDenom}</span>. 
+              Adding codes for <span className="font-bold text-[#1F2937]">{selectedDenomTitle}</span>. 
               Paste multiple codes separated by new lines. These will be encrypted instantly.
             </DialogDescription>
           </DialogHeader>
@@ -510,7 +519,7 @@ export default function InventoryPage() {
               <div>
                 <DialogTitle className="text-xl font-bold text-[#1F2937] flex items-center gap-2">
                   <KeyRound className="h-5 w-5 text-[#92400E]" />
-                  Manage Codes: {manageDenom}
+                  Manage Codes: {manageDenomTitle}
                 </DialogTitle>
                 <DialogDescription className="text-[#4B5563] mt-1">
                   {manageProductName} &bull; Manage stored gift card codes, reveal for audit, or remove mistyped codes.
@@ -711,7 +720,7 @@ export default function InventoryPage() {
             <AlertDialogDescription className="text-[#4B5563]">
               Are you sure you want to delete this code (
               <span className="font-mono font-bold text-[#1F2937]">{codeToDelete?.maskedCode}</span>
-              ) from <span className="font-bold text-[#1F2937]">{manageDenom}</span>?
+              ) from <span className="font-bold text-[#1F2937]">{manageDenomTitle}</span>?
               <br /><br />
               This will permanently remove it from available stock so it will never be sent to any customer. This action cannot be undone.
             </AlertDialogDescription>

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client"
 import { decodeHtmlEntities } from "@/lib/sanitize"
+import type { Denomination } from "@/lib/denominations"
 
 export interface Product {
   id: string
@@ -13,14 +14,7 @@ export interface Product {
   description?: string | null
   denom_icon_url?: string | null
   ribbon_text?: string | null
-  denominations?: Array<{
-    price: string
-    label: string
-    icon_url?: string
-    bestseller?: boolean
-    in_stock?: boolean
-    categoryId?: string
-  }>
+  denominations?: Array<Denomination>
   denomination_categories?: Array<{
     id: string
     name: string
@@ -96,6 +90,7 @@ export function mapProductRow(product: any): Product {
       denomination_categories: (product.denomination_categories || []).map((c: any) => ({
         ...c,
         name: decodeHtmlEntities(c.name || ""),
+        description: c.description ? decodeHtmlEntities(c.description) : c.description,
       })),
       faqs: (product.faqs || []).map((f: any) => ({
         ...f,

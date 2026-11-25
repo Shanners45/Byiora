@@ -19,5 +19,5 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { data: o } = await q.maybeSingle()
   if (!o) return apiError(404, "ORDER_NOT_FOUND", "No order with that ID.")
 
-  return apiOk({ ...orderWebhookData({ ...o, byiora_sku: await byioraSkuFor(o.product_id, o.denomination_label) }), livemode: !o.is_test, codes: o.status === "completed" ? await orderCodes(o.id) : [] })
+  return apiOk({ ...orderWebhookData({ ...o, byiora_sku: await byioraSkuFor(o.product_id, o.denomination_id, o.denomination_label) }), livemode: !o.is_test, codes: o.status === "completed" ? await orderCodes(o.id) : [] })
 }

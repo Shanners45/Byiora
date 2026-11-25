@@ -122,7 +122,7 @@ export async function getMerchantOverviewAction(tzRaw?: string): Promise<Merchan
 
 // ── Catalog and ordering ─────────────────────────────────────────────────
 
-export type CatalogItem = { id: string; name: string; category: string; logo: string | null; denominations: { label: string; pricePaisa: number; available: number; sku: string | null; mySku: string | null; displayName: string | null }[] }
+export type CatalogItem = { id: string; name: string; category: string; logo: string | null; denominations: { id: string; label: string; pricePaisa: number; available: number; sku: string | null; mySku: string | null; displayName: string | null }[] }
 
 export async function getPricedCatalogAction(): Promise<{ products: CatalogItem[]; availablePaisa: number; manualDelivery: boolean; comingSoon: { id: string; name: string; logo: string | null }[] } | null> {
   const ctx = await requireMerchant("onboarded")
@@ -133,14 +133,14 @@ export async function getPricedCatalogAction(): Promise<{ products: CatalogItem[
     merchantDb().from("products").select("id, name, logo").eq("category", "topup").eq("is_active", true).order("name"),
   ])
   return {
-    products: products.map((p: PricedProduct) => ({ ...p, denominations: p.denominations.map((d) => ({ label: d.label, pricePaisa: d.pricePaisa, available: d.available, sku: d.sku, mySku: d.mySku, displayName: d.displayName })) })),
+    products: products.map((p: PricedProduct) => ({ ...p, denominations: p.denominations.map((d) => ({ id: d.id, label: d.label, pricePaisa: d.pricePaisa, available: d.available, sku: d.sku, mySku: d.mySku, displayName: d.displayName })) })),
     availablePaisa: ctx.merchant.wallet_balance_paisa + ctx.merchant.credit_limit_paisa,
     manualDelivery: ctx.merchant.manual_delivery,
     comingSoon: (topups || []).map((t: any) => ({ id: t.id, name: t.name, logo: t.logo || null })),
   }
 }
 
-export async function placeMerchantOrderAction(input: { productId: string; denomination: string; quantity: number; clientRef: string }): Promise<{ success: true; orderId: string; codes: string[]; pending: boolean } | { success: false; error: string }> {
+export async function placeMerchantOrderAction(input: { productId: string; denominationId?: string; denomination: string; quantity: number; clientRef: string }): Promise<{ success: true; orderId: string; codes: string[]; pending: boolean } | { success: false; error: string }> {
   const ctx = await requireMerchant("active")
   if ("error" in ctx) return fail(lockedText(ctx.error))
   const m = ctx.merchant
@@ -148,7 +148,7 @@ export async function placeMerchantOrderAction(input: { productId: string; denom
   const clientRef = /^[\w-]{8,64}$/.test(String(input.clientRef)) ? `dash-${input.clientRef}` : null
   if (!clientRef) return fail("Invalid request. Refresh and try again.")
 
-  const res = await placeOrder(m, { productId: String(input.productId), denomination: String(input.denomination), quantity: Math.floor(Number(input.quantity)), clientRef, source: "dashboard" })
+  const res = await placeOrder(m, { productId: String(input.productId), denominationId: input.denominationId ? String(input.denominationId) : null, denomination: String(input.denomination), quantity: Math.floor(Number(input.quantity)), clientRef, source: "dashboard" })
   if (!res.ok) return fail(ORDER_ERROR_TEXT[res.error])
   if (res.created) await audit({ actorType: "merchant", actorId: m.user_id, merchantId: m.id, action: "order.placed", details: { orderId: res.orderId, source: "dashboard" } })
   return { success: true, orderId: res.orderId, codes: res.pending ? [] : await orderCodes(res.orderId), pending: res.pending }
@@ -566,8 +566,8 @@ export async function redeliverWebhookAction(id: string): Promise<{ success: tru
 
 // ── Your own SKUs and names ──────────────────────────────────────────────
 
-/** Gives one of our product amounts the merchant's own code and display name (empty sku removes it). */
-export async function saveMerchantSkuAction(productId: string, label: string, sku: string, displayName: string): Promise<{ success: true } | { success: false; error: string }> {
+/** Gives one of our product packs (by its permanent id) the merchant's own code and display name (empty sku removes it). */
+export async function saveMerchantSkuAction(productId: string, denominationId: string, sku: string, displayName: string): Promise<{ success: true } | { success: false; error: string }> {
   const ctx = await requireMerchant("onboarded")
   if ("error" in ctx) return fail("Please sign in again.")
   const m = ctx.merchant
@@ -575,17 +575,17 @@ export async function saveMerchantSkuAction(productId: string, label: string, sk
   const name = String(displayName || "").trim().slice(0, 100) || null
   const db = merchantDb()
   if (!cleanSku) {
-    await db.from("merchant_skus").delete().eq("merchant_id", m.id).eq("product_id", String(productId)).eq("denomination_label", String(label))
+    await db.from("merchant_skus").delete().eq("merchant_id", m.id).eq("product_id", String(productId)).eq("denomination_id", String(denominationId))
     return { success: true }
   }
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(cleanSku)) return fail("SKU can use letters, digits, dot, _ and -, up to 64 characters.")
   if (!(await rateLimit(`merchant-sku:${m.id}`, { windowMs: 60_000, max: 60 })).ok) return fail("Too many changes. Wait a minute.")
   // Only amounts this merchant can actually buy.
-  const visible = (await loadPricedCatalog(m)).some((p) => p.id === productId && p.denominations.some((d) => d.label === label))
-  if (!visible) return fail("That product isn't available to you.")
+  const pack = (await loadPricedCatalog(m)).find((p) => p.id === productId)?.denominations.find((d) => d.id === denominationId)
+  if (!pack) return fail("That product isn't available to you.")
   const { error } = await db.from("merchant_skus").upsert(
-    { merchant_id: m.id, sku: cleanSku, product_id: String(productId), denomination_label: String(label), display_name: name, updated_at: new Date().toISOString() },
-    { onConflict: "merchant_id,product_id,denomination_label" },
+    { merchant_id: m.id, sku: cleanSku, product_id: String(productId), denomination_id: pack.id, denomination_label: pack.label, display_name: name, updated_at: new Date().toISOString() },
+    { onConflict: "merchant_id,product_id,denomination_id" },
   )
   if (error) return fail(error.code === "23505" ? `You already use SKU "${cleanSku}" for another product.` : "Could not save the SKU.")
   return { success: true }

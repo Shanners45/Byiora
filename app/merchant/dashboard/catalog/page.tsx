@@ -37,7 +37,7 @@ function BuyDialog({ pick, availablePaisa, onClose, onBought }: { pick: Pick | n
 
   const buy = async () => {
     setBusy(true)
-    const res = await placeMerchantOrderAction({ productId: pick.product.id, denomination: pick.denom.label, quantity: qty, clientRef })
+    const res = await placeMerchantOrderAction({ productId: pick.product.id, denominationId: pick.denom.id, denomination: pick.denom.label, quantity: qty, clientRef })
     setBusy(false)
     if (!res.success) return toast.error(res.error)
     setCodes(res.codes)
@@ -96,7 +96,7 @@ function SkuDialog({ pick, onClose, onSaved }: { pick: Pick | null; onClose: () 
   if (!pick) return null
   const save = async (clear = false) => {
     setBusy(true)
-    const res = await saveMerchantSkuAction(pick.product.id, pick.denom.label, clear ? "" : sku, clear ? "" : name)
+    const res = await saveMerchantSkuAction(pick.product.id, pick.denom.id, clear ? "" : sku, clear ? "" : name)
     setBusy(false)
     if (!res.success) return toast.error(res.error)
     toast.success(clear ? "Removed" : "Saved")
@@ -218,7 +218,7 @@ export default function MerchantCatalog() {
                           {p.denominations.map((d) => {
                             const can = state.canUse && d.available > 0
                             return (
-                              <div key={d.label} className="flex items-stretch hover:bg-[#F5F0FB]">
+                              <div key={d.id} className="flex items-stretch hover:bg-[#F5F0FB]">
                                 <button
                                   type="button"
                                   disabled={!can}

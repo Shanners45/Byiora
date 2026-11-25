@@ -47,7 +47,7 @@ export default function ProductEditPage() {
   const [description, setDescription] = useState("")
   const [isActive, setIsActive] = useState(true)
   const [ribbonText, setRibbonText] = useState("")
-  const [denominations, setDenominations] = useState<Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean; categoryId?: string }>>([])
+  const [denominations, setDenominations] = useState<Array<{ id?: string; price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean; categoryId?: string }>>([])
   const [denomIconUrl, setDenomIconUrl] = useState("")
   const [uidInstructions, setUidInstructions] = useState("")
   const [uidGuideImage, setUidGuideImage] = useState("")
@@ -130,6 +130,7 @@ export default function ProductEditPage() {
           setDenominationCategories(productData.denomination_categories.map((c: any) => ({
             ...c,
             name: decodeHtmlEntities(c.name || ""),
+            description: c.description ? decodeHtmlEntities(c.description) : c.description,
           })))
         }
 
@@ -416,11 +417,12 @@ export default function ProductEditPage() {
 
     if (editingDenomIndex !== null) {
       const updated = [...denominations]
-      updated[editingDenomIndex] = { price: newDenomPrice, label: cleanLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }
+      // Keep the pack's permanent id (and any other stored fields): stock and orders are tied to it.
+      updated[editingDenomIndex] = { ...updated[editingDenomIndex], price: newDenomPrice, label: cleanLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }
       setDenominations(updated)
       setEditingDenomIndex(null)
     } else {
-      setDenominations([...denominations, { price: newDenomPrice, label: cleanLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }])
+      setDenominations([...denominations, { id: crypto.randomUUID(), price: newDenomPrice, label: cleanLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }])
     }
 
     setNewDenomPrice("")

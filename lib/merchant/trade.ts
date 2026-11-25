@@ -6,21 +6,25 @@ import { afterLiveOrder, emitWebhook, orderPayload } from "@/lib/merchant/events
 import { audit } from "@/lib/merchant/server"
 import { alertStaff } from "@/lib/merchant/alerts"
 import { alertIfSoldOut } from "@/lib/inventory-alerts"
+import { denomKey, findDenomination } from "@/lib/denominations"
 
 export { merchantPrice, type PriceRule }
 
 // Server-only ordering and pricing shared by merchant server actions and /api/v1.
 
-/** sku = Byiora's stable code; mySku/displayName = the merchant's optional own code and name. */
-export type PricedDenomination = { label: string; retailPaisa: number; pricePaisa: number; available: number; sku: string | null; mySku: string | null; displayName: string | null }
+/** id = the pack's permanent id; sku = Byiora's stable code; mySku/displayName = the merchant's optional own code and name. */
+export type PricedDenomination = { id: string; label: string; retailPaisa: number; pricePaisa: number; available: number; sku: string | null; mySku: string | null; displayName: string | null }
 export type PricedProduct = { id: string; name: string; category: string; logo: string | null; denominations: PricedDenomination[] }
+
+/** Key of a row that references a pack: its pack id, else (old rows) its title. */
+const rowKey = (r: any) => ruleKey(r.product_id, r.denomination_id ?? r.denomination_label)
 
 export const toPaisa = (price: unknown) => Math.round((parseFloat(String(price ?? "").replace(/,/g, "")) || 0) * 100)
 async function loadRules(merchantId: string, productId?: string): Promise<Map<string, PriceRule>> {
-  let q = merchantDb().from("merchant_price_rules").select("product_id, denomination_label, visible, discount_percent, fixed_price_paisa").eq("merchant_id", merchantId)
+  let q = merchantDb().from("merchant_price_rules").select("product_id, denomination_label, denomination_id, visible, discount_percent, fixed_price_paisa").eq("merchant_id", merchantId)
   if (productId) q = q.eq("product_id", productId)
   const { data } = await q
-  return new Map((data || []).map((r: any) => [ruleKey(r.product_id, r.denomination_label), { ...r, discount_percent: r.discount_percent == null ? null : Number(r.discount_percent) }]))
+  return new Map((data || []).map((r: any) => [rowKey(r), { ...r, discount_percent: r.discount_percent == null ? null : Number(r.discount_percent) }]))
 }
 
 export type PriceBookLine = {
@@ -29,7 +33,11 @@ export type PriceBookLine = {
   category: string
   logo: string | null
   globallyEnabled: boolean
+  /** The pack's permanent id (several packs of one product may share a title). */
+  denominationId: string
   label: string
+  /** label plus its category, when the product has categories (e.g. "475 VP · India"). */
+  title: string
   sku: string | null
   retailPaisa: number
   pricePaisa: number
@@ -44,7 +52,7 @@ export type PriceBookLine = {
 export async function loadPriceBook(m: Merchant): Promise<PriceBookLine[]> {
   const db = merchantDb()
   const [{ data: products }, { data: stock }, { data: own }, { data: catalog }, rules] = await Promise.all([
-    db.from("products").select("id, name, category, logo, denominations").eq("is_active", true).in("category", MERCHANT_CATEGORIES as unknown as string[]).order("name"),
+    db.from("products").select("id, name, category, logo, denominations, denomination_categories").eq("is_active", true).in("category", MERCHANT_CATEGORIES as unknown as string[]).order("name"),
     m.use_global_inventory ? db.rpc("inventory_available_counts") : Promise.resolve({ data: [] }),
     db.rpc("merchant_inventory_counts", { p_merchant_id: m.id }),
     db.from("merchant_catalog").select("product_id, enabled"),
@@ -53,7 +61,7 @@ export async function loadPriceBook(m: Merchant): Promise<PriceBookLine[]> {
   // Sellable stock = the merchant's own codes + shared stock when they may use it.
   const stockOf = new Map<string, number>()
   for (const s of [...(stock || []), ...(own || [])]) {
-    const k = ruleKey(s.product_id, s.denomination_label)
+    const k = rowKey(s)
     stockOf.set(k, (stockOf.get(k) || 0) + Number(s.available))
   }
   const enabled = new Set((catalog || []).filter((c: any) => c.enabled).map((c: any) => c.product_id))
@@ -64,21 +72,25 @@ export async function loadPriceBook(m: Merchant): Promise<PriceBookLine[]> {
       const retailPaisa = toPaisa(d?.price)
       if (!d?.label || retailPaisa <= 0) continue
       const label = String(d.label)
-      const r = resolvePrice(m, p.id, label, retailPaisa, enabled.has(p.id), rules)
+      const key = denomKey(d)
+      const cat = (Array.isArray(p.denomination_categories) ? p.denomination_categories : []).find((c: any) => c.id === d.categoryId)?.name
+      const r = resolvePrice(m, p.id, key, retailPaisa, enabled.has(p.id), rules)
       lines.push({
         productId: p.id,
         productName: p.name,
         category: p.category,
         logo: p.logo || null,
         globallyEnabled: enabled.has(p.id),
+        denominationId: key,
         label,
-        sku: skuOf.get(ruleKey(p.id, label)) ?? null,
+        title: cat ? `${label} · ${cat}` : label,
+        sku: skuOf.get(ruleKey(p.id, key)) ?? null,
         retailPaisa,
         pricePaisa: r.pricePaisa,
         source: r.source,
         visible: r.visible && d.in_stock !== false,
-        available: d.in_stock === false ? 0 : stockOf.get(ruleKey(p.id, label)) || 0,
-        rule: rules.get(ruleKey(p.id, label)) || null,
+        available: d.in_stock === false ? 0 : stockOf.get(ruleKey(p.id, key)) || 0,
+        rule: rules.get(ruleKey(p.id, key)) || null,
         productRule: rules.get(ruleKey(p.id, "")) || null,
       })
     }
@@ -88,7 +100,7 @@ export async function loadPriceBook(m: Merchant): Promise<PriceBookLine[]> {
     lastSkuSync = Date.now()
     await db.rpc("ensure_product_skus")
     skuOf = await loadByioraSkus()
-    for (const l of lines) l.sku = skuOf.get(ruleKey(l.productId, l.label)) ?? null
+    for (const l of lines) l.sku = skuOf.get(ruleKey(l.productId, l.denominationId)) ?? null
   }
   return lines
 }
@@ -96,8 +108,8 @@ export async function loadPriceBook(m: Merchant): Promise<PriceBookLine[]> {
 let lastSkuSync = 0
 
 async function loadByioraSkus(): Promise<Map<string, string>> {
-  const { data } = await merchantDb().from("product_skus").select("sku, product_id, denomination_label").limit(20000)
-  return new Map((data || []).map((r: any) => [ruleKey(r.product_id, r.denomination_label), r.sku]))
+  const { data } = await merchantDb().from("product_skus").select("sku, product_id, denomination_label, denomination_id").limit(20000)
+  return new Map((data || []).map((r: any) => [rowKey(r), r.sku]))
 }
 
 /** What the merchant (and the API) sees: visible products only, grouped. */
@@ -107,8 +119,8 @@ export async function loadPricedCatalog(m: Merchant): Promise<PricedProduct[]> {
   for (const l of book) {
     if (!l.visible) continue
     const p = byProduct.get(l.productId) || { id: l.productId, name: l.productName, category: l.category, logo: l.logo, denominations: [] }
-    const s = skus.get(ruleKey(l.productId, l.label))
-    p.denominations.push({ label: l.label, retailPaisa: l.retailPaisa, pricePaisa: l.pricePaisa, available: l.available, sku: l.sku, mySku: s?.sku ?? null, displayName: s?.display_name ?? null })
+    const s = skus.get(ruleKey(l.productId, l.denominationId))
+    p.denominations.push({ id: l.denominationId, label: l.label, retailPaisa: l.retailPaisa, pricePaisa: l.pricePaisa, available: l.available, sku: l.sku, mySku: s?.sku ?? null, displayName: s?.display_name ?? null })
     byProduct.set(l.productId, p)
   }
   return [...byProduct.values()]
@@ -116,25 +128,27 @@ export async function loadPricedCatalog(m: Merchant): Promise<PricedProduct[]> {
 
 /** The merchant's own codes and names for our product amounts. */
 export async function loadSkus(merchantId: string): Promise<Map<string, { sku: string; display_name: string | null }>> {
-  const { data } = await merchantDb().from("merchant_skus").select("sku, product_id, denomination_label, display_name").eq("merchant_id", merchantId)
-  return new Map((data || []).map((r: any) => [ruleKey(r.product_id, r.denomination_label), { sku: r.sku, display_name: r.display_name }]))
+  const { data } = await merchantDb().from("merchant_skus").select("sku, product_id, denomination_label, denomination_id, display_name").eq("merchant_id", merchantId)
+  return new Map((data || []).map((r: any) => [rowKey(r), { sku: r.sku, display_name: r.display_name }]))
 }
 
 /** Resolves a SKU: the merchant's own alias first, then Byiora's SKU. */
-export async function findSku(merchantId: string, sku: string): Promise<{ productId: string; label: string } | null> {
+export async function findSku(merchantId: string, sku: string): Promise<{ productId: string; label: string; denominationId: string | null } | null> {
   const db = merchantDb()
-  const { data } = await db.from("merchant_skus").select("product_id, denomination_label").eq("merchant_id", merchantId).eq("sku", sku).maybeSingle()
-  if (data) return { productId: data.product_id, label: data.denomination_label }
-  const { data: ours } = await db.from("product_skus").select("product_id, denomination_label").eq("sku", sku.toUpperCase()).maybeSingle()
-  return ours ? { productId: ours.product_id, label: ours.denomination_label } : null
+  const { data } = await db.from("merchant_skus").select("product_id, denomination_label, denomination_id").eq("merchant_id", merchantId).eq("sku", sku).maybeSingle()
+  if (data) return { productId: data.product_id, label: data.denomination_label, denominationId: data.denomination_id ?? null }
+  const { data: ours } = await db.from("product_skus").select("product_id, denomination_label, denomination_id").eq("sku", sku.toUpperCase()).maybeSingle()
+  return ours ? { productId: ours.product_id, label: ours.denomination_label, denominationId: ours.denomination_id ?? null } : null
 }
 
-export async function byioraSkuFor(productId: string, label: string): Promise<string | null> {
-  const { data } = await merchantDb().from("product_skus").select("sku").eq("product_id", productId).eq("denomination_label", label).maybeSingle()
+/** Byiora's SKU for a pack: by its permanent id (older rows without one match by title). */
+export async function byioraSkuFor(productId: string, denominationId: string | null | undefined, label?: string): Promise<string | null> {
+  const q = merchantDb().from("product_skus").select("sku").eq("product_id", productId)
+  const { data } = await (denominationId ? q.eq("denomination_id", denominationId) : q.eq("denomination_label", label ?? "")).maybeSingle()
   return data?.sku ?? null
 }
 
-export type OrderError = "INVALID_QUANTITY" | "INVALID_PRICE" | "MERCHANT_INACTIVE" | "INSUFFICIENT_BALANCE" | "OUT_OF_STOCK" | "PRODUCT_NOT_FOUND" | "PRICE_CHANGED" | "ORDER_LIMIT" | "DAILY_LIMIT" | "MONTHLY_LIMIT" | "ORDER_FAILED"
+export type OrderError = "INVALID_QUANTITY" | "INVALID_PRICE" | "MERCHANT_INACTIVE" | "INSUFFICIENT_BALANCE" | "OUT_OF_STOCK" | "PRODUCT_NOT_FOUND" | "DENOMINATION_AMBIGUOUS" | "INVALID_DENOMINATION" | "PRICE_CHANGED" | "ORDER_LIMIT" | "DAILY_LIMIT" | "MONTHLY_LIMIT" | "ORDER_FAILED"
 
 export const ORDER_ERROR_TEXT: Record<OrderError, string> = {
   INVALID_QUANTITY: "Quantity must be between 1 and 20.",
@@ -143,6 +157,8 @@ export const ORDER_ERROR_TEXT: Record<OrderError, string> = {
   INSUFFICIENT_BALANCE: "Not enough wallet balance. Top up your wallet first.",
   OUT_OF_STOCK: "Not enough codes in stock for this amount.",
   PRODUCT_NOT_FOUND: "That product or amount isn't available.",
+  DENOMINATION_AMBIGUOUS: "More than one amount of this product has that name. Order it by its sku or denomination_id instead.",
+  INVALID_DENOMINATION: "That product or amount isn't available.",
   PRICE_CHANGED: "The price changed. Check the new price and try again.",
   ORDER_LIMIT: "This order is above your per-order limit.",
   DAILY_LIMIT: "This order would go over your 24-hour spending limit.",
@@ -154,7 +170,10 @@ export async function placeOrder(
   merchant: Merchant,
   input: {
     productId: string
+    /** The pack's title. Accepted only when no other pack of the product shares it. */
     denomination: string
+    /** The pack's permanent id; preferred over the title. */
+    denominationId?: string | null
     quantity: number
     clientRef: string | null
     source: "dashboard" | "api"
@@ -171,11 +190,16 @@ export async function placeOrder(
     db.from("merchant_catalog").select("enabled").eq("product_id", input.productId).maybeSingle(),
     loadRules(merchant.id, input.productId),
   ])
-  const denom = product?.is_active && isMerchantCategory(product.category) ? (product.denominations || []).find((d: any) => d?.label === input.denomination) : null
+  const sellable = product?.is_active && isMerchantCategory(product.category)
+  const denom: any = sellable ? findDenomination<any>(product.denominations, input.denominationId || input.denomination) : null
+  if (!denom && sellable && !input.denominationId && (product.denominations || []).filter((d: any) => d?.label === input.denomination).length > 1) {
+    return { ok: false, error: "DENOMINATION_AMBIGUOUS" }
+  }
   if (!denom || denom.in_stock === false) return { ok: false, error: "PRODUCT_NOT_FOUND" }
+  const key = denomKey(denom)
 
   const retailPaisa = toPaisa(denom.price)
-  const priced = resolvePrice(merchant, product.id, denom.label, retailPaisa, !!catalogRow?.enabled, rules)
+  const priced = resolvePrice(merchant, product.id, key, retailPaisa, !!catalogRow?.enabled, rules)
   if (!priced.visible) return { ok: false, error: "PRODUCT_NOT_FOUND" }
   const unitPaisa = priced.pricePaisa
   if (input.maxUnitPricePaisa != null && unitPaisa > input.maxUnitPricePaisa) return { ok: false, error: "PRICE_CHANGED" }
@@ -191,14 +215,14 @@ export async function placeOrder(
     const { data: o, error } = await db
       .from("merchant_orders")
       .insert({
-        merchant_id: merchant.id, client_ref: ref, product_id: product.id, product_name: product.name, denomination_label: denom.label, quantity: input.quantity,
+        merchant_id: merchant.id, client_ref: ref, product_id: product.id, product_name: product.name, denomination_label: denom.label, denomination_id: denom.id ?? null, quantity: input.quantity,
         unit_price_paisa: unitPaisa, total_paisa: unitPaisa * input.quantity, retail_unit_price_paisa: retailPaisa, source: "api", is_test: true,
         customer_email: input.customer?.email ?? null, customer_name: input.customer?.name ?? null, customer_phone: input.customer?.phone ?? null,
       })
       .select("id")
       .single()
     if (error) return { ok: false, error: "ORDER_FAILED" }
-    await tagOrderWithSku(merchant.id, o.id, product.id, denom.label)
+    await tagOrderWithSku(merchant.id, o.id, product.id, key)
     return { ok: true, orderId: o.id, created: true, pending: false }
   }
 
@@ -216,6 +240,7 @@ export async function placeOrder(
     p_customer_name: input.customer?.name ?? null,
     p_customer_phone: input.customer?.phone ?? null,
     p_allow_pending: !!input.allowPending,
+    p_denomination_id: denom.id ?? null,
   })
   const row = Array.isArray(data) ? data[0] : data
   if (error || !row) {
@@ -227,11 +252,11 @@ export async function placeOrder(
       { name: "Merchant", value: merchant.business_name, inline: true },
       { name: "Product", value: `${product.name} · ${denom.label}`, inline: true },
       { name: "Quantity wanted", value: String(input.quantity), inline: true },
-    ], 0xff5722, `oos:${product.id}:${denom.label}`)
+    ], 0xff5722, `oos:${product.id}:${key}`)
   }
   if (row.error) return { ok: false, error: row.error as OrderError }
   if (row.created) {
-    await tagOrderWithSku(merchant.id, row.order_id, product.id, denom.label)
+    await tagOrderWithSku(merchant.id, row.order_id, product.id, key)
     if (row.pending) {
       // Not deduped: every pending order is money taken that someone must fill or refund.
       await alertStaff("⏳ Merchant order waiting for codes", [
@@ -241,7 +266,7 @@ export async function placeOrder(
         { name: "Fill it", value: "Admin → Merchants → Pending orders", inline: false },
       ], 0xf59e0b)
     } else {
-      await alertIfSoldOut({ productId: product.id, label: denom.label, productName: product.name, soldVia: `Merchant ${merchant.business_name}`, merchantOrderId: row.order_id })
+      await alertIfSoldOut({ productId: product.id, label: denom.label, denominationId: denom.id, productName: product.name, soldVia: `Merchant ${merchant.business_name}`, merchantOrderId: row.order_id })
     }
     await afterLiveOrder(merchant, row.order_id)
   }
@@ -253,9 +278,9 @@ export async function placeOrder(
  * admin adds codes, inside that request, so no cron or background job is needed.
  * Each merchant only gets shared stock if they are allowed to use it.
  */
-export async function fillPendingFromStock(productId: string, label: string, onlyMerchantId?: string): Promise<number> {
+export async function fillPendingFromStock(productId: string, denominationId: string, onlyMerchantId?: string): Promise<number> {
   const db = merchantDb()
-  let q = db.from("merchant_orders").select("id, merchant_id, merchants(use_global_inventory)").eq("status", "pending").eq("product_id", productId).eq("denomination_label", label)
+  let q = db.from("merchant_orders").select("id, merchant_id, denomination_label, merchants(use_global_inventory)").eq("status", "pending").eq("product_id", productId).eq("denomination_id", denominationId)
   if (onlyMerchantId) q = q.eq("merchant_id", onlyMerchantId)
   const { data: waiting } = await q.order("created_at").limit(50)
   let filled = 0
@@ -264,7 +289,7 @@ export async function fillPendingFromStock(productId: string, label: string, onl
     if (error || err) continue // out of stock for this one (a smaller or other-merchant order may still fit)
     filled++
     await audit({ actorType: "system", merchantId: o.merchant_id, action: "order.fulfilled", details: { orderId: o.id, from: "stock_added" } })
-    await alertIfSoldOut({ productId, label, soldVia: `Merchant backorder ${o.id}`, merchantOrderId: o.id })
+    await alertIfSoldOut({ productId, label: (o as any).denomination_label, denominationId, soldVia: `Merchant backorder ${o.id}`, merchantOrderId: o.id })
     const { data: done } = await db.from("merchant_orders").select("*").eq("id", o.id).single()
     if (done) await emitWebhook(o.merchant_id, "order.completed", await orderPayload(done))
   }
@@ -288,7 +313,7 @@ export function generateApiKey(mode: "live" | "test" = "live") {
   return { key, prefix: key.slice(0, 16), hash: hashApiKey(key) }
 }
 
-async function tagOrderWithSku(merchantId: string, orderId: string, productId: string, label: string) {
-  const s = (await loadSkus(merchantId)).get(ruleKey(productId, label))
+async function tagOrderWithSku(merchantId: string, orderId: string, productId: string, denominationId: string) {
+  const s = (await loadSkus(merchantId)).get(ruleKey(productId, denominationId))
   if (s) await merchantDb().from("merchant_orders").update({ merchant_sku: s.sku, merchant_display_name: s.display_name }).eq("id", orderId)
 }

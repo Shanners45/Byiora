@@ -6,6 +6,7 @@ import { rateLimit } from "@/lib/rate-limit"
 import { customAlphabet } from "nanoid"
 import { promoValidationInputSchema, createPromoCodeSchema } from "@/lib/validations/promo-code"
 import { countLiveUses } from "@/lib/promo/internal"
+import { findDenomination } from "@/lib/denominations"
 
 // Cryptographically secure code generator — no ambiguous characters (0/O, 1/I/L)
 const generateRandomCode = customAlphabet("ABCDEFGHJKMNPQRSTUVWXYZ23456789", 8)
@@ -215,12 +216,8 @@ export async function validatePromoCodeAction({
     }
 
     if (denominations && Array.isArray(denominations)) {
-      const cleanLabel = denominationLabel.trim().toLowerCase()
-      const matched = denominations.find(
-        (d: any) =>
-          (d.label && d.label.trim().toLowerCase() === cleanLabel) ||
-          (d.id && String(d.id).trim().toLowerCase() === cleanLabel)
-      )
+      // `denominationLabel` carries the pack id (a title only resolves when unique in the product).
+      const matched: any = findDenomination(denominations as any[], denominationLabel)
       if (matched?.price !== undefined) {
         actualPrice = parseFloat(String(matched.price).replace(/,/g, "").trim())
       }

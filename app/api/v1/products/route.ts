@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
         id: p.id,
         name: p.name,
         category: p.category,
-        denominations: p.denominations.map((d) => ({ sku: d.sku, denomination: d.label, merchant_sku: d.mySku, display_name: d.displayName, price: rupees(d.pricePaisa), in_stock: auth.test ? Math.max(d.available, 20) : d.available })),
+        denominations: p.denominations.map((d) => ({ sku: d.sku, denomination_id: d.id, denomination: d.label, merchant_sku: d.mySku, display_name: d.displayName, price: rupees(d.pricePaisa), in_stock: auth.test ? Math.max(d.available, 20) : d.available })),
       }))
       .filter((p) => p.denominations.length),
   })

@@ -1,9 +1,9 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, HelpCircle, QrCode, Download, Loader2, CheckCircle2, Tag, ChevronDown, ChevronUp, ShoppingCart } from "lucide-react"
+import { ArrowLeft, HelpCircle, QrCode, Download, Loader2, CheckCircle2, Tag, ChevronDown, ChevronUp } from "lucide-react"
 import { TurnstileWidget } from "@/components/turnstile-widget"
 import { checkCheckoutSecurityAction } from "@/app/actions/transactions"
 import { validatePromoCodeAction, getPromoVisibilityAction } from "@/app/actions/promo-codes"
@@ -24,6 +24,7 @@ import { Header } from "@/components/header"
 import { Footer } from "@/components/footer"
 import { useAuth } from "@/lib/auth-context"
 import { getProductBySlug, type Product } from "@/lib/product-categories"
+import { denomKey, findDenomination } from "@/lib/denominations"
 import { createClient } from "@/lib/supabase/client"
 import Image from "next/image"
 import { ProductSkeleton } from "@/components/product-skeleton"
@@ -93,35 +94,6 @@ export default function ProductDetailPage({
   const { addTransaction, user } = useAuth()
   const [selectedDenomination, setSelectedDenomination] = useState("")
   const [showUidGuide, setShowUidGuide] = useState(false)
-  // Floating pill bar: shown while the real buy button is off-screen.
-  const buyButtonRef = useRef<HTMLDivElement | null>(null)
-  const [buyButtonInView, setBuyButtonInView] = useState(true)
-  // Sentinel at the end of the purchase area: once it scrolls into view the customer is looking at
-  // related products or the footer, so the pill steps aside instead of covering them.
-  const [pastPurchaseArea, setPastPurchaseArea] = useState(false)
-  // Callback refs attach each observer the moment its element mounts (the purchase area can render
-  // after the first commit), and disconnect it when the element goes away.
-  const buyObserver = useRef<IntersectionObserver | null>(null)
-  const setBuyButtonEl = useCallback((node: HTMLDivElement | null) => {
-    buyButtonRef.current = node
-    buyObserver.current?.disconnect()
-    buyObserver.current = null
-    if (!node || typeof IntersectionObserver === "undefined") return
-    buyObserver.current = new IntersectionObserver(([entry]) => setBuyButtonInView(entry.isIntersecting), { threshold: 0.1 })
-    buyObserver.current.observe(node)
-  }, [])
-  const endObserver = useRef<IntersectionObserver | null>(null)
-  const setPillEndEl = useCallback((node: HTMLDivElement | null) => {
-    endObserver.current?.disconnect()
-    endObserver.current = null
-    if (!node || typeof IntersectionObserver === "undefined") return
-    // Root stretched far upwards: "intersecting" means the sentinel is anywhere above the bottom of the
-    // screen, so a jump straight to the footer is caught too.
-    endObserver.current = new IntersectionObserver(([entry]) => setPastPurchaseArea(entry.isIntersecting), {
-      rootMargin: "100000px 0px 0px 0px",
-    })
-    endObserver.current.observe(node)
-  }, [])
   const [selectedPayment, setSelectedPayment] = useState("")
   const [email, setEmail] = useState(user?.email || "")
 
@@ -312,7 +284,7 @@ export default function ProductDetailPage({
     setPromoError("")
 
     try {
-      const selectedDenom = giftCard?.denominations?.find((d: any) => d.label === selectedDenomination)
+      const selectedDenom = findDenomination<any>(giftCard?.denominations, selectedDenomination)
       if (!selectedDenom) {
         setPromoError("Please select a denomination first.")
         setIsValidatingPromo(false)
@@ -323,7 +295,7 @@ export default function ProductDetailPage({
         code: promoInput.trim(),
         productId: product?.id || productSlug,
         productCategory: product?.category || "digital-goods",
-        denominationLabel: selectedDenom.label,
+        denominationLabel: denomKey(selectedDenom),
         email: email || "guest@preview.com", // Preview only — server re-checks at order time
         userId: user?.id || null,
         deviceId: getOrCreateDeviceId(),
@@ -386,7 +358,7 @@ export default function ProductDetailPage({
     isSubmittingRef.current = true
     setIsProcessing(true)
 
-    const selectedDenom = giftCard.denominations.find((d: any) => d.label === selectedDenomination)
+    const selectedDenom = findDenomination<any>(giftCard.denominations, selectedDenomination)
     const paymentMethodName = isFreeOrder
       ? `Promo Code (100% Discount - ${appliedPromo?.code})`
       : (paymentMethods.find((p) => p.id === selectedPayment)?.name || selectedPayment)
@@ -396,6 +368,7 @@ export default function ProductDetailPage({
       const { transactionId, checkoutToken, paymentUrl, isDuplicate, isFreeOrder: freeFromAction } = await addTransaction({
         product: `${giftCard.name}`,
         amount: selectedDenom?.label || selectedDenomination,
+        denominationId: selectedDenom?.id || undefined,
         price: `${selectedDenom?.price}`,
         status: isFreeOrder ? "Paid" : "Processing",
         paymentMethod: paymentMethodName,
@@ -725,7 +698,8 @@ export default function ProductDetailPage({
 
               {(() => {
                 const renderDenominationCard = (denom: any) => {
-                  const isSelected = selectedDenomination === denom.label;
+                  const key = denomKey(denom);
+                  const isSelected = selectedDenomination === key;
                   const cat = product?.denomination_categories?.find((c: any) => c.id === denom.categoryId);
                   // If category exists, only use category icon (no fallback to product icon)
                   // If no category, use product icon
@@ -734,7 +708,7 @@ export default function ProductDetailPage({
                   const isOutOfStock = denom.in_stock === false;
 
                   return (
-                    <div key={denom.label} className={`relative ${isSelected && hasIcon ? "z-10" : ""}`}>
+                    <div key={key} className={`relative ${isSelected && hasIcon ? "z-10" : ""}`}>
                       {denom.bestseller && !isOutOfStock && (
                         <div className="absolute -top-3 -left-2 z-20 bg-gradient-to-r from-[#FF6B93] to-[#8B5CF6] text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow flex items-center gap-1 uppercase tracking-wider">
                           <svg viewBox="0 0 24 24" className="w-3 h-3 fill-current">
@@ -748,9 +722,9 @@ export default function ProductDetailPage({
                           Out of Stock
                         </div>
                       )}
-                      <RadioGroupItem value={denom.label} id={denom.label} className="peer sr-only" disabled={isOutOfStock} />
+                      <RadioGroupItem value={key} id={`denom-${key}`} className="peer sr-only" disabled={isOutOfStock} />
                       <Label
-                        htmlFor={denom.label}
+                        htmlFor={`denom-${key}`}
                         className={`group flex flex-col overflow-hidden rounded-2xl transition-all h-full ${isOutOfStock
                           ? "cursor-not-allowed opacity-40 border border-gray-300 bg-gray-100 grayscale hover:border-gray-400 hover:shadow-[0_0_10px_rgba(156,163,175,0.4)]"
                           : isSelected
@@ -1146,7 +1120,6 @@ export default function ProductDetailPage({
                 </div>
               )}
 
-              <div ref={setBuyButtonEl}>
               <Button
                 onClick={() => {
                   const isFreeOrder = appliedPromo && appliedPromo.finalPrice === 0
@@ -1175,7 +1148,6 @@ export default function ProductDetailPage({
                   "Proceed to Payment"
                 )}
               </Button>
-              </div>
 
               <div className="mt-4 text-xs text-brand-light-gray leading-relaxed">
                 By clicking "Proceed to Payment", I acknowledge that the purchase of this virtual item will be a license for its use, subject to the publisher providing this service and to their end user license agreement that I accepted.
@@ -1303,7 +1275,7 @@ export default function ProductDetailPage({
               <div className="flex justify-between">
                 <span className="text-gray-500">Amount:</span>
                 <span className="font-medium text-brand-charcoal">
-                  {selectedDenomination && giftCard.denominations.find((d: any) => d.label === selectedDenomination)?.label}
+                  {selectedDenomination && findDenomination<any>(giftCard.denominations, selectedDenomination)?.label}
                 </span>
               </div>
               {appliedPromo && (
@@ -1328,7 +1300,7 @@ export default function ProductDetailPage({
                   </div>
                 ) : (
                   <span className="font-bold text-xl text-brand-sky-blue">
-                    Rs. {selectedDenomination && giftCard.denominations.find((d: any) => d.label === selectedDenomination)?.price}
+                    Rs. {selectedDenomination && findDenomination<any>(giftCard.denominations, selectedDenomination)?.price}
                   </span>
                 )}
               </div>
@@ -1407,38 +1379,6 @@ export default function ProductDetailPage({
           animation: promoBounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
       `}} />
-
-      {/* Mobile-only "Proceed to Payment" pill, shown once a pack is picked. It only scrolls to the real
-          payment button, so every check (email, payment method, captcha) still runs there. Hidden while that
-          button is on screen and once the customer has scrolled past the purchase area. */}
-      <div ref={setPillEndEl} aria-hidden="true" />
-      {giftCard && selectedDenomination && (() => {
-        const hidden = buyButtonInView || pastPurchaseArea
-        const denom = giftCard.denominations?.find((d: any) => d.label === selectedDenomination)
-        const price = appliedPromo ? appliedPromo.finalPrice : parseFloat(String(denom?.price ?? "").replace(/,/g, ""))
-        return (
-          <div
-            className={`md:hidden fixed inset-x-0 bottom-4 z-40 flex justify-center px-4 transition-all duration-200 ${
-              hidden ? "pointer-events-none translate-y-6 opacity-0" : "translate-y-0 opacity-100"
-            }`}
-            style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-            aria-hidden={hidden}
-          >
-            <button
-              type="button"
-              tabIndex={hidden ? -1 : 0}
-              onClick={() => buyButtonRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })}
-              className="flex h-14 w-full max-w-md items-center gap-3 rounded-full bg-[#5B3FE4] px-5 text-white shadow-[0_8px_24px_rgba(91,63,228,0.35)] transition hover:bg-[#4F35D6] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#5B3FE4]/40"
-            >
-              <ShoppingCart className="h-6 w-6 shrink-0" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate text-center text-base font-semibold">Proceed to Payment</span>
-              {Number.isFinite(price) && (
-                <span className="shrink-0 rounded-full bg-white/15 px-3 py-1 text-sm font-bold">Rs. {price.toLocaleString("en-IN")}</span>
-              )}
-            </button>
-          </div>
-        )
-      })()}
 
       {/* Related products: server-rendered links so out-of-stock pages aren't dead ends. */}
       {related.length > 0 && (

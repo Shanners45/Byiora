@@ -42,7 +42,7 @@ export function PricingEditor({ merchantId, refreshKey }: { merchantId: string; 
   const saved = useMemo(() => {
     const m = new Map<string, Draft>()
     for (const l of book?.lines || []) {
-      m.set(ruleKey(l.productId, l.label), toDraft(l.rule))
+      m.set(ruleKey(l.productId, l.denominationId), toDraft(l.rule))
       m.set(ruleKey(l.productId, ""), toDraft(l.productRule))
     }
     return m
@@ -75,8 +75,8 @@ export function PricingEditor({ merchantId, refreshKey }: { merchantId: string; 
         const d = current(ruleKey(p.id, label))
         return { product_id: p.id, denomination_label: label, visible: d.visible, discount_percent: d.discount.trim() === "" ? null : Number(d.discount), fixed_price_paisa: d.fixed.trim() === "" ? null : Math.round(Number(d.fixed) * 100) }
       }
-      const rules = new Map([[ruleKey(p.id, ""), asRule("")], [ruleKey(p.id, l.label), asRule(l.label)]])
-      return resolvePrice({ discount_percent: book.discountPercent, catalog_mode: book.catalogMode }, p.id, l.label, l.retailPaisa, p.globallyEnabled, rules)
+      const rules = new Map([[ruleKey(p.id, ""), asRule("")], [ruleKey(p.id, l.denominationId), asRule(l.denominationId)]])
+      return resolvePrice({ discount_percent: book.discountPercent, catalog_mode: book.catalogMode }, p.id, l.denominationId, l.retailPaisa, p.globallyEnabled, rules)
     },
     [book, current],
   )
@@ -109,16 +109,16 @@ export function PricingEditor({ merchantId, refreshKey }: { merchantId: string; 
   }
   const clearProduct = (p: Product) => {
     change(ruleKey(p.id, ""), { ...EMPTY })
-    p.lines.forEach((l) => change(ruleKey(p.id, l.label), { ...EMPTY }))
+    p.lines.forEach((l) => change(ruleKey(p.id, l.denominationId), { ...EMPTY }))
   }
 
   const save = async () => {
     const rules: RuleInput[] = []
     for (const [key, d] of drafts) {
-      const [productId, label] = key.split("\u0000")
+      const [productId, denominationId] = key.split("\u0000")
       if (d.discount.trim() !== "" && !(Number(d.discount) >= 0 && Number(d.discount) <= 90)) return toast.error("Discounts must be between 0% and 90%.")
       if (d.fixed.trim() !== "" && !(Number(d.fixed) > 0)) return toast.error("Fixed prices must be above zero.")
-      rules.push({ productId, label, visible: d.visible, discountPercent: d.discount.trim() === "" ? null : Number(d.discount), fixedPriceRupees: d.fixed.trim() === "" ? null : Number(d.fixed) })
+      rules.push({ productId, denominationId, visible: d.visible, discountPercent: d.discount.trim() === "" ? null : Number(d.discount), fixedPriceRupees: d.fixed.trim() === "" ? null : Number(d.fixed) })
     }
     setSaving(true)
     const res = await saveMerchantPriceRulesAction(merchantId, rules)
@@ -205,7 +205,7 @@ export function PricingEditor({ merchantId, refreshKey }: { merchantId: string; 
           {paged.pageItems.map((p) => {
             const isOpen = open.has(p.id)
             const pd = current(ruleKey(p.id, ""))
-            const dirtyCount = [ruleKey(p.id, ""), ...p.lines.map((l) => ruleKey(p.id, l.label))].filter((k) => drafts.has(k)).length
+            const dirtyCount = [ruleKey(p.id, ""), ...p.lines.map((l) => ruleKey(p.id, l.denominationId))].filter((k) => drafts.has(k)).length
             return (
               <div key={p.id}>
                 <div className={`grid grid-cols-[28px_1fr_28px] sm:grid-cols-[28px_1fr_120px_130px_28px] items-center gap-x-2 gap-y-2.5 px-3 py-3 sm:py-2.5 ${dirtyCount ? "bg-purple-50/50" : ""}`}>
@@ -251,18 +251,18 @@ export function PricingEditor({ merchantId, refreshKey }: { merchantId: string; 
                       </thead>
                       <tbody>
                         {p.lines.map((l) => {
-                          const k = ruleKey(p.id, l.label)
+                          const k = ruleKey(p.id, l.denominationId)
                           const d = current(k)
                           const pv = preview(p, l)
                           const margin = l.retailPaisa ? Math.round(((l.retailPaisa - pv.pricePaisa) / l.retailPaisa) * 1000) / 10 : 0
                           return (
-                            <tr key={l.label} className={`border-t border-gray-100 ${drafts.has(k) ? "bg-purple-50/60" : ""}`}>
-                              <td className="py-2 pr-2 font-medium text-[#1F2937]">{l.label}</td>
+                            <tr key={l.denominationId} className={`border-t border-gray-100 ${drafts.has(k) ? "bg-purple-50/60" : ""}`}>
+                              <td className="py-2 pr-2 font-medium text-[#1F2937]">{l.title}</td>
                               <td className="pr-2 text-[#4B5563]">{npr(l.retailPaisa)}</td>
                               <td className={`pr-2 ${l.available ? "text-emerald-600" : "text-gray-400"}`}>{l.available}</td>
-                              <td className="pr-2"><Switch checked={d.visible !== false} onCheckedChange={(on) => change(k, { visible: on ? null : false })} aria-label={`Show ${l.label}`} /></td>
-                              <td className="pr-2"><Input value={d.discount} onChange={(e) => change(k, { discount: e.target.value })} placeholder="—" type="number" min={0} max={90} step="0.01" className={`${inputCls} h-8 w-20 bg-white text-center text-sm rounded-lg placeholder:text-gray-400`} aria-label={`${l.label} discount`} /></td>
-                              <td className="pr-2"><Input value={d.fixed} onChange={(e) => change(k, { fixed: e.target.value })} placeholder="—" type="number" min={0} step="0.01" className={`${inputCls} h-8 w-28 bg-white text-center text-sm rounded-lg placeholder:text-gray-400`} aria-label={`${l.label} fixed price`} /></td>
+                              <td className="pr-2"><Switch checked={d.visible !== false} onCheckedChange={(on) => change(k, { visible: on ? null : false })} aria-label={`Show ${l.title}`} /></td>
+                              <td className="pr-2"><Input value={d.discount} onChange={(e) => change(k, { discount: e.target.value })} placeholder="—" type="number" min={0} max={90} step="0.01" className={`${inputCls} h-8 w-20 bg-white text-center text-sm rounded-lg placeholder:text-gray-400`} aria-label={`${l.title} discount`} /></td>
+                              <td className="pr-2"><Input value={d.fixed} onChange={(e) => change(k, { fixed: e.target.value })} placeholder="—" type="number" min={0} step="0.01" className={`${inputCls} h-8 w-28 bg-white text-center text-sm rounded-lg placeholder:text-gray-400`} aria-label={`${l.title} fixed price`} /></td>
                               <td>
                                 <span className={`font-bold ${pv.visible ? "text-[#7E3AF2]" : "text-gray-400 line-through"}`}>{npr(pv.pricePaisa)}</span>
                                 <span className="block text-[11px] text-[#6B7280]">{SOURCE[pv.source]} · {margin >= 0 ? `${margin}% off retail` : <span className="text-red-600 font-semibold">{Math.abs(margin)}% above retail</span>}</span>

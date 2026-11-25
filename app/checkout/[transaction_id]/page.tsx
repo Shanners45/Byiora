@@ -310,7 +310,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
       const res = await verifyPaymentByPhoneAction(transaction_id, cleanPhone, captchaToken)
       if (res.success && (res.verified || res.alreadyCompleted)) {
         setIsCompleted(true)
-        toast.success("Payment verified successfully! Your order is being fulfilled.")
         setTimeout(() => {
           if (!qrData?.isGuest) {
             router.push("/transactions")
@@ -335,7 +334,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ transaction
 
       if (res.success && res.completed) {
         setIsCompleted(true)
-        toast.success("Payment verified successfully!")
       } else if (res.error) {
         if (res.error.toLowerCase().includes("fetch failed") || res.error.toLowerCase().includes("network")) {
           toast.error("Our payment network is temporarily unresponsive. Please try again shortly.")

@@ -141,6 +141,8 @@ export async function fulfillOrderDirectly({
       const { data: claimData, error: claimError } = await supabase.rpc("claim_gift_card", {
         p_product_id: txn.product_id,
         p_denomination_label: txn.amount,
+        // The pack's permanent id: titles can repeat across a product's categories.
+        p_denomination_id: txn.denomination_id || null,
         p_transaction_id: transactionId,
         p_user_id: txn.user_id || txn.user_email
       } as any)
@@ -155,7 +157,7 @@ export async function fulfillOrderDirectly({
         decryptedCode = decryptInventoryCode(deliveredCode as string)
         // That may have been the last code for this pack: tell staff on Discord so it gets restocked.
         const { alertIfSoldOut } = await import("@/lib/inventory-alerts")
-        await alertIfSoldOut({ productId: txn.product_id, label: txn.amount, productName: txn.product_name, soldVia: `Storefront order ${transactionId}` })
+        await alertIfSoldOut({ productId: txn.product_id, label: txn.amount, denominationId: txn.denomination_id, productName: txn.product_name, soldVia: `Storefront order ${transactionId}` })
 
         if (decryptedCode) {
           await supabase.from("transactions").update({

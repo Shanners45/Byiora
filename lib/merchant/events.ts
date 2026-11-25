@@ -189,7 +189,8 @@ export async function afterLiveOrder(m: Merchant, orderId: string): Promise<void
 
 /** Order payload including Byiora's SKU (looked up from product_skus). */
 export async function orderPayload(o: any) {
-  const { data } = await merchantDb().from("product_skus").select("sku").eq("product_id", o.product_id).eq("denomination_label", o.denomination_label).maybeSingle()
+  const q = merchantDb().from("product_skus").select("sku").eq("product_id", o.product_id)
+  const { data } = await (o.denomination_id ? q.eq("denomination_id", o.denomination_id) : q.eq("denomination_label", o.denomination_label)).maybeSingle()
   return orderWebhookData({ ...o, byiora_sku: data?.sku ?? null })
 }
 
@@ -203,6 +204,7 @@ export function orderWebhookData(o: any) {
     display_name: o.merchant_display_name ?? null,
     product_id: o.product_id,
     product_name: o.product_name,
+    denomination_id: o.denomination_id ?? null,
     denomination: o.denomination_label,
     quantity: o.quantity,
     unit_price: o.unit_price_paisa / 100,

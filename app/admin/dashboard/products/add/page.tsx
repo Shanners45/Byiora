@@ -42,7 +42,7 @@ export default function AddProductPage() {
   const [description, setDescription] = useState("")
   const [isActive, setIsActive] = useState(true)
   const [ribbonText, setRibbonText] = useState("")
-  const [denominations, setDenominations] = useState<Array<{ price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean; categoryId?: string }>>([])
+  const [denominations, setDenominations] = useState<Array<{ id?: string; price: string; label: string; icon_url?: string; bestseller?: boolean; in_stock?: boolean; categoryId?: string }>>([])
   const [denomIconUrl, setDenomIconUrl] = useState("")
   const [uidInstructions, setUidInstructions] = useState("To find your User ID, click on your avatar, you can find your User ID under your Nickname.")
   const [uidGuideImage, setUidGuideImage] = useState("")
@@ -291,8 +291,9 @@ export default function AddProductPage() {
 
     if (editingDenomIndex !== null) {
       const updated = [...denominations]
-      updated[editingDenomIndex] = { 
-        price: newDenomPrice, 
+      updated[editingDenomIndex] = {
+        ...updated[editingDenomIndex],
+        price: newDenomPrice,
         label: cleanLabel,
         bestseller: newDenomInStock ? newDenomBestseller : false,
         in_stock: newDenomInStock,
@@ -301,7 +302,7 @@ export default function AddProductPage() {
       setDenominations(updated)
       setEditingDenomIndex(null)
     } else {
-      setDenominations([...denominations, { price: newDenomPrice, label: cleanLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }])
+      setDenominations([...denominations, { id: crypto.randomUUID(), price: newDenomPrice, label: cleanLabel, bestseller: newDenomInStock ? newDenomBestseller : false, in_stock: newDenomInStock, categoryId: newDenomCategoryId === "none" ? undefined : newDenomCategoryId || undefined }])
     }
 
     setNewDenomPrice("")

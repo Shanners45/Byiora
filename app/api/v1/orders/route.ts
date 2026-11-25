@@ -10,6 +10,8 @@ const STATUS: Record<OrderError, number> = {
   INVALID_QUANTITY: 422,
   INVALID_PRICE: 422,
   PRODUCT_NOT_FOUND: 404,
+  DENOMINATION_AMBIGUOUS: 422,
+  INVALID_DENOMINATION: 404,
   PRICE_CHANGED: 409,
   INSUFFICIENT_BALANCE: 402,
   OUT_OF_STOCK: 409,
@@ -19,7 +21,7 @@ const STATUS: Record<OrderError, number> = {
   MONTHLY_LIMIT: 403,
   ORDER_FAILED: 500,
 }
-const ALLOWED = new Set(["sku", "product_id", "denomination", "quantity", "client_ref", "max_unit_price", "customer"])
+const ALLOWED = new Set(["sku", "product_id", "denomination", "denomination_id", "quantity", "client_ref", "max_unit_price", "customer"])
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[a-z]{2,}$/i
 
 function parseCustomer(c: any): { email: string; name: string | null; phone: string | null } | string {
@@ -48,17 +50,19 @@ export async function POST(req: NextRequest) {
   const unknown = Object.keys(body).find((k) => !ALLOWED.has(k))
   if (unknown) return apiError(422, "UNKNOWN_FIELD", `Unknown field "${unknown}".`)
   const { quantity = 1, client_ref, max_unit_price, sku } = body
-  let { product_id, denomination } = body
-  // Either your own SKU, or our product_id + denomination.
+  let { product_id, denomination, denomination_id } = body
+  // Either a SKU (yours or ours), or our product_id + denomination_id (or a denomination name that is unique in the product).
   if (sku != null) {
-    if (product_id != null || denomination != null) return apiError(422, "INVALID_FIELD", "Send either sku, or product_id and denomination, not both.")
+    if (product_id != null || denomination != null || denomination_id != null) return apiError(422, "INVALID_FIELD", "Send either sku, or product_id and denomination_id, not both.")
     if (typeof sku !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(sku)) return apiError(422, "INVALID_FIELD", "sku must be 1-64 letters, digits, dot, _ or -.")
     const found = await findSku(m.id, sku)
     if (!found) return apiError(404, "SKU_NOT_FOUND", `No product has SKU "${sku}". Use a sku from GET /products, or your own SKU set in the merchant portal.`)
     product_id = found.productId
     denomination = found.label
+    denomination_id = found.denominationId
   }
-  if (typeof product_id !== "string" || typeof denomination !== "string") return apiError(422, "INVALID_FIELD", "Send sku, or product_id and denomination.")
+  if (denomination_id != null && (typeof denomination_id !== "string" || denomination_id.length > 64)) return apiError(422, "INVALID_FIELD", "denomination_id must be the id from GET /products.")
+  if (typeof product_id !== "string" || (typeof denomination !== "string" && typeof denomination_id !== "string")) return apiError(422, "INVALID_FIELD", "Send sku, or product_id and denomination_id.")
   if (!Number.isInteger(quantity)) return apiError(422, "INVALID_QUANTITY", ORDER_ERROR_TEXT.INVALID_QUANTITY)
   if (typeof client_ref !== "string" || !/^[\w-]{4,64}$/.test(client_ref)) return apiError(422, "INVALID_CLIENT_REF", "client_ref is required: 4-64 letters, digits, _ or -. Reuse it when retrying.")
   if (max_unit_price != null && !(typeof max_unit_price === "number" && max_unit_price > 0)) return apiError(422, "INVALID_FIELD", "max_unit_price must be a positive number in NPR.")
@@ -67,7 +71,8 @@ export async function POST(req: NextRequest) {
 
   const res = await placeOrder(m, {
     productId: product_id,
-    denomination,
+    denomination: typeof denomination === "string" ? denomination : "",
+    denominationId: denomination_id ?? null,
     quantity,
     clientRef: `${auth.test ? "" : "api-"}${client_ref}`,
     source: "api",
@@ -84,7 +89,7 @@ export async function POST(req: NextRequest) {
     if (auth.test) await emitWebhook(m.id, "order.completed", await orderPayload(o), false)
     else await audit({ actorType: "merchant", actorId: m.user_id, merchantId: m.id, action: "order.placed", details: { orderId: res.orderId, source: "api", keyId: auth.keyId } })
   }
-  return apiOk({ ...orderWebhookData({ ...o, byiora_sku: await byioraSkuFor(o.product_id, o.denomination_label) }), livemode: !auth.test, client_ref, duplicate: !res.created, codes: await orderCodes(o.id) }, res.created ? 201 : 200)
+  return apiOk({ ...orderWebhookData({ ...o, byiora_sku: await byioraSkuFor(o.product_id, o.denomination_id, o.denomination_label) }), livemode: !auth.test, client_ref, duplicate: !res.created, codes: await orderCodes(o.id) }, res.created ? 201 : 200)
 }
 
 /** Orders made with this key's mode, newest first, 50 per page (?page=2). No codes. */

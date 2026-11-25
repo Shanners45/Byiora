@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { TurnstileWidget, currentTurnstileToken } from "@/components/turnstile-widget"
+import { BrandLoader } from "@/components/brand-loader"
 import { createClient } from "@/lib/supabase/client"
 import {
   getMerchantStateAction,
@@ -193,13 +194,8 @@ export default function MerchantLogin() {
       window.location.reload()
     })
 
-  if (!step) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F9FAFB]">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-t-[#7E3AF2] border-gray-200"></div>
-      </div>
-    )
-  }
+  // Same Byiora logo loader as the route's loading screen, so the hand-over is seamless.
+  if (!step) return <BrandLoader label="Checking your session" />
 
   const codeReady = /^\d{6}$/.test(code)
 

@@ -345,7 +345,8 @@ for p in r.json()["products"]:
               rows={[
                 ["Byiora SKU (recommended)", <C key="a">{'"sku": "GOOGLE-PLAY-100INR"'}</C>, "Stable, assigned by us"],
                 ["Your own SKU", <C key="b">{'"sku": "MY-GPLAY-100"'}</C>, "Only after you save it in the portal"],
-                ["Product + amount", <C key="c">{'"product_id": "google-play", "denomination": "₹100 Gift Card"'}</C>, "Works, but the text must match exactly"],
+                ["Product + amount id", <C key="c">{'"product_id": "google-play", "denomination_id": "<id from GET /products>"'}</C>, "Stable: the id never changes, even if the amount is renamed"],
+                ["Product + amount name", <C key="d">{'"product_id": "google-play", "denomination": "₹100 Gift Card"'}</C>, "Works only when the name is exact and unique in the product (some products list the same amount for two regions)"],
               ]}
             />
           </Section>
@@ -396,8 +397,8 @@ for p in r.json()["products"]:
 
             <Endpoint method="GET" path="/products" id="products" title="5.2 List products">
               <p>Every product and amount available to your account, with your price and live stock.</p>
-              <CodeTabs samples={{ Response: `{\n  "currency": "NPR",\n  "products": [\n    {\n      "id": "google-play",\n      "name": "Google Play Gift card (INR)",\n      "category": "digital-goods",\n      "denominations": [\n        { "sku": "GOOGLE-PLAY-100INR", "denomination": "₹100 Gift Card", "merchant_sku": "MY-GPLAY-100", "display_name": "Google Play ₹100 (India)", "price": 190, "in_stock": 42 },\n        { "sku": "GOOGLE-PLAY-500INR", "denomination": "₹500 Gift Card", "merchant_sku": null, "display_name": null, "price": 930, "in_stock": 0 }\n      ]\n    }\n  ]\n}` }} />
-              <Table head={["Field", "Meaning"]} rows={[["id", "Product ID: send as product_id"], ["denominations[].sku", "Byiora's permanent SKU: store this and order with it"], ["denominations[].denomination", "Amount name (or send as denomination)"], ["denominations[].merchant_sku / display_name", "Your own code and name, if you set them (else null)"], ["denominations[].price", "Your unit price in NPR"], ["denominations[].in_stock", "Codes available now"]]} />
+              <CodeTabs samples={{ Response: `{\n  "currency": "NPR",\n  "products": [\n    {\n      "id": "google-play",\n      "name": "Google Play Gift card (INR)",\n      "category": "digital-goods",\n      "denominations": [\n        { "sku": "GOOGLE-PLAY-100INR", "denomination_id": "3f1c…", "denomination": "₹100 Gift Card", "merchant_sku": "MY-GPLAY-100", "display_name": "Google Play ₹100 (India)", "price": 190, "in_stock": 42 },\n        { "sku": "GOOGLE-PLAY-500INR", "denomination_id": "9a07…", "denomination": "₹500 Gift Card", "merchant_sku": null, "display_name": null, "price": 930, "in_stock": 0 }\n      ]\n    }\n  ]\n}` }} />
+              <Table head={["Field", "Meaning"]} rows={[["id", "Product ID: send as product_id"], ["denominations[].sku", "Byiora's permanent SKU: store this and order with it"], ["denominations[].denomination_id", "The amount's permanent id: order with it (with product_id) or with sku"], ["denominations[].denomination", "Amount name, for display. Two regions of a product can share a name"], ["denominations[].merchant_sku / display_name", "Your own code and name, if you set them (else null)"], ["denominations[].price", "Your unit price in NPR"], ["denominations[].in_stock", "Codes available now"]]} />
             </Endpoint>
 
             <Endpoint method="POST" path="/orders" id="create-order" title="5.3 Place an order">
@@ -406,8 +407,9 @@ for p in r.json()["products"]:
                 head={["Field", "Type", "Required", "Description"]}
                 rows={[
                   ["sku", "string", "Either this…", "Byiora SKU from GET /products, or your own SKU"],
-                  ["product_id", "string", "…or these two", "From GET /products"],
-                  ["denomination", "string", "…or these two", "Exact denomination text from GET /products"],
+                  ["product_id", "string", "…or product_id + denomination_id", "From GET /products"],
+                  ["denomination_id", "string", "…with product_id", "The amount's permanent id from GET /products"],
+                  ["denomination", "string", "Instead of denomination_id", "Exact amount name; refused with DENOMINATION_AMBIGUOUS when two amounts of the product share it"],
                   ["quantity", "integer", "No (1)", "1 to 20 codes"],
                   ["client_ref", "string", "Yes", "Your unique order ID: 4–64 letters, digits, _ or -. Reuse it on retries."],
                   ["max_unit_price", "number", "No", "Fail with PRICE_CHANGED instead of paying more than this per code"],

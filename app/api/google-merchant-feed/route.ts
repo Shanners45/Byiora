@@ -94,7 +94,12 @@ export async function GET(req: Request) {
             : /₹|\bINR\b/i.test(label) ? " (India region)"
               : /\$|\bUSD\b/i.test(label) ? " (US region)"
                 : ""
-          const itemTitle = `${p.name} - ${label}${regionTag}`
+          // Packs can share a title across categories (e.g. Valorant Nepal / India): name the category too.
+          const cats = (p as any).denomination_categories
+          const categoryName = (Array.isArray(cats) ? cats : []).find((c: any) => c.id === denom.categoryId)?.name
+          const itemTitle = categoryName
+            ? `${p.name} - ${label} (${String(categoryName).replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "").trim()})`
+            : `${p.name} - ${label}${regionTag}`
           const itemId = `${p.id}-${idx + 1}`
 
           items.push(`    <item>

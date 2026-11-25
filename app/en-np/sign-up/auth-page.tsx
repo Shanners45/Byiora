@@ -8,13 +8,13 @@ import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { useAuth } from "@/lib/auth-context"
 import { Header } from "@/components/header"
+import { Footer } from "@/components/footer"
 import { TurnstileWidget } from "@/components/turnstile-widget"
 import Link from "next/link"
-import Image from "next/image"
 import { signupWithPassword, verifySignupOtp, resendSignupOtp } from "@/app/actions/auth"
 import { getOrCreateDeviceId } from "@/lib/security/device"
 import { safeInternalPath } from "@/lib/safe-redirect"
-import { ShieldCheck, Loader2, ArrowLeft, Mail, BadgeCheck, Facebook, Instagram, Youtube } from "lucide-react"
+import { ShieldCheck, Loader2, ArrowLeft, Mail } from "lucide-react"
 
 const GoogleIcon = () => (
   <svg className="mr-2 h-5 w-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -517,85 +517,7 @@ export function AuthPage({ mode }: { mode: "signup" | "signin" }) {
         </div>
       </main>
 
-      {/* Simplified Yellow Footer */}
-      <footer className="w-full">
-        <div className="bg-brand-soft-yellow py-8">
-          <div className="container mx-auto px-4 max-w-4xl">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div>
-                <h3 className="font-bold text-brand-charcoal mb-4">Need help?</h3>
-                <Link href="/contact">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-brand-charcoal text-brand-charcoal hover:bg-brand-charcoal hover:text-white flex items-center gap-1.5"
-                  >
-                    <Mail className="h-4 w-4" />
-                    Contact Us
-                  </Button>
-                </Link>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-brand-charcoal mb-4">Country</h3>
-                <div className="flex items-center gap-1.5">
-                  <Image
-                    src="/images/nepal-flag.svg"
-                    alt="Nepal Flag"
-                    width={20}
-                    height={20}
-                    className="w-4 h-4 object-contain drop-shadow-sm -translate-y-[2.5px]"
-                  />
-                  <span className="text-brand-charcoal font-medium">Nepal</span>
-                </div>
-                <p className="text-xs text-brand-charcoal/90 font-medium mt-1.5 tracking-wide flex items-center gap-1.5">
-                  <BadgeCheck className="h-4 w-4 text-emerald-700 shrink-0" />
-                  <span>PAN: 151285437</span>
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-brand-charcoal mb-4">Stay updated with us:</h3>
-                <div className="flex space-x-2">
-                  <a href="https://www.facebook.com/byiora" target="_blank" rel="noopener noreferrer" aria-label="Byiora on Facebook">
-                    <Button variant="ghost" size="icon" className="text-brand-charcoal hover:text-blue-600 hover:bg-blue-50">
-                      <Facebook className="h-5 w-5" />
-                    </Button>
-                  </a>
-                  <a href="https://www.instagram.com/byiora" target="_blank" rel="noopener noreferrer" aria-label="Byiora on Instagram">
-                    <Button variant="ghost" size="icon" className="text-brand-charcoal hover:text-pink-500 hover:bg-pink-50">
-                      <Instagram className="h-5 w-5" />
-                    </Button>
-                  </a>
-                  <a href="https://www.youtube.com/@byiora" target="_blank" rel="noopener noreferrer" aria-label="Byiora on YouTube">
-                    <Button variant="ghost" size="icon" className="text-brand-charcoal hover:text-red-600 hover:bg-red-50">
-                      <Youtube className="h-5 w-5" />
-                    </Button>
-                  </a>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-gray-100 py-4">
-          <div className="container mx-auto px-4">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-brand-light-gray">
-              <div className="flex flex-wrap gap-4">
-                <span>© 2026 Copyright Byiora</span>
-                <Link href="/terms-and-conditions" className="hover:text-brand-sky-blue">Terms & Conditions</Link>
-                <Link href="/privacy-policy" className="hover:text-brand-sky-blue">Privacy Policy</Link>
-                <Link href="/refund-policy" className="hover:text-brand-sky-blue">Refund Policy</Link>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="h-6 relative">
-                  <Image src="/logo-final.png" alt="Byiora Logo" width={80} height={24} className="object-contain" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer simple />
     </div>
   )
 }

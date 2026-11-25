@@ -49,6 +49,7 @@ interface AuthContextType {
       guestData?: any
       turnstileToken?: string
       promoCode?: string
+      denominationId?: string
     },
   ) => Promise<{ transactionId: string, checkoutToken?: string, paymentUrl?: string, isDuplicate?: boolean, isFreeOrder?: boolean }>
   refreshTransactions: () => Promise<void>
@@ -297,6 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       guestData?: any
       turnstileToken?: string
       promoCode?: string
+      denominationId?: string
     },
   ): Promise<{ transactionId: string, checkoutToken?: string, paymentUrl?: string, isDuplicate?: boolean, isFreeOrder?: boolean }> => {
     try {

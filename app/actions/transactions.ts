@@ -10,6 +10,7 @@ import { checkStrikePenalty } from "@/lib/security/strike-counter"
 import { verifyTurnstileToken } from "@/lib/captcha"
 import { trackRateLimitViolation, trackEmailVelocity, isTrustedBuyer } from "@/lib/security/spam-detection"
 import { createCheckoutCapability } from "@/lib/crypto/checkout"
+import { denomKey, findDenomination } from "@/lib/denominations"
 
 interface TransactionData {
   product: string
@@ -24,6 +25,8 @@ interface TransactionData {
   userId?: string | null
   turnstileToken?: string
   promoCode?: string
+  /** The pack's permanent id; `amount` is only its title. */
+  denominationId?: string
 }
 
 /**
@@ -288,13 +291,9 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       verifiedCategory = (slugProduct as any)?.category
     }
 
-    // SECURITY: Strictly match denomination by label or id against DB records
-    const cleanAmount = transactionData.amount?.trim().toLowerCase()
-    let matchedDenom = Array.isArray(denominations) ? denominations.find(
-      (d: any) =>
-        (d.label && d.label.trim().toLowerCase() === cleanAmount) ||
-        (d.id && String(d.id).trim().toLowerCase() === cleanAmount)
-    ) : null
+    // SECURITY: Match the pack against DB records by its permanent id. A bare title is accepted only
+    // when no other pack of the product shares it, so the price is never taken from the wrong pack.
+    const matchedDenom: any = findDenomination(denominations as any[], transactionData.denominationId || transactionData.amount)
 
     let verifiedPrice = "0"
     if (matchedDenom && matchedDenom.price !== undefined && matchedDenom.price !== null) {
@@ -325,7 +324,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
         code: transactionData.promoCode,
         productId: productId,
         productCategory: verifiedCategory || "",
-        denominationLabel: transactionData.amount,
+        denominationLabel: denomKey(matchedDenom),
         email: transactionData.email,
         userId: sessionUserId,
         deviceId: deviceId,
@@ -401,7 +400,9 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       user_id: actualUserId,
       product_id: productId,
       product_name: transactionData.product,
-      amount: transactionData.amount,
+      // The order keeps the pack id plus the title as shown at purchase.
+      amount: matchedDenom.label,
+      denomination_id: matchedDenom.id || null,
       price: verifiedPrice,
       status: initialStatus,
       payment_method: transactionData.paymentMethod,
@@ -479,7 +480,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
             { name: "Order ID", value: transactionId, inline: true },
             { name: "Status", value: "Processing", inline: true },
             { name: "Product", value: transactionData.product, inline: false },
-            { name: "Amount", value: transactionData.amount, inline: true },
+            { name: "Amount", value: matchedDenom.label, inline: true },
             { name: "Price", value: `Rs. ${verifiedPrice}`, inline: true },
             { name: "Email", value: transactionData.email, inline: false },
             { name: "Payment Method", value: transactionData.paymentMethod, inline: true },
@@ -515,7 +516,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
           email: transactionData.email,
           userName: userName,
           productName: transactionData.product,
-          denomination: transactionData.amount,
+          denomination: matchedDenom.label,
           transactionId: transactionId,
           price: verifiedPrice,
           paymentMethod: transactionData.paymentMethod,

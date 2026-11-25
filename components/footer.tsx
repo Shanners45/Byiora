@@ -2,10 +2,12 @@ import { Clock, Shield, CreditCard, Headphones, Mail, BadgeCheck } from "lucide-
 import Image from "next/image"
 import Link from "next/link"
 
-export function Footer() {
+/** simple: skip the purple "Why top up on Byiora?" block (used on the sign-in/sign-up pages). */
+export function Footer({ simple = false }: { simple?: boolean } = {}) {
   return (
-    <footer>
+    <footer className="w-full">
       {/* Purple Section */}
+      {!simple && (
       <div className="footer-purple py-10">
         <div className="container mx-auto px-4">
           <div className="text-center mb-8">
@@ -74,6 +76,7 @@ export function Footer() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Yellow Section: help, country, socials. Two columns on phones so it reads as one tidy block. */}
       <div className="footer-yellow py-8">

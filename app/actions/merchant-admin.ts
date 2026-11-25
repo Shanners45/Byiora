@@ -474,7 +474,7 @@ export async function fulfilMerchantOrderAction(orderId: string, codesRaw: strin
   const admin = await superAdmin()
   if (!admin) return { success: false, error: "Unauthorized" }
   const db = merchantDb()
-  const { data: o } = await db.from("merchant_orders").select("id, merchant_id, quantity, status, product_name, denomination_label").eq("id", orderId).maybeSingle()
+  const { data: o } = await db.from("merchant_orders").select("id, merchant_id, quantity, status, product_name, denomination_label, denomination_id").eq("id", orderId).maybeSingle()
   if (!o || o.status !== "pending") return { success: false, error: "This order is no longer waiting for codes." }
 
   let payload: { encrypted_code: string; code_hash: string }[] | null = null
@@ -500,7 +500,7 @@ export async function fulfilMerchantOrderAction(orderId: string, codesRaw: strin
     const { data: row } = await db.from("merchant_orders").select("product_id").eq("id", orderId).maybeSingle()
     if (row?.product_id) {
       const { alertIfSoldOut } = await import("@/lib/inventory-alerts")
-      await alertIfSoldOut({ productId: row.product_id, label: o.denomination_label, productName: o.product_name, soldVia: `Merchant order ${orderId} (filled from stock by admin)`, merchantOrderId: orderId })
+      await alertIfSoldOut({ productId: row.product_id, label: o.denomination_label, denominationId: o.denomination_id, productName: o.product_name, soldVia: `Merchant order ${orderId} (filled from stock by admin)`, merchantOrderId: orderId })
     }
   }
   const { data: done } = await db.from("merchant_orders").select("*").eq("id", orderId).single()
@@ -607,7 +607,8 @@ export async function getMerchantPriceBookAction(merchantId: string): Promise<{ 
   return { success: true, lines: await loadPriceBook(merchant), catalogMode: merchant.catalog_mode, discountPercent: merchant.discount_percent }
 }
 
-export type RuleInput = { productId: string; label: string; visible: boolean | null; discountPercent: number | null; fixedPriceRupees: number | null }
+/** denominationId: the pack's permanent id, or "" for the product-wide rule. */
+export type RuleInput = { productId: string; denominationId: string; visible: boolean | null; discountPercent: number | null; fixedPriceRupees: number | null }
 
 /** Upserts rules; a rule with nothing set is deleted (falls back to defaults). */
 export async function saveMerchantPriceRulesAction(merchantId: string, rules: RuleInput[]): Promise<{ success: boolean; error?: string }> {
@@ -617,28 +618,35 @@ export async function saveMerchantPriceRulesAction(merchantId: string, rules: Ru
   if (rules.length > 2000) return { success: false, error: "Too many changes at once." }
 
   const upserts: any[] = []
-  const deletes: { productId: string; label: string }[] = []
+  const deletes: { productId: string; denominationId: string }[] = []
   const now = new Date().toISOString()
+  // Pack titles are stored on each rule as a readable snapshot.
+  const productIds = [...new Set(rules.map((r) => String(r.productId || "")).filter(Boolean))]
+  const { data: products } = await merchantDb().from("products").select("id, denominations").in("id", productIds)
+  const packsOf = new Map<string, any[]>((products || []).map((p: any) => [p.id, Array.isArray(p.denominations) ? p.denominations : []]))
   for (const r of rules) {
     const productId = String(r.productId || "")
-    const label = String(r.label ?? "")
+    const denominationId = String(r.denominationId ?? "")
     if (!productId) return { success: false, error: "Invalid product." }
+    const pack = denominationId ? (packsOf.get(productId) || []).find((d: any) => d?.id === denominationId) : null
+    if (denominationId && !pack) return { success: false, error: "One of these amounts no longer exists. Reload and try again." }
+    const label = pack ? String(pack.label) : ""
     const visible = typeof r.visible === "boolean" ? r.visible : null
     const discount = r.discountPercent == null || (r.discountPercent as any) === "" ? null : Math.round(Number(r.discountPercent) * 100) / 100
     const fixed = r.fixedPriceRupees == null || (r.fixedPriceRupees as any) === "" ? null : Math.round(Number(r.fixedPriceRupees) * 100)
     if (discount != null && !(discount >= 0 && discount <= 90)) return { success: false, error: "Discounts must be between 0% and 90%." }
     if (fixed != null && !(fixed > 0)) return { success: false, error: "Fixed prices must be above zero." }
     if (fixed != null && !label) return { success: false, error: "Fixed prices are set per amount, not per product." }
-    if (visible == null && discount == null && fixed == null) deletes.push({ productId, label })
-    else upserts.push({ merchant_id: merchantId, product_id: productId, denomination_label: label, visible, discount_percent: discount, fixed_price_paisa: fixed, updated_by: admin.id, updated_at: now })
+    if (visible == null && discount == null && fixed == null) deletes.push({ productId, denominationId })
+    else upserts.push({ merchant_id: merchantId, product_id: productId, denomination_id: denominationId, denomination_label: label, visible, discount_percent: discount, fixed_price_paisa: fixed, updated_by: admin.id, updated_at: now })
   }
 
   const db = merchantDb()
   if (upserts.length) {
-    const { error } = await db.from("merchant_price_rules").upsert(upserts)
+    const { error } = await db.from("merchant_price_rules").upsert(upserts, { onConflict: "merchant_id,product_id,denomination_id" })
     if (error) return { success: false, error: error.message }
   }
-  for (const d of deletes) await db.from("merchant_price_rules").delete().eq("merchant_id", merchantId).eq("product_id", d.productId).eq("denomination_label", d.label)
+  for (const d of deletes) await db.from("merchant_price_rules").delete().eq("merchant_id", merchantId).eq("product_id", d.productId).eq("denomination_id", d.denominationId)
   await audit({ actorType: "admin", actorId: admin.id, merchantId, action: "pricing.updated", details: { changed: upserts.length, cleared: deletes.length } })
   return { success: true }
 }
@@ -658,8 +666,9 @@ export async function setMerchantCatalogModeAction(merchantId: string, mode: "al
 export type MerchantInventoryView = {
   useGlobal: boolean
   manualDelivery: boolean
-  rows: { productId: string; productName: string; label: string; available: number; delivered: number }[]
-  products: { id: string; name: string; labels: string[] }[]
+  rows: { productId: string; productName: string; denominationId: string | null; label: string; available: number; delivered: number }[]
+  /** packs: id + a readable title (with its category when titles repeat across categories). */
+  products: { id: string; name: string; packs: { id: string; title: string }[] }[]
 }
 
 export async function getMerchantInventoryAction(merchantId: string): Promise<{ success: true; data: MerchantInventoryView } | { success: false; error: string }> {
@@ -668,23 +677,29 @@ export async function getMerchantInventoryAction(merchantId: string): Promise<{ 
   const [{ data: m }, { data: counts }, { data: products }] = await Promise.all([
     db.from("merchants").select("use_global_inventory, manual_delivery").eq("id", merchantId).maybeSingle(),
     db.rpc("merchant_inventory_counts", { p_merchant_id: merchantId }),
-    db.from("products").select("id, name, denominations").eq("is_active", true).in("category", MERCHANT_CATEGORIES as unknown as string[]).order("name"),
+    db.from("products").select("id, name, denominations, denomination_categories").eq("is_active", true).in("category", MERCHANT_CATEGORIES as unknown as string[]).order("name"),
   ])
   if (!m) return { success: false, error: "Merchant not found" }
   const nameOf = new Map((products || []).map((p: any) => [p.id, p.name]))
+  const packTitle = (p: any, d: any) => {
+    const cat = (Array.isArray(p.denomination_categories) ? p.denomination_categories : []).find((c: any) => c.id === d.categoryId)?.name
+    return cat ? `${d.label} · ${cat}` : String(d.label)
+  }
+  const titleOf = new Map<string, string>()
+  for (const p of products || []) for (const d of Array.isArray(p.denominations) ? p.denominations : []) if (d?.id) titleOf.set(d.id, packTitle(p, d))
   return {
     success: true,
     data: {
       useGlobal: m.use_global_inventory,
       manualDelivery: m.manual_delivery,
-      rows: (counts || []).map((c: any) => ({ productId: c.product_id, productName: nameOf.get(c.product_id) || c.product_id, label: c.denomination_label, available: Number(c.available), delivered: Number(c.delivered) })),
-      products: (products || []).map((p: any) => ({ id: p.id, name: p.name, labels: (Array.isArray(p.denominations) ? p.denominations : []).map((d: any) => String(d?.label || "")).filter(Boolean) })),
+      rows: (counts || []).map((c: any) => ({ productId: c.product_id, productName: nameOf.get(c.product_id) || c.product_id, denominationId: c.denomination_id ?? null, label: (c.denomination_id && titleOf.get(c.denomination_id)) || c.denomination_label, available: Number(c.available), delivered: Number(c.delivered) })),
+      products: (products || []).map((p: any) => ({ id: p.id, name: p.name, packs: (Array.isArray(p.denominations) ? p.denominations : []).filter((d: any) => d?.id && d?.label).map((d: any) => ({ id: String(d.id), title: packTitle(p, d) })) })),
     },
   }
 }
 
 /** Adds codes that only this merchant can buy (one per line). */
-export async function addMerchantInventoryCodesAction(merchantId: string, productId: string, label: string, codesRaw: string): Promise<{ success: boolean; error?: string; added?: number; duplicates?: number; failed?: number; filled?: number }> {
+export async function addMerchantInventoryCodesAction(merchantId: string, productId: string, denominationId: string, codesRaw: string): Promise<{ success: boolean; error?: string; added?: number; duplicates?: number; failed?: number; filled?: number }> {
   const admin = await superAdmin()
   if (!admin) return { success: false, error: "Unauthorized" }
   const codes = [...new Set(String(codesRaw || "").split(/\r?\n/).map((c) => c.trim()).filter(Boolean))]
@@ -692,18 +707,20 @@ export async function addMerchantInventoryCodesAction(merchantId: string, produc
   if (codes.length > 500) return { success: false, error: "Up to 500 codes at a time." }
   const db = merchantDb()
   const { data: product } = await db.from("products").select("denominations").eq("id", productId).maybeSingle()
-  if (!product || !(product.denominations || []).some((d: any) => d?.label === label)) return { success: false, error: "Pick a valid product and amount." }
+  const pack = (product?.denominations || []).find((d: any) => d?.id && d.id === denominationId)
+  if (!pack) return { success: false, error: "Pick a valid product and amount." }
+  const label = String(pack.label)
   let added = 0, duplicates = 0, failed = 0
   for (const code of codes) {
     const enc = await encryptInventoryCode(code)
     if (!enc.success || !enc.encryptedBlob || !enc.codeHash) { failed++; continue }
-    const { error } = await db.from("gift_card_inventory").insert({ product_id: productId, denomination_label: label, encrypted_code: enc.encryptedBlob, code_hash: enc.codeHash, added_by: admin.id, merchant_id: merchantId })
+    const { error } = await db.from("gift_card_inventory").insert({ product_id: productId, denomination_id: denominationId, denomination_label: label, encrypted_code: enc.encryptedBlob, code_hash: enc.codeHash, added_by: admin.id, merchant_id: merchantId })
     if (!error) added++
     else if (error.code === "23505") duplicates++
     else failed++
   }
-  await audit({ actorType: "admin", actorId: admin.id, merchantId, action: "inventory.added", details: { productId, label, added, duplicates, failed } })
-  const filled = added ? await fillPendingFromStock(productId, label, merchantId).catch(() => 0) : 0
+  await audit({ actorType: "admin", actorId: admin.id, merchantId, action: "inventory.added", details: { productId, denominationId, label, added, duplicates, failed } })
+  const filled = added ? await fillPendingFromStock(productId, denominationId, merchantId).catch(() => 0) : 0
   return { success: true, added, duplicates, failed, filled }
 }
 
