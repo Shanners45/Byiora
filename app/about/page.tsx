@@ -54,7 +54,7 @@ export default function AboutPage() {
                 Byiora is a registered business in Nepal, PAN 151285437. You can reach our support team by email at{" "}
                 <a href="mailto:support@byiora.com.np" className={link}>support@byiora.com.np</a> or on{" "}
                 <a href="https://wa.me/9779842864103" target="_blank" rel="noopener noreferrer" className={link}>WhatsApp (+977-9842864103)</a>,
-                Sunday to Friday, 9 AM to 6 PM Nepal time.
+                Sunday to Friday, 9 AM to 9 PM Nepal time.
               </p>
             </section>
 

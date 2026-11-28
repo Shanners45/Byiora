@@ -66,7 +66,7 @@ export function Footer({ simple = false }: { simple?: boolean } = {}) {
               <div>
                 <h4 className="font-bold text-white mb-2">Customer Support</h4>
                 <p className="text-white/80 text-sm">
-                  Our support team is here Sunday to Friday, 9 AM to 6 PM Nepal time.{" "}
+                  Our support team is here Sunday to Friday, 9 AM to 9 PM Nepal time.{" "}
                   <a href="/contact" className="underline hover:text-yellow-300">
                     Contact us!
                   </a>

@@ -116,7 +116,7 @@ export default async function Home() {
             </li>
           </ol>
           <p>
-            Byiora is a Nepal-registered business (PAN 151285437). Support replies by email and WhatsApp, Sunday to Friday, 9 AM to 6 PM Nepal time.
+            Byiora is a Nepal-registered business (PAN 151285437). Support replies by email and WhatsApp, Sunday to Friday, 9 AM to 9 PM Nepal time.
             Problems with a code? Read our <a href="/refund-policy">Refund Policy</a>, or see what customers say on{" "}
             <a href="https://www.trustpilot.com/review/byiora.com.np" target="_blank" rel="noopener noreferrer">Trustpilot</a>.
           </p>

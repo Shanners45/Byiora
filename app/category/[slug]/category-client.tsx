@@ -52,7 +52,7 @@ const CATEGORY_INTROS: Record<string, string[]> = {
   ],
   "direct-login": [
     "Some subscriptions cannot be bought with a code or a player ID, so Byiora activates them directly on your account. This category covers ChatGPT, Claude, Netflix and Prime Video plans, paid using eSewa, Khalti or Fonepay.",
-    "To order, choose a plan, pay, and enter the account email and password requested on the product page. Our team signs in, activates the plan and confirms by email, usually during support hours (Sunday to Friday, 9 AM to 6 PM Nepal time). Change your password once the plan is active.",
+    "To order, choose a plan, pay, and enter the account email and password requested on the product page. Our team signs in, activates the plan and confirms by email, usually during support hours (Sunday to Friday, 9 AM to 9 PM Nepal time). Change your password once the plan is active.",
     "Direct-login orders are processed by hand, so they take longer than instant code delivery. Each product page lists the plan length and what is included. Questions before ordering? Message us on WhatsApp.",
   ],
 }

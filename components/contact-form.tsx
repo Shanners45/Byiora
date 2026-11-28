@@ -15,7 +15,7 @@ const CONTACT_DETAILS = {
   facebook: "https://www.facebook.com/byiora",
   instagram: "https://www.instagram.com/byiora",
   youtube: "https://www.youtube.com/@byiora",
-  supportHours: "Sun – Fri, 9 AM – 6 PM NPT",
+  supportHours: "Sun – Fri, 9 AM – 9 PM NPT",
 }
 
 export function ContactForm() {

@@ -8,13 +8,13 @@ const BASE_URL = "https://www.byiora.com.np"
 
 export const metadata: Metadata = {
   title: { absolute: "Contact Us | Byiora - Game Top-Up & Gift Card Support Nepal" },
-  description: "Need help with a game top-up or gift card? Contact Byiora support via WhatsApp, email, or our contact form. We reply Sunday to Friday, 9 AM to 6 PM Nepal time.",
+  description: "Need help with a game top-up or gift card? Contact Byiora support via WhatsApp, email, or our contact form. We reply Sunday to Friday, 9 AM to 9 PM Nepal time.",
   alternates: {
     canonical: `${BASE_URL}/contact`,
   },
   openGraph: {
     title: "Contact Us | Byiora - Game Top-Up & Gift Card Support Nepal",
-    description: "Need help with a game top-up or gift card? Contact Byiora support via WhatsApp, email, or our contact form. We reply Sunday to Friday, 9 AM to 6 PM Nepal time.",
+    description: "Need help with a game top-up or gift card? Contact Byiora support via WhatsApp, email, or our contact form. We reply Sunday to Friday, 9 AM to 9 PM Nepal time.",
     url: `${BASE_URL}/contact`,
     siteName: "Byiora",
     type: "website",
