@@ -53,7 +53,7 @@ export async function GET(req: Request) {
         p.category === "topup" ? "sent to your player ID after payment"
           : p.category === "direct-login" ? "activated on your account by our team"
             : "code emailed to you after payment"
-      const productDescription = `${p.name} in Nepal. Pay in NPR with eSewa, Khalti or Fonepay QR at Byiora; ${delivery}.`
+      const productDescription = `${p.name} in Nepal. Pay using eSewa, Khalti or Fonepay at Byiora; ${delivery}.`
       // Game keys are video game software; everything else (gift cards, top-ups, subscriptions) is a gift card/voucher.
       const googleCategory = p.category === "games" ? "1279" : "53"
       const brand = brandOf(p.name)

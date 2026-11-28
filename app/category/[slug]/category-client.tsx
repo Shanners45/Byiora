@@ -42,7 +42,7 @@ const CATEGORY_INTROS: Record<string, string[]> = {
   ],
   topup: [
     "Top up your favourite games in Nepal without sharing your password. Byiora credits in-game currency straight to your account using your Player ID (UID), plus a server or zone ID for some games. Available top-ups include PUBG Mobile UC, Free Fire diamonds, Genshin Impact, Clash of Clans and EA SPORTS FC Mobile.",
-    "Pick your game and amount, enter your Player ID, and pay in NPR by scanning the QR with eSewa, Khalti or your bank app. Each product page shows where to find your ID. Copy it carefully: once currency is credited to the ID you entered, it cannot be reversed.",
+    "Pick your game and amount, enter your Player ID, and pay by scanning the QR with eSewa, Khalti or your bank app. Each product page shows where to find your ID. Copy it carefully: once currency is credited to the ID you entered, it cannot be reversed.",
     "Packs marked Out of Stock cannot be ordered until they are restocked. If an order cannot be completed because the Player ID is invalid, it is held until you send the correct details, or refunded in full on request.",
   ],
   games: [
@@ -51,7 +51,7 @@ const CATEGORY_INTROS: Record<string, string[]> = {
     "After payment is confirmed, your key is emailed to you and saved in your order history together with activation steps. If a key shows an activation error, send us your order ID and a screenshot of the error within 24 hours and our team will look into it.",
   ],
   "direct-login": [
-    "Some subscriptions cannot be bought with a code or a player ID, so Byiora activates them directly on your account. This category covers ChatGPT, Claude, Netflix and Prime Video plans, paid in Nepali rupees with eSewa, Khalti or Fonepay QR.",
+    "Some subscriptions cannot be bought with a code or a player ID, so Byiora activates them directly on your account. This category covers ChatGPT, Claude, Netflix and Prime Video plans, paid using eSewa, Khalti or Fonepay.",
     "To order, choose a plan, pay, and enter the account email and password requested on the product page. Our team signs in, activates the plan and confirms by email, usually during support hours (Sunday to Friday, 9 AM to 6 PM Nepal time). Change your password once the plan is active.",
     "Direct-login orders are processed by hand, so they take longer than instant code delivery. Each product page lists the plan length and what is included. Questions before ordering? Message us on WhatsApp.",
   ],

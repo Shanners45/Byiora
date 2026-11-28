@@ -1,6 +1,7 @@
 "use client"
 
 import type { MonthlyStatement } from "@/lib/merchant/reports"
+import { SELLER } from "@/lib/seller"
 
 const KIND: Record<string, string> = { topup: "Wallet top-up", order: "Order", refund: "Refund", adjustment: "Adjustment" }
 // jsPDF's built-in fonts have no rupee sign, so amounts use "Rs.".
@@ -54,14 +55,7 @@ export async function downloadStatementPdf(st: MonthlyStatement) {
   doc.setTextColor(31, 41, 55)
   doc.setFont("helvetica", "bold").setFontSize(10).text("Issued by", 40, 108).text("Statement for", W / 2 + 10, 108)
   doc.setFont("helvetica", "normal").setFontSize(9)
-  const issuedByLines = [
-    "Byiora",
-    "PAN 151285437,",
-    "Kathmandu, Nepal",
-    "+977 9842864103",
-    "support@byiora.com.np",
-    "www.byiora.com.np",
-  ]
+  const issuedByLines = [SELLER.name, `PAN ${SELLER.pan}`, SELLER.address, SELLER.phone, SELLER.email, SELLER.website]
   issuedByLines.forEach((l, i) => doc.text(l, 40, 124 + i * 13))
   const m = st.merchant
   ;[m.legalName || m.businessName, m.pan ? `PAN / VAT ${m.pan}` : null, m.address, m.email, m.phone].filter(Boolean).forEach((l, i) => doc.text(doc.splitTextToSize(String(l), W / 2 - 50)[0], W / 2 + 10, 124 + i * 13))

@@ -31,6 +31,10 @@ interface Transaction {
   failure_remarks?: string
   payment_category?: string
   product_category?: string
+  denomination_category?: string
+  promo_code?: string | null
+  discount_amount?: number | null
+  original_price?: number | null
 }
 
 interface AuthContextType {
@@ -156,6 +160,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         failure_remarks: transaction.failure_remarks,
         payment_category: transaction.payment_category,
         product_category: transaction.product_category,
+        denomination_category: transaction.denomination_category,
+        promo_code: transaction.promo_code,
+        discount_amount: transaction.discount_amount,
+        original_price: transaction.original_price,
       }))
 
       setTransactions(formattedTransactions)

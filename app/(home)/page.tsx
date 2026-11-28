@@ -107,7 +107,7 @@ export default async function Home() {
               <p>Choose a gift card, game top-up or game key and the amount you need. For top-ups, enter your Player ID; each product page shows where to find it.</p>
             </li>
             <li>
-              <p>2. Pay in NPR</p>
+              <p>2. Pay using eSewa, Khalti or Fonepay</p>
               <p>Scan the QR with eSewa, Khalti, Fonepay or your bank app. No international card or PayPal account is needed.</p>
             </li>
             <li>

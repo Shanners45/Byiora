@@ -17,6 +17,8 @@ import { toast } from "sonner";
 import { retryKhaltiPaymentAction } from "@/app/actions/transactions";
 import { verifyPaymentByPhoneAction } from "@/app/actions/checkout";
 import { TurnstileWidget } from "@/components/turnstile-widget";
+import { SELLER } from "@/lib/seller";
+import { packTitle } from "@/lib/denominations";
 
 export default function TransactionsPage() {
   const [filterStatus, setFilterStatus] = useState("all");
@@ -173,202 +175,108 @@ export default function TransactionsPage() {
 
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.width;
+      const left = 15;
+      const right = pageWidth - 15;
+      // jsPDF's built-in fonts only cover Latin-1: drop emoji and other scripts instead of printing junk.
+      const pdfText = (text: unknown) => String(text ?? "").replace(/[^\x20-\x7E\xA0-\xFF]/g, "").replace(/\s+/g, " ").trim();
+      const rs = (n: number) => `Rs. ${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+      const paid = Number(String(transaction.price ?? "").replace(/,/g, "")) || 0;
+      // Promo orders store the pre-discount price; price is what the customer paid.
+      const discount = Number(transaction.discount_amount) || 0;
+      const listPrice = discount > 0 ? Number(transaction.original_price) || paid + discount : paid;
+      const invoiceDate = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kathmandu", day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit",
+      }).format(new Date(transaction.date || Date.now())) + " NPT";
 
-      // 1. Header Section
-      // Logo text fallback
-      doc.setFontSize(24);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(126, 58, 242); // Brand purple color
-      doc.text("BYIORA", 20, 25);
-
-      // Try to add logo image
+      // 1. Header band: logo, title, invoice number
+      doc.setFillColor(90, 53, 136);
+      doc.rect(0, 0, pageWidth, 36, "F");
+      let logo: string | null = null;
       try {
-        const logoUrl = '/logo-final.png';
-        const response = await fetch(logoUrl);
+        const response = await fetch("/logo-final.png");
         if (response.ok) {
           const blob = await response.blob();
-          const base64Logo = await new Promise<string>((resolve, reject) => {
+          logo = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();
             reader.onloadend = () => resolve(reader.result as string);
             reader.onerror = reject;
             reader.readAsDataURL(blob);
           });
-
-          if (base64Logo.startsWith('data:image')) {
-            doc.addImage(base64Logo, 'PNG', 20, 12, 40, 15);
-            // Draw a white rectangle over the "BYIORA" text we drew earlier if logo exists
-            doc.setFillColor(255, 255, 255);
-            doc.rect(19, 19, 52, 10, 'F');
-            // Re-draw logo to be on top
-            doc.addImage(base64Logo, 'PNG', 20, 12, 40, 15);
-          }
         }
       } catch (e) {
-        console.warn("Logo fetch/process failed, using text fallback:", e);
+        console.warn("Logo fetch failed, using text fallback:", e);
       }
-
-      // "PAID" Stamp
-      doc.setDrawColor(34, 197, 94); // Green
-      doc.setLineWidth(1);
-      doc.roundedRect(pageWidth - 55, 15, 35, 15, 2, 2, 'S');
-      doc.setFontSize(14);
-      doc.setTextColor(34, 197, 94);
-      doc.text("PAID", pageWidth - 37.5, 25, { align: "center" });
-
-      // 2. Metadata Grid
-      doc.setTextColor(75, 85, 99); // Slate-600
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-
-      const gridY = 45;
-      const col1 = 20;
-      const col2 = pageWidth / 2;
-
-      doc.text("Order ID:", col1, gridY);
-      doc.setFont("helvetica", "bold");
-      doc.text(transaction.transactionId || "N/A", col1, gridY + 5);
-
-      doc.setFont("helvetica", "normal");
-      doc.text("Date:", col2, gridY);
-      doc.setFont("helvetica", "bold");
-      const dateVal = transaction.date || new Date().toISOString();
-      const dateStr = new Date(dateVal).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-      doc.text(dateStr, col2, gridY + 5);
-
-      doc.setFont("helvetica", "normal");
-      doc.text("Payment Method:", col1, gridY + 15);
-      doc.setFont("helvetica", "bold");
-      doc.text(transaction.paymentMethod || "N/A", col1, gridY + 20);
-
-      doc.setFont("helvetica", "normal");
-      doc.text("Status:", col2, gridY + 15);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(34, 197, 94);
-      doc.text("Completed", col2, gridY + 20);
-
-      // --- New Customer Section ---
-      doc.setTextColor(75, 85, 99);
-      doc.setFont("helvetica", "normal");
-      doc.text("Customer Email:", col1, gridY + 30);
-      doc.setFont("helvetica", "bold");
-      doc.text(transaction.email || "N/A", col1, gridY + 35);
-
-      if (user?.name) {
-        doc.setFont("helvetica", "normal");
-        doc.text("Customer Name:", col2, gridY + 30);
-        doc.setFont("helvetica", "bold");
-        doc.text(user.name, col2, gridY + 35);
+      doc.setTextColor(255, 255, 255);
+      if (logo?.startsWith("data:image")) {
+        doc.addImage(logo, "PNG", left, 9, 46, 15); // logo-final.png is ~3.07:1
+      } else {
+        doc.setFont("helvetica", "bold").setFontSize(22).text("BYIORA", left, 22);
       }
+      doc.setFont("helvetica", "bold").setFontSize(20).text("INVOICE", right, 17, { align: "right" });
+      doc.setFont("helvetica", "normal").setFontSize(9).text(`Invoice No. ${pdfText(transaction.transactionId)}`, right, 25, { align: "right" });
+      doc.text(`Invoice Date: ${invoiceDate}`, right, 30, { align: "right" });
 
-      // Helper function to sanitize text for PDF
-      const sanitizeForPDF = (text: string): string => {
-        if (!text) return ""
-        // Replace common problematic characters and ensure proper encoding
-        return text
-          .replace(/&/g, 'and')
-          .replace(/</g, '<')
-          .replace(/>/g, '>')
-          .replace(/"/g, '"')
-          .replace(/'/g, "'")
-      }
+      // 2. Seller and buyer
+      const colB = pageWidth / 2 + 5;
+      doc.setTextColor(107, 114, 128).setFont("helvetica", "bold").setFontSize(8);
+      doc.text("SOLD BY", left, 48);
+      doc.text("BILLED TO", colB, 48);
+      const sellerLines = [
+        `PAN No.: ${SELLER.pan}`,
+        `Address: ${SELLER.address}`,
+        `Phone: ${SELLER.phone}`,
+        `Email: ${SELLER.email}`,
+        `Web: ${SELLER.website}`,
+      ];
+      const buyerName = pdfText(user?.name);
+      const buyerLines = [`Email: ${pdfText(transaction.email) || "N/A"}`];
+      doc.setTextColor(31, 41, 55).setFont("helvetica", "bold").setFontSize(11);
+      doc.text(SELLER.name, left, 55);
+      doc.text(buyerName || "Customer", colB, 55);
+      doc.setFont("helvetica", "normal").setFontSize(9);
+      sellerLines.forEach((l, i) => doc.text(l, left, 61 + i * 5));
+      buyerLines.forEach((l, i) => doc.text(l, colB, 61 + i * 5));
 
-      // 3. Line Items Table
+      // 3. Line items and total
+      const pack = pdfText(packTitle({ amount: transaction.amount, denomination_category: transaction.denomination_category }));
       autoTable(doc, {
-        startY: 95,
-        head: [['ITEM', 'PAYMENT METHOD', 'TOTAL']],
-        body: [[
-          `${sanitizeForPDF(transaction.product)} - ${sanitizeForPDF(transaction.amount)}`,
-          sanitizeForPDF(transaction.paymentMethod),
-          `Rs. ${transaction.price}`
-        ]],
-        headStyles: {
-          fillColor: [126, 58, 242],
-          textColor: [255, 255, 255],
-          fontSize: 10,
-          fontStyle: 'bold'
+        startY: 61 + sellerLines.length * 5 + 6,
+        theme: "striped",
+        head: [["#", "Description", "Qty", "Unit price", "Amount"]],
+        body: [["1", [pdfText(transaction.product), pack].filter(Boolean).join(" - "), "1", rs(listPrice), rs(listPrice)]],
+        foot: [
+          [{ content: "Subtotal", colSpan: 4, styles: { halign: "right" } }, { content: rs(listPrice), styles: { halign: "right" } }],
+          ...(discount > 0
+            ? [[
+                { content: `Discount${transaction.promo_code ? ` (Promo: ${pdfText(transaction.promo_code)})` : ""}`, colSpan: 4, styles: { halign: "right" as const, textColor: [22, 163, 74] as [number, number, number] } },
+                { content: `- ${rs(discount)}`, styles: { halign: "right" as const, textColor: [22, 163, 74] as [number, number, number] } },
+              ]]
+            : []),
+          [{ content: "Total", colSpan: 4, styles: { halign: "right" } }, { content: rs(paid), styles: { halign: "right" } }],
+        ],
+        headStyles: { fillColor: [90, 53, 136], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 9 },
+        bodyStyles: { fontSize: 9, textColor: [31, 41, 55] },
+        footStyles: { fillColor: [255, 255, 255], textColor: [31, 41, 55], fontStyle: "bold", fontSize: 10 },
+        columnStyles: {
+          0: { cellWidth: 10 },
+          2: { cellWidth: 14, halign: "center" },
+          3: { cellWidth: 30, halign: "right" },
+          4: { cellWidth: 30, halign: "right" },
         },
-        bodyStyles: {
-          fontSize: 10,
-          textColor: [31, 41, 55]
-        },
-        alternateRowStyles: {
-          fillColor: [249, 250, 251]
-        },
-        margin: { left: 20, right: 20 }
+        margin: { left, right: 15 },
       });
-
-      // 4. Gift Card Section (Conditional)
-      // Use lastAutoTable.finalY to position content after the table
-      const finalY = (doc as any).lastAutoTable?.finalY ? (doc as any).lastAutoTable.finalY + 15 : 100;
-
-      if (transaction.status === "Completed" && transaction.giftcard_code) {
-        const rawCode = String(transaction.giftcard_code || "").trim();
-        const isUrl = /^https?:\/\//i.test(rawCode);
-
-        const boxX = 20;
-        const boxWidth = pageWidth - 40;
-        const paddingX = 8;
-        const textX = boxX + paddingX;
-        const maxTextWidth = boxWidth - (paddingX * 2);
-
-        // Adjust font size dynamically so long URLs or codes wrap cleanly without overflowing
-        const codeFontSize = isUrl
-          ? (rawCode.length > 55 ? 9.5 : 10.5)
-          : (rawCode.length > 30 ? 11 : 13);
-
-        doc.setFontSize(codeFontSize);
-        doc.setFont("courier", "bold");
-        const codeLines: string[] = doc.splitTextToSize(rawCode, maxTextWidth);
-
-        const lineHeight = codeFontSize * 0.45;
-        const boxHeight = Math.max(24, 14 + (codeLines.length * lineHeight) + 4);
-
-        // Background rounded box
-        doc.setFillColor(254, 252, 232); // bg-yellow-50
-        doc.setDrawColor(254, 240, 138); // border-yellow-200
-        doc.roundedRect(boxX, finalY, boxWidth, boxHeight, 3, 3, 'FD');
-
-        // Label
-        doc.setFontSize(10);
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(146, 64, 14); // text-yellow-800
-        doc.text(isUrl ? "YOUR REDEMPTION LINK / CODE:" : "YOUR GIFTCARD CODE:", textX, finalY + 8);
-
-        // Render code/link lines
-        doc.setFontSize(codeFontSize);
-        doc.setFont("courier", "bold");
-        doc.setTextColor(180, 83, 9); // text-yellow-700
-
-        let currentLineY = finalY + 15;
-        for (let i = 0; i < codeLines.length; i++) {
-          doc.text(codeLines[i], textX, currentLineY);
-          currentLineY += lineHeight;
-        }
-
-        // Clickable link annotation if it's a URL
-        if (isUrl) {
-          doc.link(textX, finalY + 11, maxTextWidth, (codeLines.length * lineHeight) + 2, { url: rawCode });
-        }
-      }
 
       // Footer
-      const footerY = doc.internal.pageSize.height - 15;
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(156, 163, 175);
-      doc.text("Thank you for shopping with Byiora!", pageWidth / 2, footerY - 5, { align: "center" });
-      doc.text("support@byiora.com.np", pageWidth / 2, footerY, { align: "center" });
+      const footerY = doc.internal.pageSize.height - 18;
+      doc.setDrawColor(229, 231, 235).setLineWidth(0.3).line(left, footerY - 6, right, footerY - 6);
+      doc.setFontSize(8).setFont("helvetica", "normal").setTextColor(156, 163, 175);
+      doc.text("This is a computer-generated invoice and does not need a signature.", pageWidth / 2, footerY, { align: "center" });
+      doc.text(`Thank you for shopping with ${SELLER.name}  |  ${SELLER.email}  |  ${SELLER.phone}  |  ${SELLER.website}`, pageWidth / 2, footerY + 5, { align: "center" });
 
-      doc.save(`Byiora_Receipt_${transaction.transactionId}.pdf`);
+      doc.save(`Byiora_Invoice_${transaction.transactionId}.pdf`);
     } catch (error) {
       console.error("PDF generation failed:", error);
-      alert("Failed to generate receipt. There was an error processing the document.");
+      alert("Failed to generate invoice. There was an error processing the document.");
     }
   };
 
@@ -478,11 +386,11 @@ export default function TransactionsPage() {
                 </div>
 
                 {transaction.giftcard_code && transaction.status.toLowerCase() === "completed" && (
-                  <div className="bg-[#FFFBEB] border border-[#FEF3C7] rounded-lg px-4 py-3 w-full max-w-full">
+                  <div className="bg-[#FFFBEB] border border-[#FEF3C7] rounded-lg px-4 py-3 w-fit max-w-full">
                     <div className="flex items-start gap-2">
                       <Gift className="h-4 w-4 text-[#F59E0B] flex-shrink-0 mt-0.5" />
                       <span className="text-sm font-semibold text-[#92400E] whitespace-nowrap mt-0.5">Giftcode:</span>
-                      <div className="flex items-center gap-1 bg-white border border-[#FEF3C7] rounded px-2 py-1 min-w-0 flex-1 sm:flex-none sm:max-w-full">
+                      <div className="flex items-center gap-1 bg-white border border-[#FEF3C7] rounded px-2 py-1 min-w-0">
                         <code className="text-[#D97706] font-mono font-bold tracking-wider text-xs sm:text-sm break-all min-w-0">
                           {revealedCodes[transaction.id] ? transaction.giftcard_code : "••••  ••••  ••••"}
                         </code>
@@ -561,7 +469,7 @@ export default function TransactionsPage() {
                                 className="border-brand-sky-blue text-brand-sky-blue hover:bg-brand-sky-blue/10"
                               >
                                 <Download className="h-4 w-4 mr-2" />
-                                Download Receipt
+                                Download Invoice
                               </Button>
                             )}
                           </>
@@ -620,7 +528,7 @@ export default function TransactionsPage() {
                               className="border-brand-sky-blue text-brand-sky-blue hover:bg-brand-sky-blue/10"
                             >
                               <Download className="h-4 w-4 mr-2" />
-                              Download Receipt
+                              Download Invoice
                             </Button>
                           )}
                         </>

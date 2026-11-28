@@ -14,7 +14,7 @@ export function Footer({ simple = false }: { simple?: boolean } = {}) {
             <h2 className="text-3xl md:text-4xl font-bold mb-3 tracking-wider">BYIORA</h2>
             <h3 className="text-xl md:text-2xl font-semibold mb-4">WHY TOP UP ON BYIORA?</h3>
             <p className="text-white/90 max-w-4xl mx-auto text-sm md:text-base leading-relaxed">
-              Buy gift cards, game top-ups and game keys in Nepal and pay in NPR with eSewa, Khalti or Fonepay QR.
+              Buy gift cards, game top-ups and game keys in Nepal and pay using eSewa, Khalti or Fonepay.
               Gift card codes are emailed to you after payment, top-ups go straight to your player ID, and every
               order stays in your transaction history.
             </p>

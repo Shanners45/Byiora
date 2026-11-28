@@ -55,11 +55,11 @@ function productSummary(p: { name: string; category?: string; denominations?: an
       : p.category === "direct-login" ? "activated on your account by our team"
         : "code emailed to you after payment"
   if (denoms.length > 0 && inStock.length === 0) {
-    return `${p.name} in Nepal, paid in NPR with eSewa, Khalti or Fonepay QR. Currently out of stock: message us on WhatsApp to hear when it's back.`
+    return `${p.name} in Nepal, paid using eSewa, Khalti or Fonepay. Currently out of stock: message us on WhatsApp to hear when it's back.`
   }
   const options = denoms.length > 1 ? `${denoms.length} options from ` : ""
   const price = inStock.length ? `: ${options}Rs. ${Math.min(...inStock).toLocaleString("en-IN")}` : ""
-  return `${p.name} in Nepal${price}. Pay in NPR with eSewa, Khalti or Fonepay QR; ${delivery}.`
+  return `${p.name} in Nepal${price}. Pay using eSewa, Khalti or Fonepay; ${delivery}.`
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

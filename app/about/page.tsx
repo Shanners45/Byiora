@@ -9,7 +9,7 @@ const BASE_URL = "https://www.byiora.com.np"
 export const metadata: Metadata = {
   title: { absolute: "About Us | Byiora – Gift Cards & Game Top-Ups in Nepal" },
   description:
-    "About Byiora: a Nepal-registered store (PAN 151285437) for gift cards, game top-ups, game keys and subscriptions, plus a Merchant Portal for resellers. Pay in NPR with eSewa, Khalti or Fonepay QR.",
+    "About Byiora: a Nepal-registered store (PAN 151285437) for gift cards, game top-ups, game keys and subscriptions, plus a Merchant Portal for resellers. Pay using eSewa, Khalti or Fonepay.",
   alternates: { canonical: `${BASE_URL}/about` },
   openGraph: { url: `${BASE_URL}/about`, title: "About Us | Byiora", siteName: "Byiora", images: [`${BASE_URL}/byiora-logo-full.png`] },
 }
