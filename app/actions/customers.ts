@@ -34,266 +34,58 @@ export interface CustomerProfile {
   posthogLastSeen?: string | null // PostHog-sourced "last active on site" timestamp
 }
 
+export type CustomerFilter = "all" | "registered" | "unverified" | "guest" | "banned" | "ban_related"
+export interface CustomerCounts { all: number; registered: number; unverified: number; guest: number; banned: number }
+
 /**
- * Loads aggregated customer data (Registered users + Guest purchasers) along with ban status.
+ * One page of the customer directory (registered users + guest buyers, grouped by email) with ban
+ * status. Built, filtered and paged in the database (admin_customer_directory), so the admin page
+ * loads only the customers it shows. "ban_related" lists every customer a ban refers to, for the
+ * blacklist tab.
  */
-export async function getCustomersOverviewAction(): Promise<{
+export async function getCustomersOverviewAction(opts: {
+  page?: number
+  pageSize?: number
+  search?: string
+  filter?: CustomerFilter
+} = {}): Promise<{
   success: boolean
   data?: CustomerProfile[]
+  total?: number
+  counts?: CustomerCounts
   error?: string
 }> {
   const session = await getAdminSessionAction()
   if (!session.success) return { success: false, error: "Unauthorized" }
 
+  const FILTERS: CustomerFilter[] = ["all", "registered", "unverified", "guest", "banned", "ban_related"]
+  const filter = FILTERS.includes(opts.filter as CustomerFilter) ? (opts.filter as CustomerFilter) : "all"
+  const pageSize = Math.min(Math.max(Math.floor(Number(opts.pageSize) || 10), 1), 1000)
+  const page = Math.max(Math.floor(Number(opts.page) || 1), 1)
+  const search = String(opts.search || "").trim().slice(0, 200)
+
   try {
-    // Proactively clean up any expired bans before aggregating
+    // Proactively clean up any expired bans before listing
     await cleanupExpiredBans().catch(() => {})
 
     const supabase = createServiceRoleClient() as any
-
-    // 0. Fetch admin accounts to exclude them from the customer directory
-    // Staff and merchant (seller) logins are not customers.
-    const [{ data: adminRows }, { data: merchantRows }] = await Promise.all([
-      supabase.from("admin_users").select("email"),
-      supabase.from("merchants").select("email"),
-    ])
-    const adminEmails = new Set([...(adminRows || []), ...(merchantRows || [])].map((a: any) => a.email?.toLowerCase().trim()).filter(Boolean))
-
-    // 1. Fetch registered users from public.users & Supabase Auth for last_sign_in_at
-    const { data: registeredUsers, error: usersErr } = await supabase
-      .from("users")
-      .select("id, email, name, created_at, signup_ip, last_ip, last_device_id, last_active_at")
-
-    if (usersErr) {
-      console.error("Error fetching registered users:", usersErr)
-      return { success: false, error: usersErr.message }
+    const { data, error } = await supabase.rpc("admin_customer_directory", {
+      p_search: search,
+      p_filter: filter,
+      p_limit: pageSize,
+      p_offset: (page - 1) * pageSize,
+    })
+    if (error) {
+      console.error("admin_customer_directory error:", error)
+      return { success: false, error: error.message }
     }
 
-    const authUsersMap = new Map<string, any>()
-    try {
-      const { data: authData } = await supabase.auth.admin.listUsers({ perPage: 1000 })
-      if (authData?.users) {
-        for (const u of authData.users) {
-          if (u.email) authUsersMap.set(u.email.toLowerCase().trim(), u)
-        }
-      }
-    } catch (authErr: any) {
-      console.warn("Could not list auth users for login times:", authErr.message)
-    }
+    const rows: CustomerProfile[] = Array.isArray(data?.rows) ? data.rows : []
 
-    // 2. Fetch all transactions to aggregate orders and spend per customer email
-    const { data: transactions, error: txnsErr } = await supabase
-      .from("transactions")
-      .select("transaction_id, user_id, user_email, price, status, created_at, guest_user_data")
-      .order("created_at", { ascending: false })
-
-    if (txnsErr) {
-      console.error("Error fetching transactions:", txnsErr)
-      return { success: false, error: txnsErr.message }
-    }
-
-    // 3. Fetch all active bans across email, IP, and device ID
-    const bans: BannedEntity[] = await getBannedEntities()
-    const bannedEmailMap = new Map<string, BannedEntity>()
-    const bannedDomainSet = new Set<string>()
-    const bannedIpMap = new Map<string, BannedEntity>()
-    const bannedDeviceMap = new Map<string, BannedEntity>()
-
-    for (const b of bans) {
-      if (b.type === "email") bannedEmailMap.set(b.value.toLowerCase(), b)
-      if (b.type === "email_domain") bannedDomainSet.add(b.value.toLowerCase())
-      if (b.type === "ip") bannedIpMap.set(b.value, b)
-      if (b.type === "device_id") bannedDeviceMap.set(b.value, b)
-    }
-
-    // Map to group all customer profiles by email
-    const customerMap = new Map<string, CustomerProfile>()
-
-    // Seed registered users first (excluding admin accounts)
-    for (const u of registeredUsers || []) {
-      if (!u.email) continue
-      const cleanEmail = u.email.trim().toLowerCase()
-      if (adminEmails.has(cleanEmail)) continue // Do not list admin staff as customers
-
-      const domain = cleanEmail.split("@")[1] || ""
-      const directBan = bannedEmailMap.get(cleanEmail)
-      const domainBan = bannedDomainSet.has(domain)
-      const authUser = authUsersMap.get(cleanEmail)
-
-      const isGoogle =
-        authUser?.app_metadata?.provider === "google" ||
-        (Array.isArray(authUser?.app_metadata?.providers) && authUser.app_metadata.providers.includes("google")) ||
-        (Array.isArray(authUser?.identities) && authUser.identities.some((id: any) => id.provider === "google"))
-
-      const userIp = u.last_ip || u.signup_ip || authUser?.user_metadata?.last_ip || authUser?.user_metadata?.signup_ip || null
-      const userDeviceId = u.last_device_id || authUser?.user_metadata?.last_device_id || null
-
-      customerMap.set(cleanEmail, {
-        email: cleanEmail,
-        name: u.name || authUser?.user_metadata?.full_name || cleanEmail.split("@")[0],
-        isRegistered: true,
-        isEmailVerified: Boolean(authUser?.email_confirmed_at),
-        isGoogleUser: Boolean(isGoogle),
-        provider: isGoogle ? "google" : "email",
-        userId: u.id,
-        totalOrders: 0,
-        totalSpent: 0,
-        successfulOrders: 0,
-        failedOrders: 0,
-        lastOrderDate: null,
-        lastIp: userIp,
-        lastDeviceId: userDeviceId,
-        lastSignInAt: authUser?.last_sign_in_at || null,
-        lastActiveAt: (u as any).last_active_at || null,
-        isBanned: !!directBan || domainBan,
-        banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
-        banId: directBan?.id || null,
-        createdAt: u.created_at,
-      })
-    }
-
-    // Seed any auth users not present in public.users (excluding admin accounts)
-    if (authUsersMap.size > 0) {
-      for (const [cleanEmail, au] of authUsersMap.entries()) {
-        if (adminEmails.has(cleanEmail)) continue // Do not list admin staff as customers
-
-        if (!customerMap.has(cleanEmail)) {
-          const isGoogle =
-            au.app_metadata?.provider === "google" ||
-            (Array.isArray(au.app_metadata?.providers) && au.app_metadata.providers.includes("google")) ||
-            (Array.isArray(au.identities) && au.identities.some((id: any) => id.provider === "google"))
-
-          const directBan = bannedEmailMap.get(cleanEmail)
-          const domain = cleanEmail.split("@")[1] || ""
-          const domainBan = bannedDomainSet.has(domain)
-          const userIp = au.user_metadata?.last_ip || au.user_metadata?.signup_ip || null
-          const userDeviceId = au.user_metadata?.last_device_id || null
-
-          customerMap.set(cleanEmail, {
-            email: cleanEmail,
-            name: au.user_metadata?.full_name || au.user_metadata?.name || cleanEmail.split("@")[0],
-            isRegistered: true,
-            isEmailVerified: Boolean(au.email_confirmed_at),
-            isGoogleUser: Boolean(isGoogle),
-            provider: isGoogle ? "google" : "email",
-            userId: au.id,
-            totalOrders: 0,
-            totalSpent: 0,
-            successfulOrders: 0,
-            failedOrders: 0,
-            lastOrderDate: null,
-            lastIp: userIp,
-            lastDeviceId: userDeviceId,
-            lastSignInAt: au.last_sign_in_at || null,
-            lastActiveAt: null,
-            isBanned: !!directBan || domainBan,
-            banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
-            banId: directBan?.id || null,
-            createdAt: au.created_at,
-          })
-        }
-      }
-    }
-
-    // Aggregate transactions
-    for (const t of transactions || []) {
-      if (!t.user_email) continue
-      const cleanEmail = t.user_email.trim().toLowerCase()
-      if (adminEmails.has(cleanEmail)) continue
-
-      const domain = cleanEmail.split("@")[1] || ""
-      const directBan = bannedEmailMap.get(cleanEmail)
-      const domainBan = bannedDomainSet.has(domain)
-
-      let profile = customerMap.get(cleanEmail)
-      if (!profile) {
-        const authUser = authUsersMap.get(cleanEmail)
-        const isRegistered = Boolean(t.user_id || authUser)
-        const isGoogle =
-          authUser?.app_metadata?.provider === "google" ||
-          (Array.isArray(authUser?.app_metadata?.providers) && authUser.app_metadata.providers.includes("google")) ||
-          (Array.isArray(authUser?.identities) && authUser.identities.some((id: any) => id.provider === "google"))
-
-        const guestName = (t.guest_user_data as any)?.name || authUser?.user_metadata?.full_name || cleanEmail.split("@")[0]
-        profile = {
-          email: cleanEmail,
-          name: guestName,
-          isRegistered,
-          isEmailVerified: Boolean(authUser?.email_confirmed_at),
-          isGoogleUser: Boolean(isGoogle),
-          provider: isGoogle ? "google" : (isRegistered ? "email" : null),
-          userId: t.user_id || authUser?.id || null,
-          totalOrders: 0,
-          totalSpent: 0,
-          successfulOrders: 0,
-          failedOrders: 0,
-          lastOrderDate: t.created_at,
-          lastIp: (t.guest_user_data as any)?.ip || null,
-          lastDeviceId: (t.guest_user_data as any)?.deviceId || null,
-          lastSignInAt: authUser?.last_sign_in_at || null,
-          lastActiveAt: null,
-          isBanned: !!directBan || domainBan,
-          banReason: directBan?.reason || (domainBan ? "Domain blacklisted" : null),
-          banId: directBan?.id || null,
-          createdAt: t.created_at,
-        }
-        customerMap.set(cleanEmail, profile)
-      }
-
-      // Update lastIp / lastDeviceId from latest transactions (transactions ordered descending by created_at)
-      const txIp = (t.guest_user_data as any)?.ip
-      const txDev = (t.guest_user_data as any)?.deviceId
-      if (txIp && !(profile as any)._hasLatestTxIp) {
-        profile.lastIp = txIp
-        ;(profile as any)._hasLatestTxIp = true
-      }
-      if (txDev && !(profile as any)._hasLatestTxDev) {
-        profile.lastDeviceId = txDev
-        ;(profile as any)._hasLatestTxDev = true
-      }
-
-      profile.totalOrders += 1
-
-      const numPrice = parseFloat(String(t.price).replace(/,/g, "")) || 0
-      const isSuccess = ["Completed", "Paid"].includes(t.status)
-      const isFailed = ["Payment Failed", "Cancelled", "Failed"].includes(t.status)
-
-      if (isSuccess) {
-        profile.successfulOrders += 1
-        profile.totalSpent += numPrice
-      }
-      if (isFailed) {
-        profile.failedOrders += 1
-      }
-
-      if (!profile.lastOrderDate || new Date(t.created_at) > new Date(profile.lastOrderDate)) {
-        profile.lastOrderDate = t.created_at
-      }
-      if (!profile.lastIp && (t.guest_user_data as any)?.ip) {
-        profile.lastIp = (t.guest_user_data as any).ip
-      }
-    }
-
-    for (const profile of customerMap.values()) {
-      const directBan = bannedEmailMap.get(profile.email)
-      const domain = profile.email.split("@")[1] || ""
-      const domainBan = bannedDomainSet.has(domain)
-      const deviceBan = profile.lastDeviceId ? bannedDeviceMap.get(profile.lastDeviceId) : null
-
-      const hardBan = directBan || deviceBan
-      if (hardBan || domainBan) {
-        profile.isBanned = true
-        profile.banReason = hardBan?.reason || (domainBan ? "Domain blacklisted" : "Banned by administrator")
-        profile.banId = hardBan?.id || null
-        profile.banVector = directBan ? "email" : (deviceBan ? "device_id" : "domain")
-      }
-    }
-
-    // ── Merge PostHog last-active timestamps ──
-    // This runs in parallel conceptually but after customer map is built.
+    // PostHog "last active on site", merged into just this page's customers.
     try {
       const posthogLastSeen = await getPostHogLastActive()
-      for (const profile of customerMap.values()) {
+      for (const profile of rows) {
         const phTimestamp = posthogLastSeen.get(profile.email)
         if (!phTimestamp) continue
         // Keep whichever signal is more recent between the DB heartbeat and PostHog
@@ -305,15 +97,7 @@ export async function getCustomersOverviewAction(): Promise<{
       console.warn("[Customers] PostHog last-active merge failed (non-critical):", phErr)
     }
 
-    const customerList = Array.from(customerMap.values())
-    // Sort by most recent order date descending (most recent buyers on top)
-    customerList.sort((a, b) => {
-      const timeA = a.lastOrderDate ? new Date(a.lastOrderDate).getTime() : (a.createdAt ? new Date(a.createdAt).getTime() : 0)
-      const timeB = b.lastOrderDate ? new Date(b.lastOrderDate).getTime() : (b.createdAt ? new Date(b.createdAt).getTime() : 0)
-      return timeB - timeA
-    })
-
-    return { success: true, data: customerList }
+    return { success: true, data: rows, total: Number(data?.total) || 0, counts: data?.counts }
   } catch (err: any) {
     console.error("getCustomersOverviewAction error:", err)
     return { success: false, error: err.message }

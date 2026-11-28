@@ -13,6 +13,21 @@ export interface Denomination {
   categoryId?: string
 }
 
+/** The pack's category name for an order snapshot, without flag emoji ("🇮🇳 India" -> "India"). */
+export function denomCategoryName(categories: unknown, d: { categoryId?: string | null } | null | undefined): string | null {
+  if (!d?.categoryId || !Array.isArray(categories)) return null
+  const name = categories.find((c: any) => c?.id === d.categoryId)?.name
+  return String(name || "").replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "").trim() || null
+}
+
+/** An order's pack as people read it: "475 VP · India", or just "475 VP" when it has no category. */
+export function packTitle(t: { amount?: string | null; denomination_category?: string | null }): string {
+  const label = String(t.amount ?? "")
+  const cat = t.denomination_category
+  // "50 Diamonds" in category "Diamonds" needs no suffix.
+  return cat && !label.toLowerCase().includes(cat.toLowerCase()) ? `${label} · ${cat}` : label
+}
+
 /** The key that identifies a pack: its id (packs from before ids existed fall back to their title). */
 export const denomKey = (d: { id?: string | null; label?: string | null }): string => String(d.id || d.label || "")
 

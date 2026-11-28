@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
@@ -16,6 +16,7 @@ import { toast } from "sonner"
 import { updateTransactionStatusAction, sendGiftcardCodeAction, insertNotificationAction, refundKhaltiTransactionAction, sendRecoveryEmailAction } from "@/app/actions/orders"
 import { getAllTransactionsAction } from "@/app/actions/dashboard"
 import { decryptCheckoutData, clearCheckoutData } from "@/app/actions/checkout-encryption"
+import { packTitle } from "@/lib/denominations"
 
 interface Transaction {
   id: string
@@ -116,9 +117,13 @@ function DirectLoginCell({ transaction }: { transaction: Transaction }) {
 export default function OrdersPage() {
   const supabase = createClient()
   const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [filteredTransactions, setFilteredTransactions] = useState<Transaction[]>([])
+  // Server-side paging: `transactions` is the current page; totals come from the server.
+  const [totalOrders, setTotalOrders] = useState(0)
+  const [guestOrderCount, setGuestOrderCount] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [pageLoading, setPageLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [giftcardCodes, setGiftcardCodes] = useState<Record<string, string>>({})
   const [sendingCodeIds, setSendingCodeIds] = useState<Record<string, boolean>>({})
@@ -161,7 +166,7 @@ export default function OrdersPage() {
               email: txn.user_email,
               userName: txn.users?.name || txn.guest_user_data?.name || txn.user_email.split('@')[0],
               productName: txn.product_name,
-              denomination: txn.amount,
+              denomination: packTitle(txn),
               status: "Refunded",
               transactionId: txn.transaction_id,
               price: parsedAmount || txn.price,
@@ -189,17 +194,25 @@ export default function OrdersPage() {
   const itemsPerPage = 10
 
 
+  // Current page / search / status, read by loads that start from realtime events.
+  const query = useRef({ page: 1, search: "", status: "all" })
+  query.current = { page: currentPage, search: debouncedSearch, status: statusFilter }
+
   const loadTransactions = async (silent = false) => {
+    const q = query.current
     try {
       if (!silent) setLoading(true)
 
-      // Use Server Action with Service Role to bypass RLS
-      const result = await getAllTransactionsAction()
+      // Only the page on screen is fetched; search and status filter run on the server.
+      const result = await getAllTransactionsAction({ page: q.page, pageSize: itemsPerPage, status: q.status, search: q.search })
 
       if (result.error) {
         toast.error(result.error)
         return
       }
+      // A slower reply for a page the admin already left is dropped.
+      const now = query.current
+      if (now.page !== q.page || now.search !== q.search || now.status !== q.status) return
 
       // Process transactions to identify guest vs registered users
       const processedTransactions = (result.data || []).map((transaction: any) => ({
@@ -208,7 +221,8 @@ export default function OrdersPage() {
       }))
 
       setTransactions(processedTransactions)
-      setFilteredTransactions(processedTransactions)
+      setTotalOrders(result.totalCount ?? processedTransactions.length)
+      setGuestOrderCount(result.guestCount ?? 0)
     } catch (error) {
       console.error("Error loading transactions:", error)
       toast.error("Failed to load transactions")
@@ -237,35 +251,31 @@ export default function OrdersPage() {
     }
   }, [])
 
+  // Search waits for a pause in typing before asking the server.
   useEffect(() => {
-    let filtered = transactions
+    const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(t)
+  }, [searchQuery])
 
-    // Apply search filter
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (transaction) =>
-          transaction.product_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          transaction.user_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          transaction.transaction_id.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    }
-
-    // Apply status filter
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((transaction) => transaction.status === statusFilter)
-    }
-
-    setFilteredTransactions(filtered)
-    // Reset to first page when filters change
+  // Reset to the first page when the search or status filter changes.
+  useEffect(() => {
     setCurrentPage(1)
-  }, [transactions, searchQuery, statusFilter])
+  }, [debouncedSearch, statusFilter])
+
+  // New page, search or status: fetch that page (the first load happens on mount).
+  const firstLoad = useRef(true)
+  useEffect(() => {
+    if (firstLoad.current) {
+      firstLoad.current = false
+      return
+    }
+    setPageLoading(true)
+    loadTransactions(true).finally(() => setPageLoading(false))
+  }, [currentPage, debouncedSearch, statusFilter])
 
   // Pagination logic
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage)
-  const paginatedTransactions = filteredTransactions.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
+  const totalPages = Math.max(1, Math.ceil(totalOrders / itemsPerPage))
+  const paginatedTransactions = transactions
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -299,10 +309,10 @@ export default function OrdersPage() {
 
         let message: string
         if (isCompleted) {
-          message = `Your order for ${transaction.product_name} (${transaction.amount}) is complete! Please check your email or transaction history for your gift card code/details.`
+          message = `Your order for ${transaction.product_name} (${packTitle(transaction)}) is complete! Please check your email or transaction history for your gift card code/details.`
         } else {
           const remarksText = remarks?.trim() ? remarks : "No specific reason provided"
-          message = `Your order for ${transaction.product_name} (${transaction.amount}) could not be processed.\n\nReason: ${remarksText}\n\nPlease contact support if you need assistance.`
+          message = `Your order for ${transaction.product_name} (${packTitle(transaction)}) could not be processed.\n\nReason: ${remarksText}\n\nPlease contact support if you need assistance.`
         }
 
         // Use server action with service role to bypass RLS
@@ -388,7 +398,7 @@ export default function OrdersPage() {
               email: transaction.user_email,
               userName: transaction.users?.name || transaction.guest_user_data?.name || transaction.user_email.split('@')[0],
               productName: transaction.product_name,
-              denomination: transaction.amount,
+              denomination: packTitle(transaction),
               status: actualNewStatus,
               transactionId: transaction.transaction_id,
               price: transaction.price,
@@ -525,7 +535,13 @@ export default function OrdersPage() {
     })
   }
 
-  const exportTransactions = () => {
+  const exportTransactions = async () => {
+    const all = await getAllTransactionsAction({ status: statusFilter, search: debouncedSearch })
+    if (all.error || !all.data) {
+      toast.error(all.error || "Failed to export orders")
+      return
+    }
+    const filteredTransactions: Transaction[] = all.data.map((t: any) => ({ ...t, is_guest: !t.user_id }))
     const headers = [
       "Order ID",
       "Bank Txn ID",
@@ -546,7 +562,7 @@ export default function OrdersPage() {
       t.transaction_id,
       t.bank_txn_id || "N/A",
       t.product_name || "N/A",
-      t.amount || "N/A",
+      packTitle(t) || "N/A",
       `Rs. ${t.price}`,
       t.promo_code || "N/A",
       t.discount_amount ? `Rs. ${t.discount_amount}` : "N/A",
@@ -587,8 +603,8 @@ export default function OrdersPage() {
   }
 
   // Calculate orders by user type
-  const registeredUserOrders = filteredTransactions.filter(t => !t.is_guest && t.user_id).length
-  const guestUserOrders = filteredTransactions.filter(t => t.is_guest).length
+  const registeredUserOrders = totalOrders - guestOrderCount
+  const guestUserOrders = guestOrderCount
 
   return (
     <div className="space-y-6">
@@ -625,7 +641,7 @@ export default function OrdersPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-[#92400E]">Total Orders</p>
-                <p className="text-2xl font-bold text-[#1F2937]">{filteredTransactions.length}</p>
+                <p className="text-2xl font-bold text-[#1F2937]">{totalOrders}</p>
               </div>
             </div>
           </CardContent>
@@ -654,7 +670,7 @@ export default function OrdersPage() {
 
       <Card className="bg-[#FEF7E0] border-[#F59E0B] shadow-md">
         <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20">
-          <CardTitle className="text-[#1F2937]">All Transactions ({filteredTransactions.length})</CardTitle>
+          <CardTitle className="text-[#1F2937]">All Transactions ({totalOrders}){pageLoading ? " · loading…" : ""}</CardTitle>
           <CardDescription className="text-[#92400E]">Complete order history from Supabase database</CardDescription>
         </CardHeader>
         <CardContent className="p-6">
@@ -720,7 +736,7 @@ export default function OrdersPage() {
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
                         <span className="font-medium text-[#1F2937]">{transaction.product_name}</span>
-                        <span className="text-xs text-[#4B5563]">{transaction.amount}</span>
+                        <span className="text-xs text-[#4B5563]">{packTitle(transaction)}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -968,7 +984,7 @@ export default function OrdersPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between pt-4 border-t border-gray-200 mt-4">
               <p className="text-xs text-gray-500">
-                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredTransactions.length)} of {filteredTransactions.length} orders
+                Showing {totalOrders === 0 ? 0 : ((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, totalOrders)} of {totalOrders} orders
               </p>
               <div className="flex items-center gap-2">
                 <Button
@@ -1071,7 +1087,7 @@ export default function OrdersPage() {
               <div className="flex items-center justify-between bg-purple-50/70 p-3 rounded-xl border border-purple-100 text-xs">
                 <div>
                   <p className="font-semibold text-gray-800">{refundModal.transaction.product_name}</p>
-                  <p className="text-gray-500">{refundModal.transaction.amount}</p>
+                  <p className="text-gray-500">{packTitle(refundModal.transaction)}</p>
                 </div>
                 <div className="text-right">
                   <span className="text-gray-400 block text-[10px]">Paid</span>

@@ -10,7 +10,7 @@ import { checkStrikePenalty } from "@/lib/security/strike-counter"
 import { verifyTurnstileToken } from "@/lib/captcha"
 import { trackRateLimitViolation, trackEmailVelocity, isTrustedBuyer } from "@/lib/security/spam-detection"
 import { createCheckoutCapability } from "@/lib/crypto/checkout"
-import { denomKey, findDenomination } from "@/lib/denominations"
+import { denomCategoryName, denomKey, findDenomination, packTitle } from "@/lib/denominations"
 
 interface TransactionData {
   product: string
@@ -269,25 +269,27 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
     // SECURITY: Validate price against the database to prevent tampering
     const { data: productData, error: productError } = await serviceSupabase
       .from("products")
-      .select("denominations, category")
+      .select("denominations, denomination_categories, category")
       .eq("id", productId)
       .single()
 
-    let denominations = productData?.denominations
+    let denominations = (productData as any)?.denominations
     let verifiedCategory = (productData as any)?.category as string | undefined
+    let packCategories = (productData as any)?.denomination_categories
 
     if (productError || !denominations) {
       // Fallback to slug search if id lookup fails
       const { data: slugProduct, error: slugError } = await serviceSupabase
         .from("products")
-        .select("denominations, category")
+        .select("denominations, denomination_categories, category")
         .eq("slug", productId)
         .single()
 
       if (slugError || !slugProduct) {
         return { success: false, error: "Product not found or unavailable." }
       }
-      denominations = slugProduct.denominations
+      denominations = (slugProduct as any).denominations
+      packCategories = (slugProduct as any)?.denomination_categories
       verifiedCategory = (slugProduct as any)?.category
     }
 
@@ -403,6 +405,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
       // The order keeps the pack id plus the title as shown at purchase.
       amount: matchedDenom.label,
       denomination_id: matchedDenom.id || null,
+      denomination_category: denomCategoryName(packCategories, matchedDenom),
       price: verifiedPrice,
       status: initialStatus,
       payment_method: transactionData.paymentMethod,
@@ -480,7 +483,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
             { name: "Order ID", value: transactionId, inline: true },
             { name: "Status", value: "Processing", inline: true },
             { name: "Product", value: transactionData.product, inline: false },
-            { name: "Amount", value: matchedDenom.label, inline: true },
+            { name: "Amount", value: packTitle({ amount: matchedDenom.label, denomination_category: denomCategoryName(packCategories, matchedDenom) }), inline: true },
             { name: "Price", value: `Rs. ${verifiedPrice}`, inline: true },
             { name: "Email", value: transactionData.email, inline: false },
             { name: "Payment Method", value: transactionData.paymentMethod, inline: true },
@@ -516,7 +519,7 @@ export async function addTransactionAction(transactionData: TransactionData): Pr
           email: transactionData.email,
           userName: userName,
           productName: transactionData.product,
-          denomination: matchedDenom.label,
+          denomination: packTitle({ amount: matchedDenom.label, denomination_category: denomCategoryName(packCategories, matchedDenom) }),
           transactionId: transactionId,
           price: verifiedPrice,
           paymentMethod: transactionData.paymentMethod,

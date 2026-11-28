@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import {
   Users,
   ShieldAlert,
@@ -64,6 +64,8 @@ import { toast } from "sonner"
 import { usePresence } from "@/lib/presence"
 import {
   getCustomersOverviewAction,
+  type CustomerCounts,
+  type CustomerFilter,
   sendCustomerPasswordResetAction,
   banEntireCustomerAction,
   unbanEntireCustomerAction,
@@ -83,6 +85,7 @@ import {
 import { resendExistingGiftcardCodeAction } from "@/app/actions/orders"
 import { useAdminSession } from "@/lib/admin-session-context"
 import { BannedEntity } from "@/lib/security/blacklist"
+import { packTitle } from "@/lib/denominations"
 
 const GoogleIcon = ({ className = "h-3.5 w-3.5" }: { className?: string }) => (
   <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -127,7 +130,16 @@ type TabKey = "customers" | "blacklist" | "support"
 
 // Survives client-side navigation: coming back shows the last data instantly and
 // refreshes it in the background (stale-while-revalidate). Cleared on full reload.
-const pageCache: { customers?: CustomerProfile[]; bans?: BannedEntity[]; tickets?: SupportTicket[] } = {}
+// Customers are paged on the server; each visited page (per search + filter) is cached here.
+type CustomerPage = { rows: CustomerProfile[]; total: number; counts: CustomerCounts }
+const pageCache: {
+  customers?: CustomerProfile[]
+  customerPages: Map<string, CustomerPage>
+  banCustomers?: CustomerProfile[]
+  bans?: BannedEntity[]
+  tickets?: SupportTicket[]
+} = { customerPages: new Map() }
+const EMPTY_COUNTS: CustomerCounts = { all: 0, registered: 0, unverified: 0, guest: 0, banned: 0 }
 
 export default function CustomersAndSecurityPage() {
   const adminSession = useAdminSession()
@@ -137,12 +149,17 @@ export default function CustomersAndSecurityPage() {
   const [loading, setLoading] = useState(() => !(initialTab === "support" ? pageCache.tickets : pageCache.customers))
   const [refreshing, setRefreshing] = useState(false)
   const [tabLoading, setTabLoading] = useState(false)
+  const [customerPageLoading, setCustomerPageLoading] = useState(false)
 
   const isSubAdmin = currentUserRole === "sub_admin"
   const isFullAdmin = currentUserRole === "admin"
 
   // Data states
   const [customers, setCustomers] = useState<CustomerProfile[]>(() => pageCache.customers ?? [])
+  const [customerTotal, setCustomerTotal] = useState(0)
+  const [customerCounts, setCustomerCounts] = useState<CustomerCounts>(EMPTY_COUNTS)
+  // Customers that bans refer to (for the blacklist tab), loaded with the ban list.
+  const [banCustomers, setBanCustomers] = useState<CustomerProfile[]>(() => pageCache.banCustomers ?? [])
   const [bans, setBans] = useState<BannedEntity[]>(() => pageCache.bans ?? [])
   const [tickets, setTickets] = useState<SupportTicket[]>(() => pageCache.tickets ?? [])
   const { online: onlineUserIds, leftAt } = usePresence()
@@ -155,6 +172,7 @@ export default function CustomersAndSecurityPage() {
 
   // Search & filter states
   const [customerSearch, setCustomerSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [customerFilter, setCustomerFilter] = useState("all")
   const [banSearch, setBanSearch] = useState("")
   const [ticketStatusFilter, setTicketStatusFilter] = useState("all")
@@ -165,9 +183,15 @@ export default function CustomersAndSecurityPage() {
   const [ticketsPage, setTicketsPage] = useState(1)
   const pageSize = 10
 
+  // Search waits for a pause in typing before asking the server.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(customerSearch.trim()), 300)
+    return () => clearTimeout(t)
+  }, [customerSearch])
+
   useEffect(() => {
     setCurrentPage(1)
-  }, [customerSearch, customerFilter])
+  }, [debouncedSearch, customerFilter])
 
   useEffect(() => {
     setBlacklistPage(1)
@@ -223,13 +247,41 @@ export default function CustomersAndSecurityPage() {
   const [submittingUnban, setSubmittingUnban] = useState(false)
 
   // Fetch one tab's data and keep it in the page cache.
-  const loadTab = async (tab: TabKey) => {
+  const showCustomerPage = (pg: CustomerPage) => {
+    setCustomers((pageCache.customers = pg.rows))
+    setCustomerTotal(pg.total)
+    setCustomerCounts(pg.counts)
+  }
+
+  // One page of customers from the server. A page already visited shows instantly from the cache;
+  // force (refresh, or after a ban) drops the cache and asks the server again.
+  const customerQuery = useRef({ page: 1, search: "", filter: "all" })
+  customerQuery.current = { page: currentPage, search: debouncedSearch, filter: customerFilter }
+  const fetchCustomers = async (force = false) => {
+    const q = customerQuery.current
+    const key = `${q.filter}|${q.search}|${q.page}`
+    if (force) pageCache.customerPages.clear()
+    const hit = pageCache.customerPages.get(key)
+    if (hit) return showCustomerPage(hit)
+    const res = await getCustomersOverviewAction({ page: q.page, pageSize, search: q.search, filter: q.filter as CustomerFilter })
+    if (!res.success || !res.data) throw new Error(res.error || "Failed to load customers")
+    const pg: CustomerPage = { rows: res.data, total: res.total ?? 0, counts: res.counts ?? EMPTY_COUNTS }
+    pageCache.customerPages.set(key, pg)
+    // Ignore a slow reply for a page the admin has already moved away from.
+    const now = customerQuery.current
+    if (now.page === q.page && now.search === q.search && now.filter === q.filter) showCustomerPage(pg)
+  }
+
+  const loadTab = async (tab: TabKey, force = false) => {
     if (tab === "customers") {
-      const res = await getCustomersOverviewAction()
-      if (res.success && res.data) setCustomers((pageCache.customers = res.data))
+      await fetchCustomers(force)
     } else if (tab === "blacklist") {
-      const res = await getBannedListAction()
+      const [res, linked] = await Promise.all([
+        getBannedListAction(),
+        getCustomersOverviewAction({ filter: "ban_related", pageSize: 1000 }),
+      ])
       if (res.success && res.data) setBans((pageCache.bans = res.data))
+      if (linked.success && linked.data) setBanCustomers((pageCache.banCustomers = linked.data))
     } else {
       const res = await getSupportTicketsAction()
       if (res.success && res.data) setTickets((pageCache.tickets = res.data))
@@ -254,7 +306,7 @@ export default function CustomersAndSecurityPage() {
     if (initial && !isTabLoaded(tab)) setLoading(true)
     else setRefreshing(true)
     try {
-      await Promise.all(tabs.filter((t) => role !== "sub_admin" || t === "support").map(loadTab))
+      await Promise.all(tabs.filter((t) => role !== "sub_admin" || t === "support").map((t) => loadTab(t, !initial)))
     } catch (err) {
       console.error("Failed to load customer & security data:", err)
       toast.error("Failed to load data")
@@ -265,8 +317,25 @@ export default function CustomersAndSecurityPage() {
   }
 
   useEffect(() => {
-    loadData(true)
+    // Coming back to the page: show the cached first page, then refresh it.
+    const cached = pageCache.customerPages.get("all||1")
+    if (cached) showCustomerPage(cached)
+    loadData(!cached)
   }, [])
+
+  // New page, search or filter: load that page of customers.
+  const firstCustomerLoad = useRef(true)
+  useEffect(() => {
+    if (firstCustomerLoad.current) {
+      firstCustomerLoad.current = false
+      return
+    }
+    if (activeTab !== "customers" || isSubAdmin) return
+    setCustomerPageLoading(true)
+    fetchCustomers()
+      .catch(() => toast.error("Failed to load customers"))
+      .finally(() => setCustomerPageLoading(false))
+  }, [currentPage, debouncedSearch, customerFilter])
 
   // First visit to another tab: fetch it then, not up front.
   useEffect(() => {
@@ -562,23 +631,9 @@ export default function CustomersAndSecurityPage() {
   }
 
   // ── Filters ──
-  const filteredCustomers = customers.filter((c) => {
-    const matchesSearch =
-      c.email.toLowerCase().includes(customerSearch.toLowerCase()) ||
-      c.name.toLowerCase().includes(customerSearch.toLowerCase())
-
-    if (!matchesSearch) return false
-
-    if (customerFilter === "registered") return c.isRegistered && c.isEmailVerified !== false
-    if (customerFilter === "unverified") return c.isRegistered && c.isEmailVerified === false
-    if (customerFilter === "guest") return !c.isRegistered
-    if (customerFilter === "banned") return c.isBanned
-    return true
-  })
-
-  // Pagination calculation
-  const totalPages = Math.ceil(filteredCustomers.length / pageSize) || 1
-  const paginatedCustomers = filteredCustomers.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+  // Search, filter and paging run on the server; `customers` is the current page.
+  const totalPages = Math.ceil(customerTotal / pageSize) || 1
+  const paginatedCustomers = customers
 
   // Blacklist rules list: Displays customer email bans, IP address bans, and domain bans
   // separately so that admins can lift bans from individual IP addresses or domains independently.
@@ -612,9 +667,9 @@ export default function CustomersAndSecurityPage() {
 
     // 1. Customer Email Bans
     for (const eb of emailBans) {
-      const cust = customers.find((c) => c.email.toLowerCase() === eb.value.toLowerCase().trim())
+      const cust = banCustomers.find((c) => c.email.toLowerCase() === eb.value.toLowerCase().trim())
       const cleanReason = (eb.reason || "Suspicious activity / policy violation").replace(/\s*\(Associated with [^)]+\)/i, "")
-      const linkedCustomers = customers
+      const linkedCustomers = banCustomers
         .filter(
           (c) =>
             c.isBanned &&
@@ -694,7 +749,7 @@ export default function CustomersAndSecurityPage() {
     }
 
     return combined
-  }, [bans, customers])
+  }, [bans, banCustomers])
 
   const filteredBans = consolidatedBans.filter((b) =>
     b.target.toLowerCase().includes(banSearch.toLowerCase()) ||
@@ -709,14 +764,14 @@ export default function CustomersAndSecurityPage() {
   // can show the same last-active signal as the Customers tab.
   const findBanCustomer = (ban: { type: string; target: string; associatedEmail?: string }) => {
     const target = ban.target.toLowerCase().trim()
-    if (ban.type === "email") return customers.find((c) => c.email.toLowerCase().trim() === target)
-    if (ban.type === "ip") return customers.find((c) => c.lastIp === ban.target)
-    if (ban.type === "device_id") return customers.find((c) => c.lastDeviceId === ban.target)
+    if (ban.type === "email") return banCustomers.find((c) => c.email.toLowerCase().trim() === target)
+    if (ban.type === "ip") return banCustomers.find((c) => c.lastIp === ban.target)
+    if (ban.type === "device_id") return banCustomers.find((c) => c.lastDeviceId === ban.target)
     if (ban.type === "email_domain") {
       const domain = target.replace(/^@/, "")
-      return customers.find((c) => c.email.toLowerCase().endsWith(`@${domain}`))
+      return banCustomers.find((c) => c.email.toLowerCase().endsWith(`@${domain}`))
     }
-    if (ban.associatedEmail) return customers.find((c) => c.email.toLowerCase().trim() === ban.associatedEmail!.toLowerCase().trim())
+    if (ban.associatedEmail) return banCustomers.find((c) => c.email.toLowerCase().trim() === ban.associatedEmail!.toLowerCase().trim())
     return undefined
   }
 
@@ -728,9 +783,9 @@ export default function CustomersAndSecurityPage() {
   const paginatedTickets = filteredTickets.slice((ticketsPage - 1) * pageSize, ticketsPage * pageSize)
 
   // Customer statistics (count only verified registered accounts)
-  const bannedCount = customers.filter((c) => c.isBanned).length
-  const registeredCount = customers.filter((c) => c.isRegistered && c.isEmailVerified !== false).length
-  const guestCount = customers.filter((c) => !c.isRegistered).length
+  const bannedCount = customerCounts.banned
+  const registeredCount = customerCounts.registered
+  const guestCount = customerCounts.guest
   const openTicketsCount = tickets.filter((t) => t.status === "open").length
 
   if (loading) {
@@ -961,7 +1016,7 @@ export default function CustomersAndSecurityPage() {
                 className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-white data-[state=active]:shadow-sm text-[#92400E] hover:text-[#B45309] font-bold flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition-all whitespace-nowrap shrink-0"
               >
                 <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0" />
-                <span>Customers{pageCache.customers ? ` (${customers.length})` : ""}</span>
+                <span>Customers{pageCache.customers ? ` (${customerCounts.all})` : ""}</span>
               </TabsTrigger>
               <TabsTrigger
                 value="blacklist"
@@ -995,7 +1050,7 @@ export default function CustomersAndSecurityPage() {
             <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md rounded-xl">
               <CardContent className="p-3 sm:p-5">
                 <p className="text-[10px] sm:text-xs font-bold text-[#92400E] uppercase tracking-wider truncate">Total Customers</p>
-                <p className="text-xl sm:text-2xl font-bold text-[#1F2937] mt-1">{customers.length}</p>
+                <p className="text-xl sm:text-2xl font-bold text-[#1F2937] mt-1">{customerCounts.all}</p>
               </CardContent>
             </Card>
 
@@ -1025,7 +1080,7 @@ export default function CustomersAndSecurityPage() {
           <Card className="bg-[#FEF7E0] border-2 border-[#F59E0B]/30 shadow-md rounded-xl overflow-hidden">
             <CardHeader className="px-6 py-4 border-b border-[#F59E0B]/20 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
-                <CardTitle className="text-[#1F2937] text-lg font-bold">Customer Directory ({filteredCustomers.length})</CardTitle>
+                <CardTitle className="text-[#1F2937] text-lg font-bold">Customer Directory ({customerTotal}){customerPageLoading ? " · loading…" : ""}</CardTitle>
                 <CardDescription className="text-[#92400E]">
                   Click any customer to inspect order history or resend gift card codes
                 </CardDescription>
@@ -1173,12 +1228,12 @@ export default function CustomersAndSecurityPage() {
               </div>
 
               {/* Pagination Controls */}
-              {filteredCustomers.length > 0 && (
+              {customerTotal > 0 && (
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#F59E0B]/20 mt-4 text-xs text-[#92400E]">
                   <div>
                     Showing <span className="font-bold text-[#111827]">{(currentPage - 1) * pageSize + 1}</span> to{" "}
-                    <span className="font-bold text-[#111827]">{Math.min(currentPage * pageSize, filteredCustomers.length)}</span> of{" "}
-                    <span className="font-bold text-[#111827]">{filteredCustomers.length}</span> customers
+                    <span className="font-bold text-[#111827]">{Math.min(currentPage * pageSize, customerTotal)}</span> of{" "}
+                    <span className="font-bold text-[#111827]">{customerTotal}</span> customers
                   </div>
                   <div className="flex items-center gap-1">
                     <Button
@@ -1660,7 +1715,7 @@ export default function CustomersAndSecurityPage() {
                             </Badge>
                           </div>
                           <p className="font-semibold text-sm text-[#111827]">
-                            {order.product_name} <span className="text-xs font-normal text-gray-500">({order.amount})</span>
+                            {order.product_name} <span className="text-xs font-normal text-gray-500">({packTitle(order)})</span>
                           </p>
                           <p className="text-xs text-gray-500">
                             Total: <span className="font-bold text-[#111827]">Rs. {order.price}</span> · Method: <span className="font-medium text-gray-700">{order.payment_method}</span>

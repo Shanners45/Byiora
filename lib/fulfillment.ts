@@ -3,6 +3,7 @@ import { sendOrderPlacedEmail, sendGiftcardCodeEmail } from "@/lib/email/resend"
 import { decryptInventoryCode } from "@/lib/crypto/inventory"
 import { Redis } from "@upstash/redis"
 import { resetFailureStrikes } from "@/lib/security/strike-counter"
+import { packTitle } from "@/lib/denominations"
 
 interface FulfillOrderParams {
   transactionId: string
@@ -172,7 +173,7 @@ export async function fulfillOrderDirectly({
           } as any).eq("transaction_id", transactionId)
         }
       } else {
-        console.warn(`[FULFILLMENT OUT OF STOCK] No codes left for ${txn.product_name} - ${txn.amount}`)
+        console.warn(`[FULFILLMENT OUT OF STOCK] No codes left for ${txn.product_name} - ${packTitle(txn)}`)
       }
     }
 
@@ -191,7 +192,7 @@ export async function fulfillOrderDirectly({
           email: txn.user_email,
           userName: userName,
           productName: txn.product_name,
-          denomination: txn.amount,
+          denomination: packTitle(txn),
           transactionId: transactionId,
           price: txn.price,
           paymentMethod: txn.payment_method,
@@ -203,7 +204,7 @@ export async function fulfillOrderDirectly({
           email: txn.user_email,
           userName: userName,
           productName: txn.product_name,
-          denomination: txn.amount,
+          denomination: packTitle(txn),
           transactionId: transactionId,
           price: txn.price,
           paymentMethod: txn.payment_method,
@@ -221,8 +222,8 @@ export async function fulfillOrderDirectly({
           ? "Order Completed! 🎉"
           : "Order Confirmed! 🎉"
         const notifMessage = decryptedCode
-          ? `Your order for ${txn.product_name} (${txn.amount}) is complete! Check your email or transaction history for your gift card code.`
-          : `Your order for ${txn.product_name} (${txn.amount}) has been confirmed. You can track its status in your transaction history.`
+          ? `Your order for ${txn.product_name} (${packTitle(txn)}) is complete! Check your email or transaction history for your gift card code.`
+          : `Your order for ${txn.product_name} (${packTitle(txn)}) has been confirmed. You can track its status in your transaction history.`
 
         await supabase.from("notifications").insert({
           title: notifTitle,

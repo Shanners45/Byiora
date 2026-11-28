@@ -114,12 +114,7 @@ export async function getAllTransactionsAction(options?: GetAllTransactionsOptio
   try {
     const serviceSupabase = createServiceRoleClient()
 
-    const buildQuery = () => {
-      let q = serviceSupabase
-        .from("transactions")
-        .select("*, users(id, name)", { count: "exact" })
-        .order("created_at", { ascending: false })
-        .order("transaction_id", { ascending: false })
+    const applyFilters = (q: any) => {
       if (options?.status && options.status !== "all") {
         q = q.eq("status", options.status as any)
       }
@@ -129,6 +124,22 @@ export async function getAllTransactionsAction(options?: GetAllTransactionsOptio
         q = q.or(`product_name.ilike.%${s}%,user_email.ilike.%${s}%,transaction_id.ilike.%${s}%`)
       }
       return q
+    }
+    const buildQuery = () =>
+      applyFilters(
+        serviceSupabase
+          .from("transactions")
+          .select("*, users(id, name)", { count: "exact" })
+          .order("created_at", { ascending: false })
+          .order("transaction_id", { ascending: false }),
+      )
+    // Paged view: how many of the matching orders are from guests vs registered accounts.
+    const countGuests = async () => {
+      if (!(options?.page && options?.pageSize)) return null
+      const { count: guests } = await applyFilters(
+        serviceSupabase.from("transactions").select("transaction_id", { count: "exact", head: true }).is("user_id", null),
+      )
+      return guests ?? 0
     }
 
     // Supabase caps every response at 1000 rows. Without paging through,
@@ -153,12 +164,14 @@ export async function getAllTransactionsAction(options?: GetAllTransactionsOptio
 
     const [
       { data, count, error },
-      { data: productsData }
+      { data: productsData },
+      guestCount,
     ] = await Promise.all([
       fetchTransactions(),
       serviceSupabase
         .from("products")
-        .select("id, name, slug")
+        .select("id, name, slug"),
+      countGuests(),
     ])
 
     if (error) {
@@ -270,6 +283,7 @@ export async function getAllTransactionsAction(options?: GetAllTransactionsOptio
       page: options?.page || 1,
       pageSize: options?.pageSize || transactionsList.length,
       totalPages: options?.pageSize ? Math.ceil((count ?? transactionsList.length) / options.pageSize) : 1,
+      guestCount: guestCount ?? transactionsList.filter((t: any) => !t.user_id).length,
       products: productsData || []
     }
   } catch (error: any) {

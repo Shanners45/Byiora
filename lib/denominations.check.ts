@@ -1,7 +1,7 @@
 // Self-check: node --experimental-strip-types lib/denominations.check.ts
 import assert from "node:assert"
 // @ts-ignore -- Node strip-types needs the .ts extension; the app build does not.
-import { denomKey, findDenomination } from "./denominations.ts"
+import { denomCategoryName, denomKey, findDenomination, packTitle } from "./denominations.ts"
 
 const packs = [
   { id: "np-475", label: "475 VP", price: "784", categoryId: "nepal" },
@@ -23,4 +23,12 @@ assert.equal(findDenomination(null, "np-475"), undefined)
 // Keys: id first, title only for packs saved before ids existed.
 assert.equal(denomKey({ id: "np-475", label: "475 VP" }), "np-475")
 assert.equal(denomKey({ label: "475 VP" }), "475 VP")
+// Order snapshots: category name without flags; plain title when the pack has no category.
+const cats = [{ id: "india", name: "\u{1F1EE}\u{1F1F3} India" }, { id: "nepal", name: "Nepal" }]
+assert.equal(denomCategoryName(cats, packs[1]), "India")
+assert.equal(denomCategoryName(cats, { categoryId: "gone" }), null)
+assert.equal(denomCategoryName(null, packs[0]), null)
+assert.equal(packTitle({ amount: "475 VP", denomination_category: "India" }), "475 VP · India")
+assert.equal(packTitle({ amount: "50 Diamonds", denomination_category: "Diamonds" }), "50 Diamonds")
+assert.equal(packTitle({ amount: "Rs 500" }), "Rs 500")
 console.log("denominations: ok")
